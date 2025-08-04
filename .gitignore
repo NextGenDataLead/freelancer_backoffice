@@ -1,0 +1,55 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Dependencies
+/node_modules
+
+# Build output
+/.next/
+/out/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+/logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env*.local
+
+# Test results and reports
+/coverage
+/playwright-report/
+/test-results/
+
+# Editor directories and files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# macOS
+.DS_Store
+
+# Project-specific ignores
+# This file seems to be a temporary note or log
+2025-08-02-caveat-the-messages-below-were-generated-by-the-u.txt
+
+# This directory appears to be for a specific AI tool's state.
+# Remove this line if you intend to share this history with your team.
+.claude/
+
+# This appears to be a temporary screenshot.
+# Remove this line if it is a required project asset.
+homepage-screenshot.png
