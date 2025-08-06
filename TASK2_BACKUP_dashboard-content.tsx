@@ -21,11 +21,6 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { UserButton } from '@clerk/nextjs'
-import { RevenueChart } from './widgets/revenue-chart'
-import { UserGrowthChart } from './widgets/user-growth-chart'
-import { ActivityFeed } from './widgets/activity-feed'
-import { useSidebar } from '@/hooks/use-app-state'
-import { useNotificationActions, useUnreadCount } from '@/store/notifications-store'
 
 // Sample dashboard data
 const metricsData = [
@@ -72,23 +67,7 @@ const navigationItems = [
 ]
 
 export function DashboardContent() {
-  const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebar()
-  const unreadCount = useUnreadCount()
-  const { showInfo } = useNotificationActions()
-
-  // Demo: Add a welcome notification on first load
-  React.useEffect(() => {
-    const hasShownWelcome = localStorage.getItem('welcome-notification-shown')
-    if (!hasShownWelcome) {
-      setTimeout(() => {
-        showInfo(
-          'Welcome to your Dashboard!',
-          'Your enhanced dashboard with state management is ready. All your preferences will be saved automatically.'
-        )
-        localStorage.setItem('welcome-notification-shown', 'true')
-      }, 2000)
-    }
-  }, [showInfo])
+  const [sidebarOpen, setSidebarOpen] = React.useState(false)
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -96,7 +75,7 @@ export function DashboardContent() {
       {sidebarOpen && (
         <div 
           className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
-          onClick={closeSidebar}
+          onClick={() => setSidebarOpen(false)}
         />
       )}
 
@@ -116,7 +95,7 @@ export function DashboardContent() {
             variant="ghost"
             size="sm"
             className="lg:hidden"
-            onClick={closeSidebar}
+            onClick={() => setSidebarOpen(false)}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -150,7 +129,7 @@ export function DashboardContent() {
                 variant="ghost"
                 size="sm"
                 className="lg:hidden"
-                onClick={toggleSidebar}
+                onClick={() => setSidebarOpen(true)}
               >
                 <Menu className="h-5 w-5" />
               </Button>
@@ -165,11 +144,9 @@ export function DashboardContent() {
             <div className="flex items-center space-x-4">
               <Button variant="ghost" size="sm" className="relative">
                 <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </Badge>
-                )}
+                <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+                  3
+                </Badge>
               </Button>
               
               {/* Clerk User Button with Sign Out */}
@@ -244,43 +221,44 @@ export function DashboardContent() {
               ))}
             </div>
 
-            {/* Charts section with real charts */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <Card className="lg:col-span-2">
+            {/* Charts section placeholders */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center">
                     <DollarSign className="mr-2 h-5 w-5" />
                     Revenue Trend
                   </CardTitle>
-                  <p className="text-sm text-slate-600">
-                    Monthly revenue vs target over the last 7 months
-                  </p>
                 </CardHeader>
                 <CardContent>
-                  <RevenueChart />
+                  <div className="h-64 flex items-center justify-center bg-slate-50 rounded-lg">
+                    <div className="text-slate-600 text-center">
+                      <BarChart3 className="h-12 w-12 mx-auto mb-2 text-blue-500" />
+                      <p>Interactive Chart Coming Soon</p>
+                      <p className="text-sm">Chart components will be added in Phase 2</p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <Users className="mr-2 h-5 w-5" />
-                      User Growth
-                    </CardTitle>
-                    <p className="text-sm text-slate-600">
-                      Total and new user acquisition
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <UserGrowthChart />
-                  </CardContent>
-                </Card>
-              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Users className="mr-2 h-5 w-5" />
+                    User Growth
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64 flex items-center justify-center bg-slate-50 rounded-lg">
+                    <div className="text-slate-600 text-center">
+                      <Users className="h-12 w-12 mx-auto mb-2 text-green-500" />
+                      <p>Interactive Chart Coming Soon</p>
+                      <p className="text-sm">Chart components will be added in Phase 2</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-
-            {/* Activity Feed */}
-            <ActivityFeed />
           </div>
         </div>
       </div>
