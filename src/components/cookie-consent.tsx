@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { motion, AnimatePresence } from "framer-motion"
+// Removed framer-motion to fix JavaScript compilation errors
 import { Cookie, Settings, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -54,12 +54,9 @@ export function CookieConsent() {
 
   return (
     <>
-      <AnimatePresence>
+      <React.Fragment>
         {showBanner && (
-          <motion.div
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
+          <div
             className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 shadow-lg"
             role="banner"
             aria-label="Cookie consent banner"
@@ -108,9 +105,9 @@ export function CookieConsent() {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
+      </React.Fragment>
 
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto" aria-labelledby="cookie-settings-title">

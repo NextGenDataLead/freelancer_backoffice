@@ -43,13 +43,27 @@ pnpm-debug.log*
 .DS_Store
 
 # Project-specific ignores
-# This file seems to be a temporary note or log
+# Temporary notes and documentation files
 2025-08-02-caveat-the-messages-below-were-generated-by-the-u.txt
+E2EGemini.md
+GEMINI_TESTS.md
 
-# This directory appears to be for a specific AI tool's state.
+# AI tool state and configuration
 # Remove this line if you intend to share this history with your team.
 .claude/
 
-# This appears to be a temporary screenshot.
+# Temporary screenshots and assets
 # Remove this line if it is a required project asset.
 homepage-screenshot.png
+
+# Clerk demo app (if not needed)
+clerk-nextjs-demo-app-router/
+
+# Development and testing files
+src/app/dashboard/page-complex.tsx
+src/app/test/
+src/middleware.ts
+
+# Optional: Uncomment if you want to ignore all test files during development
+# src/__tests__/
+# tests/

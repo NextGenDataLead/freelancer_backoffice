@@ -236,7 +236,7 @@ export async function checkDatabaseHealth() {
   } catch (error) {
     return {
       status: 'unhealthy',
-      error: error.message,
+      error: error instanceof Error ? error.message : 'Unknown error',
       timestamp: new Date().toISOString(),
     }
   }

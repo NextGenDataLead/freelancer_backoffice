@@ -64,31 +64,14 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider
-      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
-      appearance={{
-        baseTheme: undefined,
-        variables: {
-          colorPrimary: '#2563EB',
-          colorBackground: '#ffffff',
-          colorInputBackground: '#ffffff',
-          colorInputText: '#1f2937',
-        },
-        elements: {
-          formButtonPrimary: 'bg-blue-600 hover:bg-blue-700 text-white',
-          card: 'shadow-lg border-0',
-          headerTitle: 'text-2xl font-bold text-gray-900',
-          headerSubtitle: 'text-gray-600',
-        },
-      }}
-    >
-      <html lang="en">
+    <html lang="en">
+      <ClerkProvider>
         <body className={inter.className}>
           <QueryProvider>
             {children}
           </QueryProvider>
         </body>
-      </html>
-    </ClerkProvider>
+      </ClerkProvider>
+    </html>
   )
 }

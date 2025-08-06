@@ -1,54 +1,60 @@
-// Feature flags configuration for A/B testing
-import { flag } from 'flags/next'
+// Client-side A/B testing configuration
+// Simple deterministic assignment based on user session
 
-// Pricing page experiments
-export const pricingPageVariantFlag = flag<'control' | 'variant-a' | 'variant-b'>({
-  key: 'pricing-page-variant',
-  decide() {
-    // Simple random assignment for A/B testing
-    const random = Math.random()
-    if (random < 0.33) return 'control'
-    if (random < 0.66) return 'variant-a'
-    return 'variant-b'
-  },
-  options: [
-    { value: 'control', label: 'Control - Original pricing' },
-    { value: 'variant-a', label: 'Variant A - Highlighted middle tier' },
-    { value: 'variant-b', label: 'Variant B - Discount emphasis' }
-  ]
-})
+type VariantType = 'control' | 'variant-a' | 'variant-b'
+type CTATextType = 'Start Free Trial' | 'Get Started Free' | 'Try It Free'
+type PricingDisplayType = 'monthly-first' | 'yearly-first'
+
+// Generate consistent user ID for session-based experiments
+function getUserSessionId(): string {
+  if (typeof window === 'undefined') return 'server'
+  
+  let userId = localStorage.getItem('ab-test-user-id')
+  if (!userId) {
+    userId = Math.random().toString(36).substring(2, 15)
+    localStorage.setItem('ab-test-user-id', userId)
+  }
+  return userId
+}
+
+// Simple hash function for deterministic assignment
+function hashString(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return Math.abs(hash)
+}
+
+// Pricing page variant experiment
+export async function pricingPageVariantFlag(): Promise<VariantType> {
+  const userId = getUserSessionId()
+  const hash = hashString(userId + 'pricing-variant')
+  const bucket = hash % 100
+  
+  if (bucket < 33) return 'control'
+  if (bucket < 66) return 'variant-a'
+  return 'variant-b'
+}
 
 // CTA button text experiment
-export const ctaButtonTextFlag = flag<'Start Free Trial' | 'Get Started Free' | 'Try It Free'>({
-  key: 'cta-button-text',
-  decide() {
-    const random = Math.random()
-    if (random < 0.33) return 'Start Free Trial'
-    if (random < 0.66) return 'Get Started Free'
-    return 'Try It Free'
-  },
-  options: [
-    { value: 'Start Free Trial', label: 'Original CTA' },
-    { value: 'Get Started Free', label: 'Action-focused CTA' },
-    { value: 'Try It Free', label: 'Simple CTA' }
-  ]
-})
+export async function ctaButtonTextFlag(): Promise<CTATextType> {
+  const userId = getUserSessionId()
+  const hash = hashString(userId + 'cta-text')
+  const bucket = hash % 100
+  
+  if (bucket < 33) return 'Start Free Trial'
+  if (bucket < 66) return 'Get Started Free'
+  return 'Try It Free'
+}
 
 // Pricing display experiment
-export const pricingDisplayFlag = flag<'monthly-first' | 'yearly-first'>({
-  key: 'pricing-display',
-  decide() {
-    return Math.random() < 0.5 ? 'monthly-first' : 'yearly-first'
-  },
-  options: [
-    { value: 'monthly-first', label: 'Show monthly pricing first' },
-    { value: 'yearly-first', label: 'Show yearly pricing first' }
-  ]
-})
-
-// List all flags for precomputing
-export const precomputeFlags = [
-  pricingPageVariantFlag,
-  ctaButtonTextFlag,
-  pricingDisplayFlag,
-]
+export async function pricingDisplayFlag(): Promise<PricingDisplayType> {
+  const userId = getUserSessionId()
+  const hash = hashString(userId + 'pricing-display')
+  const bucket = hash % 100
+  
+  return bucket < 50 ? 'monthly-first' : 'yearly-first'
+}

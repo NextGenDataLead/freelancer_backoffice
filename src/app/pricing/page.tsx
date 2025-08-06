@@ -1,32 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { motion } from "framer-motion"
 import { ArrowRight, Check, Star, Users, Shield, Award, Clock, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { pricingAnalytics, configureWebVitals } from "@/lib/analytics"
-import { pricingPageVariantFlag, ctaButtonTextFlag, pricingDisplayFlag } from "@/lib/flags"
-import { WebVitals } from "@/components/web-vitals"
-
-export const metadata = {
-  title: 'Pricing - SaaS Template | Transparent, Scalable Plans',
-  description: 'Choose the perfect plan for your business. Start with our free trial and scale as you grow. No hidden fees, cancel anytime.',
-}
-
-const fadeInUp = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.6 } }
-}
-
-const staggerContainer = {
-  animate: {
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-}
+// Temporarily disable complex imports to isolate issue
+// import { pricingAnalytics, configureWebVitals } from "@/lib/analytics"
+// import { pricingPageVariantFlag, ctaButtonTextFlag, pricingDisplayFlag } from "@/lib/flags"
+// import { WebVitals } from "@/components/web-vitals"
 
 // Trust signals data from research
 const trustSignals = [
@@ -145,49 +126,11 @@ const faqs = [
 
 export default function PricingPage() {
   const [isYearly, setIsYearly] = React.useState(false)
-  const [variant, setVariant] = React.useState<string>('control')
-  const [ctaText, setCTAText] = React.useState<string>('Start Free Trial')
-  const [pricingDisplay, setPricingDisplay] = React.useState<string>('monthly-first')
-
-  // Initialize A/B testing flags and analytics
-  React.useEffect(() => {
-    const initializeExperiments = async () => {
-      try {
-        // Get A/B test variants
-        const variantResult = await pricingPageVariantFlag()
-        const ctaResult = await ctaButtonTextFlag()
-        const displayResult = await pricingDisplayFlag()
-        
-        setVariant(variantResult)
-        setCTAText(ctaResult)
-        setPricingDisplay(displayResult)
-        
-        // Set initial yearly state based on display flag
-        if (displayResult === 'yearly-first') {
-          setIsYearly(true)
-        }
-        
-        // Track page view with variant
-        pricingAnalytics.trackPageView(variantResult)
-      } catch (error) {
-        console.warn('Failed to initialize experiments:', error)
-      }
-    }
-
-    // Configure Web Vitals tracking
-    const reportWebVitals = configureWebVitals()
-    if (reportWebVitals && typeof window !== 'undefined') {
-      // Web Vitals will be automatically tracked
-    }
-
-    initializeExperiments()
-  }, [])
 
   return (
     <>
-      <WebVitals />
       <main className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
-      {/* Navigation */}
+        {/* Navigation */}
       <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-lg border-b border-slate-200 z-50" role="navigation" aria-label="Main navigation">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -213,13 +156,8 @@ export default function PricingPage() {
       {/* Hero Section */}
       <section className="pt-32 pb-16 px-4 sm:px-6 lg:px-8" aria-labelledby="pricing-heading">
         <div className="max-w-7xl mx-auto">
-          <motion.div 
-            className="text-center space-y-12"
-            variants={staggerContainer}
-            initial="initial"
-            animate="animate"
-          >
-            <motion.div variants={fadeInUp} className="space-y-6">
+          <div className="text-center space-y-12">
+            <div className="space-y-6">
               <Badge variant="secondary" className="mb-4" role="text">
                 <Star className="mr-1.5 h-4 w-4 fill-current" />
                 Join 2,500+ growing businesses
@@ -231,31 +169,29 @@ export default function PricingPage() {
                 Choose the plan that fits your business. Start free, scale as you grow. 
                 No hidden fees, no surprises.
               </p>
-            </motion.div>
+            </div>
 
             {/* Value propositions */}
-            <motion.div variants={fadeInUp} className="flex flex-wrap justify-center gap-8 mb-12">
+            <div className="flex flex-wrap justify-center gap-8 mb-12">
               {[
                 '14-day free trial',
                 'Cancel anytime',
                 'No setup fees',
                 '24/7 support'
-              ].map((item, index) => (
+              ].map((item) => (
                 <div key={item} className="flex items-center">
                   <Check className="h-5 w-5 text-green-600 mr-2" aria-hidden="true" />
                   <span className="text-slate-700 font-medium">{item}</span>
                 </div>
               ))}
-            </motion.div>
+            </div>
 
             {/* Billing toggle - Research shows this increases engagement */}
-            <motion.div variants={fadeInUp} className="flex items-center justify-center space-x-4">
+            <div className="flex items-center justify-center space-x-4">
               <span className={`text-slate-700 ${!isYearly ? 'font-semibold' : ''}`}>Monthly</span>
               <button
                 onClick={() => {
-                  const newBilling = !isYearly
-                  setIsYearly(newBilling)
-                  pricingAnalytics.trackBillingToggle(newBilling ? 'yearly' : 'monthly', variant)
+                  setIsYearly(!isYearly)
                 }}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                   isYearly ? 'bg-blue-600' : 'bg-slate-200'
@@ -274,8 +210,8 @@ export default function PricingPage() {
                   Save 20%
                 </span>
               </span>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -283,13 +219,9 @@ export default function PricingPage() {
       <section className="py-12 bg-white border-t border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 gap-8 md:grid-cols-4 mb-12">
-            {trustSignals.map((signal, index) => (
-              <motion.div
+            {trustSignals.map((signal) => (
+              <div
                 key={signal.description}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
-                viewport={{ once: true }}
                 className="text-center"
               >
                 <div className="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-blue-100 mb-4" aria-hidden="true">
@@ -301,18 +233,12 @@ export default function PricingPage() {
                 <div className="text-slate-600 text-sm">
                   {signal.description}
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
           
           {/* Security badges - Research shows crucial for B2B pricing pages */}
-          <motion.div 
-            className="flex flex-wrap justify-center items-center gap-4 pt-8 border-t border-slate-100"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            viewport={{ once: true }}
-          >
+          <div className="flex flex-wrap justify-center items-center gap-4 pt-8 border-t border-slate-100">
             <div className="flex items-center space-x-2 bg-slate-50 rounded-lg px-4 py-2">
               <Shield className="h-4 w-4 text-green-600" />
               <span className="text-sm font-medium text-slate-700">SOC 2 Type II</span>
@@ -329,31 +255,24 @@ export default function PricingPage() {
               <Shield className="h-4 w-4 text-orange-600" />
               <span className="text-sm font-medium text-slate-700">PCI DSS Level 1</span>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
       {/* Pricing Tiers */}
       <section className="py-24 bg-slate-50" aria-labelledby="pricing-tiers-heading">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.h2 
+          <h2 
             id="pricing-tiers-heading"
             className="text-3xl font-bold text-center text-slate-900 mb-16"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
           >
             Choose your plan
-          </motion.h2>
+          </h2>
           
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-            {pricingTiers.map((tier, index) => (
-              <motion.div
+            {pricingTiers.map((tier) => (
+              <div
                 key={tier.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
-                viewport={{ once: true }}
                 className={`relative rounded-2xl bg-white p-8 shadow-lg ring-1 ring-slate-900/10 ${
                   tier.popular 
                     ? 'ring-2 ring-blue-600 scale-105 shadow-2xl' 
@@ -393,15 +312,10 @@ export default function PricingPage() {
                     className="w-full mb-8"
                     aria-label={`${tier.cta} for ${tier.name} plan`}
                     onClick={() => {
-                      pricingAnalytics.trackTierClick(tier.id, variant)
-                      if (tier.id === 'enterprise') {
-                        pricingAnalytics.trackContactSales(variant)
-                      } else {
-                        pricingAnalytics.trackCTAClick(ctaText, tier.id, variant)
-                      }
+                      // Analytics tracking disabled temporarily
                     }}
                   >
-                    {tier.id === 'enterprise' ? tier.cta : ctaText}
+                    {tier.id === 'enterprise' ? tier.cta : 'Start Free Trial'}
                     {tier.id !== 'enterprise' && <ArrowRight className="ml-2 h-4 w-4" />}
                   </Button>
                 </div>
@@ -422,18 +336,12 @@ export default function PricingPage() {
                     </li>
                   ))}
                 </ul>
-              </motion.div>
+              </div>
             ))}
           </div>
 
           {/* Enterprise contact section */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            viewport={{ once: true }}
-            className="mt-16 text-center"
-          >
+          <div className="mt-16 text-center">
             <div className="bg-blue-50 rounded-2xl p-8 max-w-2xl mx-auto">
               <h3 className="text-2xl font-bold text-slate-900 mb-4">
                 Need something custom?
@@ -446,24 +354,20 @@ export default function PricingPage() {
                 size="lg" 
                 variant="outline"
                 onClick={() => {
-                  pricingAnalytics.trackContactSales(variant)
+                  // Analytics tracking disabled temporarily
                 }}
               >
                 Schedule a Demo
               </Button>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
       {/* FAQ Section */}
       <section className="py-24 bg-white" aria-labelledby="faq-heading">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
+          <div
             className="text-center mb-16"
           >
             <h2 id="faq-heading" className="text-3xl font-bold text-slate-900 mb-4">
@@ -472,23 +376,17 @@ export default function PricingPage() {
             <p className="text-xl text-slate-600">
               Have a different question? Contact our support team.
             </p>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            viewport={{ once: true }}
+          <div
             className="space-y-4"
           >
-            {faqs.map((faq, index) => (
+            {faqs.map((faq) => (
               <details
-                key={index}
+                key={faq.question}
                 className="border border-slate-200 rounded-lg px-6 py-4 group"
                 onToggle={(e) => {
-                  if ((e.target as HTMLDetailsElement).open) {
-                    pricingAnalytics.trackFAQClick(faq.question, variant)
-                  }
+                  // Analytics tracking disabled temporarily
                 }}
               >
                 <summary className="text-left font-medium text-slate-900 cursor-pointer hover:text-blue-600 transition-colors">
@@ -499,18 +397,15 @@ export default function PricingPage() {
                 </div>
               </details>
             ))}
-          </motion.div>
+          </div>
         </div>
       </section>
 
       {/* Final CTA */}
       <section className="py-16 bg-gradient-to-r from-blue-600 to-violet-600">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-          <motion.div 
+          <div 
             className="space-y-8"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
           >
             <div className="space-y-4">
               <h2 className="text-4xl font-bold text-white">
@@ -527,10 +422,10 @@ export default function PricingPage() {
                 variant="secondary" 
                 className="text-lg px-8 py-6 h-auto"
                 onClick={() => {
-                  pricingAnalytics.trackCTAClick(ctaText, 'footer', variant)
+                  // Analytics tracking disabled temporarily
                 }}
               >
-                {ctaText}
+                Start Free Trial
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
               <Button 
@@ -538,13 +433,13 @@ export default function PricingPage() {
                 size="lg" 
                 className="text-lg px-8 py-6 h-auto border-white text-white hover:bg-white hover:text-blue-600"
                 onClick={() => {
-                  pricingAnalytics.trackContactSales(variant)
+                  // Analytics tracking disabled temporarily
                 }}
               >
                 Schedule Demo
               </Button>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
     </main>
