@@ -15,7 +15,8 @@ import {
   Home,
   ChevronRight,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  User
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,6 +27,7 @@ import { UserGrowthChart } from './widgets/user-growth-chart'
 import { ActivityFeed } from './widgets/activity-feed'
 import { useSidebar } from '@/hooks/use-app-state'
 import { useNotificationActions, useUnreadCount } from '@/store/notifications-store'
+import { useUserSync } from '@/lib/user-sync'
 
 // Sample dashboard data
 const metricsData = [
@@ -68,6 +70,7 @@ const navigationItems = [
   { name: 'Analytics', icon: BarChart3, href: '/dashboard/analytics', active: false },
   { name: 'Users', icon: Users, href: '/dashboard/users', active: false },
   { name: 'Revenue', icon: DollarSign, href: '/dashboard/revenue', active: false },
+  { name: 'Profile', icon: User, href: '/dashboard/profile', active: false },
   { name: 'Settings', icon: Settings, href: '/dashboard/settings', active: false },
 ]
 
@@ -75,6 +78,9 @@ export function DashboardContent() {
   const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebar()
   const unreadCount = useUnreadCount()
   const { showInfo } = useNotificationActions()
+  
+  // Initialize user synchronization with Supabase
+  useUserSync()
 
   // Demo: Add a welcome notification on first load
   React.useEffect(() => {

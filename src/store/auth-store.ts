@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { UserProfile } from '@/hooks/use-user'
+import type { UserProfile } from '@/lib/user-sync'
 
 interface AuthState {
   // User state
@@ -14,10 +14,18 @@ interface AuthState {
     sidebarCollapsed: boolean
     language: string
     timezone: string
+    emailNotifications: boolean
+    pushNotifications: boolean
+    marketingEmails: boolean
+    weeklyReports: boolean
+    activityDigest: boolean
+    dataCollection: boolean
+    profileVisibility: 'public' | 'team' | 'private'
   }
   
   // Actions
   setUserProfile: (profile: UserProfile | null) => void
+  updateUserProfile: (profile: UserProfile) => void
   setIsAuthenticated: (authenticated: boolean) => void
   setIsLoading: (loading: boolean) => void
   updatePreferences: (preferences: Partial<AuthState['preferences']>) => void
@@ -29,6 +37,13 @@ const defaultPreferences = {
   sidebarCollapsed: false,
   language: 'en',
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  emailNotifications: true,
+  pushNotifications: true,
+  marketingEmails: false,
+  weeklyReports: true,
+  activityDigest: true,
+  dataCollection: true,
+  profileVisibility: 'team' as const,
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -44,6 +59,10 @@ export const useAuthStore = create<AuthState>()(
       setUserProfile: (profile) => set({ 
         userProfile: profile,
         isAuthenticated: !!profile,
+      }),
+      
+      updateUserProfile: (profile) => set({ 
+        userProfile: profile 
       }),
       
       setIsAuthenticated: (authenticated) => set({ 

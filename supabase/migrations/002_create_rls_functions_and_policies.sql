@@ -4,64 +4,19 @@
 
 BEGIN;
 
--- Helper function to get current tenant from JWT
-CREATE OR REPLACE FUNCTION get_current_tenant_id()
-RETURNS UUID
-LANGUAGE SQL STABLE
-SECURITY DEFINER
-AS $$
-  SELECT NULLIF(
-    ((current_setting('request.jwt.claims', true)::jsonb -> 'app_metadata')::jsonb ->> 'tenant_id'),
-    ''
-  )::UUID
-$$;
+-- Policies for user_profiles
+CREATE POLICY "Users can insert their own profile" ON public.user_profiles FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own profile" ON public.user_profiles FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can view their own profile" ON public.user_profiles FOR SELECT USING (auth.uid() = user_id);
 
--- Helper function to get current user profile
-CREATE OR REPLACE FUNCTION get_current_user_profile()
-RETURNS UUID
-LANGUAGE SQL STABLE
-SECURITY DEFINER
-AS $$
-  SELECT id FROM profiles 
-  WHERE clerk_user_id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))
-$$;
+-- Policies for organizations
+CREATE POLICY "Authenticated users can create organizations" ON public.organizations FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Organization owners can update their organization" ON public.organizations FOR UPDATE USING (id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND role = 'owner' AND status = 'active'));
+CREATE POLICY "Users can view organizations they are members of" ON public.organizations FOR SELECT USING (id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND status = 'active'));
 
--- Tenant isolation policies
-CREATE POLICY "tenant_isolation_select" ON tenants
-  FOR SELECT TO authenticated
-  USING (id = get_current_tenant_id());
-
--- Profiles policies
-CREATE POLICY "profiles_tenant_isolation" ON profiles
-  FOR ALL TO authenticated
-  USING (tenant_id = get_current_tenant_id());
-
--- Organizations policies
-CREATE POLICY "organizations_tenant_isolation" ON organizations
-  FOR ALL TO authenticated
-  USING (tenant_id = get_current_tenant_id());
-
--- Organization memberships policies
-CREATE POLICY "org_memberships_access" ON organization_memberships
-  FOR SELECT TO authenticated
-  USING (
-    organization_id IN (
-      SELECT organization_id FROM organization_memberships 
-      WHERE user_id = get_current_user_profile()
-    )
-  );
-
--- Admin access: Admins and owners can manage organizations
-CREATE POLICY "admin_full_access" ON organizations
-  FOR ALL TO authenticated
-  USING (
-    tenant_id = get_current_tenant_id() AND
-    EXISTS (
-      SELECT 1 FROM profiles 
-      WHERE profiles.id = get_current_user_profile()
-      AND profiles.tenant_id = get_current_tenant_id()
-      AND profiles.role IN ('admin', 'owner')
-    )
-  );
+-- Policies for organization_members
+CREATE POLICY "Organization admins can manage members" ON public.organization_members FOR ALL USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin') AND status = 'active'));
+CREATE POLICY "Users can update their own membership" ON public.organization_members FOR UPDATE USING (user_id = auth.uid());
+CREATE POLICY "Users can view members of their organizations" ON public.organization_members FOR SELECT USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND status = 'active'));
 
 COMMIT;
