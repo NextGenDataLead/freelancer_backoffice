@@ -27,6 +27,9 @@ import { UserGrowthChart } from './widgets/user-growth-chart'
 import { ActivityFeed } from './widgets/activity-feed'
 import { useSidebar } from '@/hooks/use-app-state'
 import { useNotificationActions, useUnreadCount } from '@/store/notifications-store'
+import { NotificationBell } from '@/components/notifications/notification-bell'
+import { NotificationToastContainer } from '@/components/notifications/notification-toast'
+import { NotificationDemo } from '@/components/notifications/notification-demo'
 import { useUserSync } from '@/lib/user-sync'
 
 // Sample dashboard data
@@ -169,14 +172,7 @@ export function DashboardContent() {
             </div>
 
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </Badge>
-                )}
-              </Button>
+              <NotificationBell />
               
               {/* Clerk User Button with Sign Out */}
               <UserButton afterSignOutUrl="/" />
@@ -287,9 +283,17 @@ export function DashboardContent() {
 
             {/* Activity Feed */}
             <ActivityFeed />
+            
+            {/* Notification Demo */}
+            <div className="flex justify-center">
+              <NotificationDemo />
+            </div>
           </div>
         </div>
       </div>
+      
+      {/* Toast notifications container */}
+      <NotificationToastContainer />
     </div>
   )
 }

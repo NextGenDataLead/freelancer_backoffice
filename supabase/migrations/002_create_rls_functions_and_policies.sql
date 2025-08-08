@@ -1,22 +1,23 @@
--- Migration: Create RLS functions and policies
+-- Migration: Create RLS functions
 -- Created: 2025-08-02
--- Description: Create helper functions and RLS policies for tenant isolation
+-- Description: Create helper functions for tenant isolation (policies created in 010_create_all_policies.sql)
 
 BEGIN;
 
--- Policies for user_profiles
-CREATE POLICY "Users can insert their own profile" ON public.user_profiles FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update their own profile" ON public.user_profiles FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can view their own profile" ON public.user_profiles FOR SELECT USING (auth.uid() = user_id);
+-- Helper function to get current tenant ID from JWT claims
+CREATE OR REPLACE FUNCTION get_current_tenant_id()
+RETURNS UUID AS $$
+  SELECT NULLIF(
+    ((current_setting('request.jwt.claims', true)::jsonb -> 'app_metadata')::jsonb ->> 'tenant_id'),
+    ''
+  )::UUID
+$$ LANGUAGE SQL STABLE SECURITY DEFINER;
 
--- Policies for organizations
-CREATE POLICY "Authenticated users can create organizations" ON public.organizations FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Organization owners can update their organization" ON public.organizations FOR UPDATE USING (id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND role = 'owner' AND status = 'active'));
-CREATE POLICY "Users can view organizations they are members of" ON public.organizations FOR SELECT USING (id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND status = 'active'));
-
--- Policies for organization_members
-CREATE POLICY "Organization admins can manage members" ON public.organization_members FOR ALL USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND role IN ('owner', 'admin') AND status = 'active'));
-CREATE POLICY "Users can update their own membership" ON public.organization_members FOR UPDATE USING (user_id = auth.uid());
-CREATE POLICY "Users can view members of their organizations" ON public.organization_members FOR SELECT USING (organization_id IN (SELECT organization_id FROM organization_members WHERE user_id = auth.uid() AND status = 'active'));
+-- Helper function to get current user profile ID
+CREATE OR REPLACE FUNCTION get_current_user_profile()
+RETURNS UUID AS $$
+  SELECT id FROM profiles 
+  WHERE clerk_user_id = ((current_setting('request.jwt.claims', true)::jsonb ->> 'sub'))
+$$ LANGUAGE SQL STABLE SECURITY DEFINER;
 
 COMMIT;

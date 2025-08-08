@@ -63,17 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_gdpr_logs_timestamp ON gdpr_audit_logs(timestamp)
 -- Enable RLS
 ALTER TABLE gdpr_audit_logs ENABLE ROW LEVEL SECURITY;
 
--- RLS policies for GDPR tables
-CREATE POLICY "password_reset_tokens_user_access" ON password_reset_tokens
-  FOR ALL TO authenticated
-  USING (user_id = get_current_user_profile());
-
-CREATE POLICY "deletion_requests_user_access" ON deletion_requests
-  FOR ALL TO authenticated
-  USING (user_id = get_current_user_profile());
-
-CREATE POLICY "gdpr_audit_logs_user_access" ON gdpr_audit_logs
-  FOR SELECT TO authenticated
-  USING (user_id = get_current_user_profile());
+-- Note: RLS policies will be created in 002_create_rls_functions_and_policies.sql
+-- after the required functions are defined
 
 COMMIT;

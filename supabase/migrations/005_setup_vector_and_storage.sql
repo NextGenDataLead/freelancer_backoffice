@@ -32,10 +32,8 @@ CREATE INDEX IF NOT EXISTS idx_documents_organization_id ON documents(organizati
 -- Enable RLS
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
--- RLS Policy for documents
-CREATE POLICY "documents_tenant_isolation" ON documents
-  FOR ALL TO authenticated
-  USING (tenant_id = get_current_tenant_id());
+-- Note: RLS policies will be created in 002_create_rls_functions_and_policies.sql
+-- after the required functions are defined
 
 -- Add updated_at trigger for documents
 CREATE TRIGGER update_documents_updated_at 
