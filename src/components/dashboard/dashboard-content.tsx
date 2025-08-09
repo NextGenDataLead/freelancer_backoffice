@@ -16,7 +16,8 @@ import {
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
-  User
+  User,
+  FileText
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,9 +32,18 @@ import { NotificationBell } from '@/components/notifications/notification-bell'
 import { NotificationToastContainer } from '@/components/notifications/notification-toast'
 import { NotificationDemo } from '@/components/notifications/notification-demo'
 import { useUserSync } from '@/lib/user-sync'
+import { useRealtimeDashboard } from '@/hooks/use-realtime-dashboard'
 
-// Sample dashboard data
-const metricsData = [
+// Static metric configuration (titles and icons)
+const metricConfig = {
+  revenue: { title: "Monthly Revenue", icon: DollarSign },
+  users: { title: "Active Users", icon: Users },
+  conversion: { title: "Conversion Rate", icon: TrendingUp },
+  session: { title: "Avg. Session", icon: Activity }
+}
+
+// Fallback static data when no real-time data is available
+const fallbackMetricsData = [
   {
     title: "Monthly Revenue",
     value: "$45,231",
@@ -71,6 +81,7 @@ const metricsData = [
 const navigationItems = [
   { name: 'Overview', icon: Home, href: '/dashboard', active: true },
   { name: 'Analytics', icon: BarChart3, href: '/dashboard/analytics', active: false },
+  { name: 'Forms', icon: FileText, href: '/dashboard/forms', active: false },
   { name: 'Users', icon: Users, href: '/dashboard/users', active: false },
   { name: 'Revenue', icon: DollarSign, href: '/dashboard/revenue', active: false },
   { name: 'Profile', icon: User, href: '/dashboard/profile', active: false },
@@ -84,6 +95,30 @@ export function DashboardContent() {
   
   // Initialize user synchronization with Supabase
   useUserSync()
+  
+  // Initialize real-time dashboard metrics
+  const { metrics: realtimeMetrics, isConnected: isDashboardConnected, lastUpdate, simulateMetricUpdate, hasMetrics } = useRealtimeDashboard()
+
+  // Combine real-time metrics with static configuration and fallback data
+  const metricsData = React.useMemo(() => {
+    if (hasMetrics) {
+      // Use real-time data when available
+      return Object.entries(metricConfig).map(([key, config]) => {
+        const realtimeData = realtimeMetrics[key]
+        if (realtimeData) {
+          return {
+            title: config.title,
+            icon: config.icon,
+            ...realtimeData
+          }
+        }
+        // Fallback to static data if specific metric not available
+        return fallbackMetricsData.find(metric => metric.title === config.title) || fallbackMetricsData[0]
+      })
+    }
+    // Use fallback data when no real-time data available
+    return fallbackMetricsData
+  }, [realtimeMetrics, hasMetrics])
 
   // Demo: Add a welcome notification on first load
   React.useEffect(() => {
@@ -98,6 +133,16 @@ export function DashboardContent() {
       }, 2000)
     }
   }, [showInfo])
+
+  // Demo: Real-time dashboard updates notification
+  React.useEffect(() => {
+    if (isDashboardConnected && lastUpdate) {
+      showInfo(
+        'Dashboard Updated!',
+        `Live metrics refreshed at ${lastUpdate.toLocaleTimeString()}`
+      )
+    }
+  }, [lastUpdate, isDashboardConnected, showInfo])
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -172,6 +217,16 @@ export function DashboardContent() {
             </div>
 
             <div className="flex items-center space-x-4">
+              {/* Dashboard connection indicator */}
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  isDashboardConnected ? 'bg-green-500' : 'bg-red-500'
+                }`} />
+                <span className="text-xs text-slate-500">
+                  {isDashboardConnected ? 'Live' : 'Offline'}
+                </span>
+              </div>
+              
               <NotificationBell />
               
               {/* Clerk User Button with Sign Out */}
@@ -284,9 +339,78 @@ export function DashboardContent() {
             {/* Activity Feed */}
             <ActivityFeed />
             
-            {/* Notification Demo */}
-            <div className="flex justify-center">
+            {/* Dashboard Real-time Demo */}
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* Notification Demo */}
               <NotificationDemo />
+              
+              {/* Dashboard Metrics Demo */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Activity className="mr-2 h-5 w-5" />
+                    Dashboard Real-time System Demo
+                  </CardTitle>
+                  <p className="text-sm text-slate-600">
+                    Test the real-time dashboard metrics updates. Connection status: 
+                    <span className={`ml-1 font-medium ${isDashboardConnected ? 'text-green-600' : 'text-red-600'}`}>
+                      {isDashboardConnected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-slate-700 mb-3">Real-time Metric Updates</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => simulateMetricUpdate('revenue')}
+                          className="text-xs"
+                        >
+                          Update Revenue
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => simulateMetricUpdate('users')}
+                          className="text-xs"
+                        >
+                          Update Users
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => simulateMetricUpdate('conversion')}
+                          className="text-xs"
+                        >
+                          Update Conversion
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => simulateMetricUpdate('session')}
+                          className="text-xs"
+                        >
+                          Update Session
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {lastUpdate && (
+                      <div className="text-xs text-slate-500 pt-2 border-t">
+                        <strong>Last Update:</strong> {lastUpdate.toLocaleString()}
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-slate-500">
+                      <strong>Real-time dashboard metrics</strong> update the KPI cards above in real-time. 
+                      <strong>Status: </strong>{hasMetrics ? 'Using live data' : 'Using fallback data'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
