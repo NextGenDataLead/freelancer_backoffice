@@ -6,6 +6,7 @@ import { ArrowRight, Check, Star, Zap, Shield, BarChart3, Users, Clock, CheckCir
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { SignInButton, SignUpButton } from '@clerk/nextjs'
 
 export default function Home() {
   return (
@@ -24,12 +25,12 @@ export default function Home() {
               <a href="#features" className="text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md px-2 py-1" aria-label="Navigate to features section">Features</a>
               <Link href="/pricing" className="text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md px-2 py-1" aria-label="Navigate to pricing section">Pricing</Link>
               <a href="#testimonials" className="text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md px-2 py-1" aria-label="Navigate to reviews section">Reviews</a>
-              <Link href="/sign-in">
+              <SignInButton>
                 <Button variant="outline" size="sm" aria-label="Sign in to your account">Sign In</Button>
-              </Link>
-              <Link href="/sign-up">
+              </SignInButton>
+              <SignUpButton>
                 <Button size="sm" aria-label="Start your free 14-day trial">Start Free Trial</Button>
-              </Link>
+              </SignUpButton>
             </div>
           </div>
         </div>
@@ -57,12 +58,12 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/sign-up">
+              <SignUpButton>
                 <Button size="lg" className="text-lg px-8 py-6 h-auto group" aria-label="Start your 14-day free trial now">
                   Start Free Trial
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
                 </Button>
-              </Link>
+              </SignUpButton>
               <Button 
                 variant="outline" 
                 size="lg" 
@@ -262,12 +263,12 @@ export default function Home() {
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/sign-up">
+              <SignUpButton>
                 <Button size="lg" variant="secondary" className="text-lg px-8 py-6 h-auto group">
                   Start Building Now
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
-              </Link>
+              </SignUpButton>
               <Link href="/pricing">
                 <Button variant="outline" size="lg" className="text-lg px-8 py-6 h-auto border-white text-white hover:bg-white hover:text-blue-600">
                   View Pricing

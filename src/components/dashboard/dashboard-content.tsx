@@ -17,7 +17,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   User,
-  FileText
+  FileText,
+  MessageSquare,
+  Table
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -82,6 +84,8 @@ const navigationItems = [
   { name: 'Overview', icon: Home, href: '/dashboard', active: true },
   { name: 'Analytics', icon: BarChart3, href: '/dashboard/analytics', active: false },
   { name: 'Forms', icon: FileText, href: '/dashboard/forms', active: false },
+  { name: 'Modals', icon: MessageSquare, href: '/dashboard/modals', active: false },
+  { name: 'Tables', icon: Table, href: '/dashboard/tables', active: false },
   { name: 'Users', icon: Users, href: '/dashboard/users', active: false },
   { name: 'Revenue', icon: DollarSign, href: '/dashboard/revenue', active: false },
   { name: 'Profile', icon: User, href: '/dashboard/profile', active: false },
