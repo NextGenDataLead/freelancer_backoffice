@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
+import { AuthGuard } from '@/components/auth/auth-guard'
 import { 
   User, 
   Settings, 
@@ -9,7 +10,8 @@ import {
   Shield, 
   Monitor,
   Key,
-  Trash2
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,12 +20,16 @@ import { PasswordSection } from '@/components/settings/password-section'
 import { SecuritySection } from '@/components/settings/security-section'
 import { SessionsSection } from '@/components/settings/sessions-section'
 import { PreferencesSection } from '@/components/profile/preferences-section'
+import { useGracePeriodGuard } from '@/hooks/use-grace-period'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 export default function SettingsPage() {
   const { user } = useUser()
+  const { isInGracePeriod, preventAction } = useGracePeriodGuard()
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <AuthGuard>
+      <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
@@ -43,6 +49,17 @@ export default function SettingsPage() {
 
       {/* Settings Content */}
       <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+        {/* Grace Period Warning */}
+        {isInGracePeriod && (
+          <Alert className="border-orange-200 bg-orange-50 mb-6">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-800">
+              Settings changes are restricted during the account deletion grace period. 
+              You can cancel the deletion request in Privacy Settings to restore full access.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <Tabs defaultValue="profile" className="space-y-8">
           {/* Tab Navigation */}
           <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto p-1">
@@ -135,8 +152,14 @@ export default function SettingsPage() {
                     </div>
                     <div className="ml-4">
                       <button 
-                        className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                        className={`px-4 py-2 text-white text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 ${
+                          isInGracePeriod 
+                            ? 'bg-red-300 cursor-not-allowed' 
+                            : 'bg-red-600 hover:bg-red-700'
+                        }`}
+                        disabled={isInGracePeriod}
                         onClick={() => {
+                          if (preventAction('account deletion')) return
                           // In a real app, this would trigger a confirmation modal
                           alert('This would open a confirmation dialog in a real application.')
                         }}
@@ -157,8 +180,14 @@ export default function SettingsPage() {
                     </div>
                     <div className="ml-4">
                       <button 
-                        className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                        className={`px-4 py-2 text-white text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${
+                          isInGracePeriod 
+                            ? 'bg-amber-300 cursor-not-allowed' 
+                            : 'bg-amber-600 hover:bg-amber-700'
+                        }`}
+                        disabled={isInGracePeriod}
                         onClick={() => {
+                          if (preventAction('data export')) return
                           // In a real app, this would trigger data export
                           alert('This would start the data export process in a real application.')
                         }}
@@ -174,5 +203,6 @@ export default function SettingsPage() {
         </Tabs>
       </div>
     </div>
+    </AuthGuard>
   )
 }

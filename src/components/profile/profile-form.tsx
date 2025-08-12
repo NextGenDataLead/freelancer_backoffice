@@ -8,8 +8,10 @@ import { useUser } from '@clerk/nextjs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useAuthStore, useAuthUser } from '@/store/auth-store'
 import { useNotificationActions } from '@/store/notifications-store'
+import { useGracePeriodGuard } from '@/hooks/use-grace-period'
 import { AvatarUpload } from './avatar-upload'
 import { PreferencesSection } from './preferences-section'
 import { 
@@ -18,7 +20,8 @@ import {
   Calendar,
   Shield,
   Save,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react'
 
 // Form validation schema
@@ -34,6 +37,7 @@ export function ProfileForm() {
   const { user, isLoaded } = useUser()
   const userProfile = useAuthUser() // Get user profile from Zustand store
   const { showSuccess, showError } = useNotificationActions()
+  const { isInGracePeriod, preventAction } = useGracePeriodGuard()
   
   const [isSubmitting, setIsSubmitting] = React.useState(false)
 
@@ -51,46 +55,71 @@ export function ProfileForm() {
     }
   })
 
-  // Update form when user data loads
+  // Load profile data from Supabase (single source of truth)
   React.useEffect(() => {
-    if (user && isLoaded) {
-      setValue('firstName', user.firstName || '')
-      setValue('lastName', user.lastName || '')
-      setValue('email', user.primaryEmailAddress?.emailAddress || '')
+    if (!user || !isLoaded) return
+
+    const loadProfile = async () => {
+      try {
+        const response = await fetch('/api/user/profile')
+        
+        if (response.ok) {
+          const { profile } = await response.json()
+          
+          // Update form with Supabase data (single source of truth)
+          setValue('firstName', profile.first_name || '')
+          setValue('lastName', profile.last_name || '')
+          setValue('email', profile.email || '')
+        } else {
+          console.log('Profile not found in Supabase, using Clerk data as fallback')
+          setValue('firstName', user.firstName || '')
+          setValue('lastName', user.lastName || '')
+          setValue('email', user.primaryEmailAddress?.emailAddress || '')
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error)
+        // Fallback to Clerk data on error
+        setValue('firstName', user.firstName || '')
+        setValue('lastName', user.lastName || '')
+        setValue('email', user.primaryEmailAddress?.emailAddress || '')
+      }
     }
+
+    loadProfile()
   }, [user, isLoaded, setValue])
 
   const onSubmit = async (data: ProfileFormData) => {
     if (!user) return
 
+    // Check grace period before submitting
+    if (preventAction('profile updates')) {
+      return
+    }
+
     setIsSubmitting(true)
     try {
-      // Update Clerk user data with correct parameter names
-      await user.update({
-        firstName: data.firstName,
-        lastName: data.lastName,
+      // Update Supabase profile (single source of truth)
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: data.firstName,
+          lastName: data.lastName,
+        })
       })
 
-      // Note: Email changes are handled through Clerk's email management
-      // and cannot be updated directly through the user.update() method
-      
-      showSuccess('Profile updated successfully', 'Your changes have been saved.')
+      const result = await response.json()
+
+      if (response.ok) {
+        showSuccess('Profile Updated', result.message || 'Your profile has been updated successfully.')
+      } else {
+        throw new Error(result.error || 'Failed to update profile')
+      }
     } catch (error) {
       console.error('Profile update error:', error)
-      
-      // Check if it's a parameter validation error
-      if (error && typeof error === 'object' && 'errors' in error) {
-        const errors = error.errors as Array<{ code: string; message: string }>
-        const paramErrors = errors.filter(e => e.code === 'form_param_format_invalid')
-        
-        if (paramErrors.length > 0) {
-          showError('Invalid Parameters', 'Please check your input format and try again.')
-        } else {
-          showError('Update failed', errors[0]?.message || 'There was an error updating your profile.')
-        }
-      } else {
-        showError('Update failed', 'There was an error updating your profile. Please try again.')
-      }
+      showError('Update Failed', error instanceof Error ? error.message : 'There was an error updating your profile. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -111,6 +140,17 @@ export function ProfileForm() {
 
   return (
     <div className="space-y-6">
+      {/* Grace Period Warning */}
+      {isInGracePeriod && (
+        <Alert className="border-orange-200 bg-orange-50">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="text-orange-800">
+            Profile updates are disabled during the account deletion grace period. 
+            You can cancel the deletion request in Privacy Settings to restore full access.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Profile Information Card */}
       <Card>
         <CardHeader>
@@ -163,7 +203,12 @@ export function ProfileForm() {
                   id="firstName"
                   type="text"
                   {...register('firstName')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  disabled={isInGracePeriod}
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm transition-colors ${
+                    isInGracePeriod 
+                      ? 'bg-slate-50 text-slate-500 cursor-not-allowed' 
+                      : 'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
                   placeholder="Enter your first name"
                 />
                 {errors.firstName && (
@@ -183,7 +228,12 @@ export function ProfileForm() {
                   id="lastName"
                   type="text"
                   {...register('lastName')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  disabled={isInGracePeriod}
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm transition-colors ${
+                    isInGracePeriod 
+                      ? 'bg-slate-50 text-slate-500 cursor-not-allowed' 
+                      : 'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
                   placeholder="Enter your last name"
                 />
                 {errors.lastName && (
@@ -248,7 +298,7 @@ export function ProfileForm() {
             <div className="flex justify-end pt-4">
               <Button 
                 type="submit" 
-                disabled={!isDirty || isSubmitting}
+                disabled={!isDirty || isSubmitting || isInGracePeriod}
                 className="min-w-32"
               >
                 {isSubmitting ? (

@@ -8,6 +8,8 @@ import { useAuthStore } from '@/store/auth-store'
 import { useAppStore } from '@/store/app-store'
 import { useNotificationActions } from '@/store/notifications-store'
 import { useThemeManager } from '@/hooks/use-app-state'
+import { useGracePeriodGuard } from '@/hooks/use-grace-period'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
   Settings, 
   Moon, 
@@ -20,7 +22,8 @@ import {
   Eye,
   EyeOff,
   Save,
-  Palette
+  Palette,
+  AlertTriangle
 } from 'lucide-react'
 
 export function PreferencesSection() {
@@ -28,6 +31,7 @@ export function PreferencesSection() {
   const { theme } = useAppStore()
   const { setTheme, effectiveTheme } = useThemeManager()
   const { showSuccess } = useNotificationActions()
+  const { isInGracePeriod, preventAction } = useGracePeriodGuard()
 
   const [localPreferences, setLocalPreferences] = React.useState({
     theme: theme,
@@ -58,10 +62,12 @@ export function PreferencesSection() {
   }, [localPreferences, theme, preferences])
 
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
+    if (preventAction('theme changes')) return
     setLocalPreferences(prev => ({ ...prev, theme: newTheme }))
   }
 
   const handleTogglePreference = (key: keyof typeof localPreferences) => {
+    if (preventAction('preference changes')) return
     setLocalPreferences(prev => ({
       ...prev,
       [key]: !prev[key]
@@ -69,10 +75,13 @@ export function PreferencesSection() {
   }
 
   const handleProfileVisibilityChange = (visibility: 'public' | 'team' | 'private') => {
+    if (preventAction('privacy settings changes')) return
     setLocalPreferences(prev => ({ ...prev, profileVisibility: visibility }))
   }
 
   const handleSavePreferences = () => {
+    if (preventAction('saving preferences')) return
+    
     // Update theme
     if (localPreferences.theme !== theme) {
       setTheme(localPreferences.theme)
@@ -114,6 +123,17 @@ export function PreferencesSection() {
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Grace Period Warning */}
+        {isInGracePeriod && (
+          <Alert className="border-orange-200 bg-orange-50">
+            <AlertTriangle className="h-4 w-4 text-orange-600" />
+            <AlertDescription className="text-orange-800">
+              Preference changes are disabled during the account deletion grace period. 
+              You can cancel the deletion request in Privacy Settings to restore full access.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Theme Settings */}
         <div>
           <h4 className="text-sm font-medium text-slate-900 mb-3 flex items-center">
@@ -125,8 +145,11 @@ export function PreferencesSection() {
               <button
                 key={themeOption}
                 onClick={() => handleThemeChange(themeOption)}
+                disabled={isInGracePeriod}
                 className={`relative p-3 rounded-lg border-2 transition-colors text-left ${
-                  localPreferences.theme === themeOption
+                  isInGracePeriod
+                    ? 'border-slate-200 bg-slate-50 cursor-not-allowed opacity-50'
+                    : localPreferences.theme === themeOption
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                 }`}
@@ -169,8 +192,11 @@ export function PreferencesSection() {
               </div>
               <button
                 onClick={() => handleTogglePreference('emailNotifications')}
+                disabled={isInGracePeriod}
                 className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                  localPreferences.emailNotifications ? 'bg-blue-500' : 'bg-slate-300'
+                  isInGracePeriod
+                    ? 'bg-slate-200 cursor-not-allowed opacity-50'
+                    : localPreferences.emailNotifications ? 'bg-blue-500' : 'bg-slate-300'
                 }`}
               >
                 <span
@@ -317,7 +343,10 @@ export function PreferencesSection() {
               <p className="text-sm text-slate-600">
                 You have unsaved changes
               </p>
-              <Button onClick={handleSavePreferences}>
+              <Button 
+                onClick={handleSavePreferences}
+                disabled={isInGracePeriod}
+              >
                 <Save className="mr-2 h-4 w-4" />
                 Save Preferences
               </Button>

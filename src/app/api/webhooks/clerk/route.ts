@@ -59,27 +59,55 @@ export async function POST(req: Request) {
     const { id, email_addresses, first_name, last_name, image_url } = evt.data
 
     try {
+      // Extract primary email address (handle empty array)
+      const primaryEmail = email_addresses?.length > 0 
+        ? email_addresses[0]?.email_address 
+        : null
+
+      console.log('Processing user.created webhook:', {
+        userId: id,
+        emailCount: email_addresses?.length || 0,
+        primaryEmail,
+        firstName: first_name,
+        lastName: last_name
+      })
+
+      // Handle case where email is required but not provided
+      if (!primaryEmail) {
+        console.warn(`⚠️ No email provided for user ${id}, using placeholder email`)
+      }
+
       // Create user profile in Supabase
-      const { error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('profiles')
         .insert({
           clerk_user_id: id,
-          email: email_addresses[0]?.email_address,
+          email: primaryEmail || `${id}@placeholder.local`, // Provide placeholder if no email
           first_name,
           last_name,
           avatar_url: image_url,
           role: 'member', // Default role
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
           // Note: tenant_id will be set later when user joins/creates organization
         })
+        .select()
+        .single()
 
       if (error) {
         console.error('Error creating user profile:', error)
+        console.error('Full error details:', JSON.stringify(error, null, 2))
         return new Response('Error creating user profile', { status: 500 })
       }
 
-      console.log('User profile created successfully for:', id)
+      console.log('✅ User profile created successfully:', {
+        clerkUserId: id,
+        supabaseUserId: data.id,
+        email: primaryEmail
+      })
     } catch (err) {
       console.error('Error processing user.created webhook:', err)
+      console.error('Full error details:', JSON.stringify(err, null, 2))
       return new Response('Error processing webhook', { status: 500 })
     }
   }
@@ -88,11 +116,24 @@ export async function POST(req: Request) {
     const { id, email_addresses, first_name, last_name, image_url } = evt.data
 
     try {
+      // Extract primary email address (handle empty array)
+      const primaryEmail = email_addresses?.length > 0 
+        ? email_addresses[0]?.email_address 
+        : null
+
+      console.log('Processing user.updated webhook:', {
+        userId: id,
+        emailCount: email_addresses?.length || 0,
+        primaryEmail,
+        firstName: first_name,
+        lastName: last_name
+      })
+
       // Update user profile in Supabase
       const { error } = await supabaseAdmin
         .from('profiles')
         .update({
-          email: email_addresses[0]?.email_address,
+          email: primaryEmail || `${id}@placeholder.local`, // Provide placeholder if no email
           first_name,
           last_name,
           avatar_url: image_url,

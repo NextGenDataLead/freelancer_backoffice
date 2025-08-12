@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useNotificationActions } from '@/store/notifications-store'
+import { useGracePeriodGuard } from '@/hooks/use-grace-period'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
   Monitor, 
   Smartphone, 

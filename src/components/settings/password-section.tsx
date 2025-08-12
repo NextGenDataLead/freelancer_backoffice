@@ -11,7 +11,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { useNotificationActions } from '@/store/notifications-store'
-import { Key, Eye, EyeOff, Shield, Loader2 } from 'lucide-react'
+import { useGracePeriodGuard } from '@/hooks/use-grace-period'
+import { Key, Eye, EyeOff, Shield, Loader2, AlertTriangle } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
@@ -30,6 +32,7 @@ type PasswordFormData = z.infer<typeof passwordSchema>
 export function PasswordSection() {
   const { user } = useUser()
   const { showSuccess, showError } = useNotificationActions()
+  const { isInGracePeriod, preventAction } = useGracePeriodGuard()
   const [showCurrentPassword, setShowCurrentPassword] = React.useState(false)
   const [showNewPassword, setShowNewPassword] = React.useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
@@ -51,6 +54,7 @@ export function PasswordSection() {
 
   const onSubmit = async (data: PasswordFormData) => {
     if (!user) return
+    if (preventAction('password changes')) return
 
     setIsSubmitting(true)
     try {
@@ -72,6 +76,17 @@ export function PasswordSection() {
 
   return (
     <div className="space-y-6">
+      {/* Grace Period Warning */}
+      {isInGracePeriod && (
+        <Alert className="border-orange-200 bg-orange-50">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="text-orange-800">
+            Password changes are disabled during the account deletion grace period. 
+            You can cancel the deletion request in Privacy Settings to restore access.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Password Change Form */}
       <Card>
         <CardHeader>
@@ -95,6 +110,7 @@ export function PasswordSection() {
                   {...register('currentPassword')}
                   className="pr-10"
                   placeholder="Enter current password"
+                  disabled={isInGracePeriod}
                 />
                 <button
                   type="button"
@@ -119,6 +135,7 @@ export function PasswordSection() {
                   {...register('newPassword')}
                   className="pr-10"
                   placeholder="Enter new password"
+                  disabled={isInGracePeriod}
                 />
                 <button
                   type="button"
@@ -146,6 +163,7 @@ export function PasswordSection() {
                   {...register('confirmPassword')}
                   className="pr-10"
                   placeholder="Confirm new password"
+                  disabled={isInGracePeriod}
                 />
                 <button
                   type="button"
@@ -165,7 +183,7 @@ export function PasswordSection() {
             <div className="flex justify-end">
               <Button 
                 type="submit" 
-                disabled={!isDirty || isSubmitting}
+                disabled={!isDirty || isSubmitting || isInGracePeriod}
                 className="min-w-32"
               >
                 {isSubmitting ? (

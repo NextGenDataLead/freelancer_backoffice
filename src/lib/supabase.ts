@@ -17,17 +17,18 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
   }
 })
 
-// Client-side function to create authenticated Supabase client
+// Client-side function to create authenticated Supabase client with Clerk integration
 // Must be called from within a React component that has access to Clerk session
 export function createClientSupabaseClient(getToken: () => Promise<string | null>) {
   return createClient(supabaseUrl, supabaseAnonKey, {
-    global: {
-      headers: {
-        async Authorization() {
-          const token = await getToken()
-          return token ? `Bearer ${token}` : ''
-        },
-      },
-    },
+    accessToken: getToken,
+  })
+}
+
+// Server-side function to create authenticated Supabase client with Clerk integration
+// For use in API routes and server components
+export function createServerSupabaseClient(getToken: () => Promise<string | null>) {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    accessToken: getToken,
   })
 }

@@ -19,7 +19,8 @@ import {
   User,
   FileText,
   MessageSquare,
-  Table
+  Table,
+  Shield
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,8 +34,8 @@ import { useNotificationActions, useUnreadCount } from '@/store/notifications-st
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { NotificationToastContainer } from '@/components/notifications/notification-toast'
 import { NotificationDemo } from '@/components/notifications/notification-demo'
-import { useUserSync } from '@/lib/user-sync'
 import { useRealtimeDashboard } from '@/hooks/use-realtime-dashboard'
+import { useUserSync } from '@/lib/user-sync'
 
 // Static metric configuration (titles and icons)
 const metricConfig = {
@@ -89,6 +90,7 @@ const navigationItems = [
   { name: 'Users', icon: Users, href: '/dashboard/users', active: false },
   { name: 'Revenue', icon: DollarSign, href: '/dashboard/revenue', active: false },
   { name: 'Profile', icon: User, href: '/dashboard/profile', active: false },
+  { name: 'Privacy', icon: Shield, href: '/dashboard/privacy', active: false },
   { name: 'Settings', icon: Settings, href: '/dashboard/settings', active: false },
 ]
 
@@ -98,7 +100,7 @@ export function DashboardContent() {
   const { showInfo } = useNotificationActions()
   
   // Initialize user synchronization with Supabase
-  useUserSync()
+  const { isAuthenticated } = useUserSync()
   
   // Initialize real-time dashboard metrics
   const { metrics: realtimeMetrics, isConnected: isDashboardConnected, lastUpdate, simulateMetricUpdate, hasMetrics } = useRealtimeDashboard()

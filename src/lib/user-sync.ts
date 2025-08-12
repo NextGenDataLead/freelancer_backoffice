@@ -117,7 +117,37 @@ export function useUserSync() {
             setUserProfile(updatedProfile)
           }
         } else {
-          // Create new profile
+          // Profile doesn't exist - use server-side sync endpoint
+          console.log('Profile not found, calling sync endpoint...')
+          try {
+            const response = await fetch('/api/user/sync', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              }
+            })
+
+            if (response.ok) {
+              const result = await response.json()
+              console.log('User sync successful:', result.action, result.profile?.id)
+              setUserProfile(result.profile)
+            } else {
+              const error = await response.json()
+              console.error('User sync failed:', error)
+              
+              // Fallback: try direct Supabase creation
+              await createProfileFallback()
+            }
+          } catch (error) {
+            console.error('Error calling sync endpoint:', error)
+            // Fallback: try direct Supabase creation
+            await createProfileFallback()
+          }
+        }
+
+        // Fallback profile creation function
+        async function createProfileFallback() {
+          console.log('Attempting fallback profile creation...')
           const tenantId = user.publicMetadata.tenant_id as string
           
           if (tenantId) {
@@ -169,8 +199,9 @@ export function useUserSync() {
             .single()
 
           if (insertError) {
-            console.error('Error creating user profile:', insertError)
+            console.error('Fallback profile creation failed:', insertError)
           } else {
+            console.log('Fallback profile created successfully')
             setUserProfile(insertedProfile)
           }
         }

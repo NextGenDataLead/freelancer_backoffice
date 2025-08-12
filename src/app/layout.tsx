@@ -2,6 +2,11 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 import { QueryProvider } from '@/components/providers/query-provider'
+import { AuthProvider } from '@/components/providers/auth-provider'
+import { RouteGuard } from '@/components/auth/route-guard'
+import { InactivityWarning } from '@/components/auth/inactivity-warning'
+import { CookieConsent } from '@/components/cookie-consent'
+import { ConsentAwareAnalytics } from '@/components/analytics/consent-aware-analytics'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -65,10 +70,22 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <ClerkProvider>
+      <ClerkProvider
+        signUpForceRedirectUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL || "/onboarding"}
+        signInForceRedirectUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL || "/dashboard"}
+      >
         <body className={inter.className}>
           <QueryProvider>
-            {children}
+            <AuthProvider>
+              <RouteGuard requireAuth={false}>
+                {children}
+                <InactivityWarning />
+              </RouteGuard>
+            </AuthProvider>
+            <CookieConsent />
+            <ConsentAwareAnalytics 
+              debug={process.env.NODE_ENV === 'development'}
+            />
           </QueryProvider>
         </body>
       </ClerkProvider>

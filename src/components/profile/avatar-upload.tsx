@@ -4,13 +4,16 @@ import * as React from 'react'
 import { useUser } from '@clerk/nextjs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useGracePeriodGuard } from '@/hooks/use-grace-period'
 import { 
   Camera, 
   Upload, 
   X, 
   User,
   Loader2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  AlertTriangle
 } from 'lucide-react'
 
 interface AvatarUploadProps {
@@ -20,6 +23,7 @@ interface AvatarUploadProps {
 
 export function AvatarUpload({ currentUrl, onUploadComplete }: AvatarUploadProps) {
   const { user } = useUser()
+  const { isInGracePeriod, preventAction } = useGracePeriodGuard()
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
   const [isUploading, setIsUploading] = React.useState(false)
   const [dragOver, setDragOver] = React.useState(false)
@@ -27,6 +31,11 @@ export function AvatarUpload({ currentUrl, onUploadComplete }: AvatarUploadProps
 
   const handleFileSelect = (file: File) => {
     if (!file) return
+
+    // Check grace period first
+    if (preventAction('avatar uploads')) {
+      return
+    }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -50,6 +59,11 @@ export function AvatarUpload({ currentUrl, onUploadComplete }: AvatarUploadProps
 
   const handleUpload = async () => {
     if (!user || !previewUrl) return
+
+    // Double-check grace period before uploading
+    if (preventAction('avatar uploads')) {
+      return
+    }
 
     setIsUploading(true)
     try {
@@ -108,6 +122,17 @@ export function AvatarUpload({ currentUrl, onUploadComplete }: AvatarUploadProps
 
   return (
     <div className="space-y-4">
+      {/* Grace Period Warning */}
+      {isInGracePeriod && (
+        <Alert className="border-orange-200 bg-orange-50">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="text-orange-800">
+            Avatar uploads are disabled during the account deletion grace period. 
+            You can cancel the deletion request in Privacy Settings to restore full access.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Avatar Display */}
       <div className="flex items-center justify-center">
         <div className="relative">
@@ -142,7 +167,7 @@ export function AvatarUpload({ currentUrl, onUploadComplete }: AvatarUploadProps
           <div className="flex items-center justify-center space-x-2">
             <Button
               onClick={handleUpload}
-              disabled={isUploading}
+              disabled={isUploading || isInGracePeriod}
               size="sm"
             >
               {isUploading ? (
@@ -176,12 +201,14 @@ export function AvatarUpload({ currentUrl, onUploadComplete }: AvatarUploadProps
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
-              dragOver
-                ? 'border-blue-500 bg-blue-50'
-                : 'border-slate-300 hover:border-slate-400'
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              isInGracePeriod 
+                ? 'border-slate-200 bg-slate-50 cursor-not-allowed'
+                : dragOver
+                ? 'border-blue-500 bg-blue-50 cursor-pointer'
+                : 'border-slate-300 hover:border-slate-400 cursor-pointer'
             }`}
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => !isInGracePeriod && fileInputRef.current?.click()}
           >
             <div className="space-y-2">
               <div className="flex justify-center">
@@ -201,9 +228,10 @@ export function AvatarUpload({ currentUrl, onUploadComplete }: AvatarUploadProps
           {/* Upload Button */}
           <div className="flex justify-center">
             <Button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => !isInGracePeriod && fileInputRef.current?.click()}
               variant="outline"
               size="sm"
+              disabled={isInGracePeriod}
             >
               <Camera className="mr-2 h-4 w-4" />
               Choose Photo

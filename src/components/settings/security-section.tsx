@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { useNotificationActions } from '@/store/notifications-store'
+import { useGracePeriodGuard } from '@/hooks/use-grace-period'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { 
   Shield, 
   Smartphone, 
@@ -22,11 +24,13 @@ import {
 export function SecuritySection() {
   const { user } = useUser()
   const { showSuccess, showInfo } = useNotificationActions()
+  const { isInGracePeriod, preventAction } = useGracePeriodGuard()
   const [twoFactorEnabled, setTwoFactorEnabled] = React.useState(false)
   const [emailNotifications, setEmailNotifications] = React.useState(true)
   const [loginAlerts, setLoginAlerts] = React.useState(true)
 
   const handleTwoFactorToggle = (enabled: boolean) => {
+    if (preventAction('2FA settings changes')) return
     setTwoFactorEnabled(enabled)
     if (enabled) {
       showInfo('2FA Setup Required', 'Please complete the setup process to enable two-factor authentication.')
@@ -36,6 +40,7 @@ export function SecuritySection() {
   }
 
   const handleEmailNotificationsToggle = (enabled: boolean) => {
+    if (preventAction('security notification changes')) return
     setEmailNotifications(enabled)
     showSuccess(
       enabled ? 'Email Notifications Enabled' : 'Email Notifications Disabled',
@@ -44,6 +49,7 @@ export function SecuritySection() {
   }
 
   const handleLoginAlertsToggle = (enabled: boolean) => {
+    if (preventAction('login alert changes')) return
     setLoginAlerts(enabled)
     showSuccess(
       enabled ? 'Login Alerts Enabled' : 'Login Alerts Disabled',

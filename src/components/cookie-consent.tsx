@@ -1,55 +1,63 @@
 "use client"
 
 import * as React from "react"
-// Removed framer-motion to fix JavaScript compilation errors
-import { Cookie, Settings, X } from "lucide-react"
+import { Cookie, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-
-interface CookiePreferences {
-  essential: boolean
-  analytics: boolean
-  marketing: boolean
-}
+import { useCookieConsent } from "@/hooks/use-cookie-consent"
+import type { CookiePreferences } from "@/lib/gdpr/cookie-manager"
 
 export function CookieConsent() {
+  const {
+    shouldShowBanner,
+    preferences,
+    acceptAll,
+    rejectAll,
+    updatePreferences,
+    isLoading
+  } = useCookieConsent()
+  
   const [showBanner, setShowBanner] = React.useState(false)
   const [showSettings, setShowSettings] = React.useState(false)
-  const [preferences, setPreferences] = React.useState<CookiePreferences>({
-    essential: true,
-    analytics: false,
-    marketing: false,
-  })
+  const [localPreferences, setLocalPreferences] = React.useState<CookiePreferences>(preferences)
 
+  // Update local preferences when global preferences change
   React.useEffect(() => {
-    const consent = localStorage.getItem('cookie-consent')
-    if (!consent) {
+    setLocalPreferences(preferences)
+  }, [preferences])
+
+  // Show banner logic with improved UX timing
+  React.useEffect(() => {
+    if (isLoading) return
+    
+    if (shouldShowBanner()) {
       // Show banner after 2 seconds to avoid disrupting the landing page experience
       const timer = setTimeout(() => setShowBanner(true), 2000)
       return () => clearTimeout(timer)
     }
-  }, [])
+  }, [shouldShowBanner, isLoading])
 
-  const acceptAll = () => {
-    const allPreferences = { essential: true, analytics: true, marketing: true }
-    setPreferences(allPreferences)
-    localStorage.setItem('cookie-consent', JSON.stringify(allPreferences))
+  const handleAcceptAll = () => {
+    acceptAll()
     setShowBanner(false)
     setShowSettings(false)
   }
 
-  const acceptSelected = () => {
-    localStorage.setItem('cookie-consent', JSON.stringify(preferences))
+  const handleAcceptSelected = () => {
+    updatePreferences(localPreferences)
     setShowBanner(false)
     setShowSettings(false)
   }
 
-  const rejectAll = () => {
-    const minimalPreferences = { essential: true, analytics: false, marketing: false }
-    setPreferences(minimalPreferences)
-    localStorage.setItem('cookie-consent', JSON.stringify(minimalPreferences))
+  const handleRejectAll = () => {
+    rejectAll()
     setShowBanner(false)
     setShowSettings(false)
+  }
+
+  const openSettings = () => {
+    setLocalPreferences(preferences) // Reset local preferences to current saved ones
+    setShowSettings(true)
   }
 
   return (
@@ -78,7 +86,7 @@ export function CookieConsent() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowSettings(true)}
+                    onClick={openSettings}
                     className="w-full sm:w-auto"
                     aria-label="Customize cookie preferences"
                   >
@@ -88,7 +96,7 @@ export function CookieConsent() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={rejectAll}
+                    onClick={handleRejectAll}
                     className="w-full sm:w-auto"
                     aria-label="Reject all non-essential cookies"
                   >
@@ -96,7 +104,7 @@ export function CookieConsent() {
                   </Button>
                   <Button
                     size="sm"
-                    onClick={acceptAll}
+                    onClick={handleAcceptAll}
                     className="w-full sm:w-auto"
                     aria-label="Accept all cookies"
                   >
@@ -146,15 +154,15 @@ export function CookieConsent() {
                 </div>
                 <div className="ml-4">
                   <button
-                    onClick={() => setPreferences(prev => ({ ...prev, analytics: !prev.analytics }))}
+                    onClick={() => setLocalPreferences(prev => ({ ...prev, analytics: !prev.analytics }))}
                     className={`w-12 h-6 rounded-full relative transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      preferences.analytics ? 'bg-blue-500' : 'bg-slate-300'
+                      localPreferences.analytics ? 'bg-blue-500' : 'bg-slate-300'
                     }`}
-                    aria-label={`${preferences.analytics ? 'Disable' : 'Enable'} analytics cookies`}
-                    aria-pressed={preferences.analytics}
+                    aria-label={`${localPreferences.analytics ? 'Disable' : 'Enable'} analytics cookies`}
+                    aria-pressed={localPreferences.analytics}
                   >
                     <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${
-                      preferences.analytics ? 'translate-x-6' : 'translate-x-0.5'
+                      localPreferences.analytics ? 'translate-x-6' : 'translate-x-0.5'
                     }`}></div>
                   </button>
                 </div>
@@ -169,15 +177,15 @@ export function CookieConsent() {
                 </div>
                 <div className="ml-4">
                   <button
-                    onClick={() => setPreferences(prev => ({ ...prev, marketing: !prev.marketing }))}
+                    onClick={() => setLocalPreferences(prev => ({ ...prev, marketing: !prev.marketing }))}
                     className={`w-12 h-6 rounded-full relative transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      preferences.marketing ? 'bg-blue-500' : 'bg-slate-300'
+                      localPreferences.marketing ? 'bg-blue-500' : 'bg-slate-300'
                     }`}
-                    aria-label={`${preferences.marketing ? 'Disable' : 'Enable'} marketing cookies`}
-                    aria-pressed={preferences.marketing}
+                    aria-label={`${localPreferences.marketing ? 'Disable' : 'Enable'} marketing cookies`}
+                    aria-pressed={localPreferences.marketing}
                   >
                     <div className={`w-5 h-5 bg-white rounded-full absolute top-0.5 shadow-sm transition-transform ${
-                      preferences.marketing ? 'translate-x-6' : 'translate-x-0.5'
+                      localPreferences.marketing ? 'translate-x-6' : 'translate-x-0.5'
                     }`}></div>
                   </button>
                 </div>
@@ -186,10 +194,10 @@ export function CookieConsent() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={rejectAll} aria-label="Reject all non-essential cookies">
+            <Button variant="outline" onClick={handleRejectAll} aria-label="Reject all non-essential cookies">
               Reject All
             </Button>
-            <Button onClick={acceptSelected} aria-label="Save selected cookie preferences">
+            <Button onClick={handleAcceptSelected} aria-label="Save selected cookie preferences">
               Save Preferences
             </Button>
           </DialogFooter>
