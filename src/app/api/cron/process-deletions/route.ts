@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { executeAccountDeletion, validateUserForDeletion } from '@/lib/deletion/account-cleanup'
+import { executeAccountDeletion, validateUserForDeletion, executeModernAccountDeletion } from '@/lib/deletion/account-cleanup'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -113,8 +113,8 @@ export async function GET(req: NextRequest) {
           // Continue anyway - these are warnings, not blockers for automated deletion
         }
 
-        // Execute the deletion
-        const deletionResult = await executeAccountDeletion(clerkUserId)
+        // Execute the deletion using modern soft deletion approach
+        const deletionResult = await executeModernAccountDeletion(clerkUserId, deletion.metadata?.reason)
 
         if (deletionResult.success) {
           console.log(`✅ Successfully deleted user ${clerkUserId}`)

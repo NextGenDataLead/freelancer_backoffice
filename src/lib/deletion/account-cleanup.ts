@@ -11,6 +11,7 @@
 
 import { clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { performSoftDeletion, SoftDeletionResult } from './soft-deletion'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,6 +32,16 @@ interface DeletionResult {
     supabaseDeleted: boolean
     partialFailure?: string[]
   }
+}
+
+export interface ModernDeletionResult {
+  success: boolean
+  method: 'soft_deletion' | 'hard_deletion'
+  userAnonymized: boolean
+  clerkAnonymized: boolean
+  error?: string
+  anonymizedUserId?: string
+  originalEmail?: string
 }
 
 /**
@@ -266,6 +277,9 @@ export async function deleteUserFromSupabase(dbUserId: string): Promise<{
 /**
  * Execute complete account deletion across both Clerk and Supabase
  * This is the main function that orchestrates the entire deletion process
+ * 
+ * @deprecated Use performSoftDeletion from soft-deletion.ts for GDPR-compliant anonymization
+ * This function performs hard deletion and should be replaced with soft deletion
  */
 export async function executeAccountDeletion(clerkUserId: string): Promise<DeletionResult> {
   let supabaseResult: { success: boolean; error?: string; partialFailures?: string[] } = { success: false }
@@ -484,6 +498,75 @@ export async function validateUserForDeletion(clerkUserId: string): Promise<{
     return {
       canDelete: false,
       issues: [`Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`]
+    }
+  }
+}
+
+/**
+ * Modern GDPR-compliant account deletion with anonymization
+ * This is the recommended approach that preserves analytics data while removing PII
+ * 
+ * @param clerkUserId The Clerk user ID to delete/anonymize
+ * @param reason Optional reason for deletion
+ * @returns ModernDeletionResult with anonymization details
+ */
+export async function executeModernAccountDeletion(
+  clerkUserId: string,
+  reason?: string
+): Promise<ModernDeletionResult> {
+  try {
+    console.log(`🔄 Starting modern account deletion (soft) for user: ${clerkUserId}`)
+    
+    // Use the soft deletion approach with anonymization
+    const result = await performSoftDeletion(clerkUserId, reason)
+    
+    // Create audit log entry for the deletion process
+    if (result.success && result.anonymizedUserId) {
+      try {
+        const supabaseAdmin = createClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!
+        )
+
+        await supabaseAdmin
+          .from('gdpr_audit_logs')
+          .insert({
+            user_id: result.anonymizedUserId,
+            action: 'deletion_completed',
+            metadata: {
+              method: 'soft_deletion_with_anonymization',
+              clerk_user_id: clerkUserId,
+              original_email: result.originalEmail,
+              reason: reason || 'User requested account deletion',
+              clerk_anonymized: result.clerkAnonymized,
+              supabase_anonymized: result.userAnonymized
+            }
+          })
+      } catch (auditError) {
+        console.warn('Failed to create completion audit log:', auditError)
+        // Don't fail the whole operation for audit issues
+      }
+    }
+
+    return {
+      success: result.success,
+      method: 'soft_deletion',
+      userAnonymized: result.userAnonymized,
+      clerkAnonymized: result.clerkAnonymized,
+      error: result.error,
+      anonymizedUserId: result.anonymizedUserId,
+      originalEmail: result.originalEmail
+    }
+
+  } catch (error) {
+    console.error(`❌ Modern account deletion failed for ${clerkUserId}:`, error)
+    
+    return {
+      success: false,
+      method: 'soft_deletion',
+      userAnonymized: false,
+      clerkAnonymized: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }

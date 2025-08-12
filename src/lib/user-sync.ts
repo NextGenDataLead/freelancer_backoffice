@@ -96,17 +96,26 @@ export function useUserSync() {
         const now = new Date().toISOString()
 
         if (existingProfile) {
-          // Update existing profile
+          // Update existing profile - preserve first_name/last_name if they exist in Supabase (single source of truth)
+          const updateData: any = {
+            email: user.primaryEmailAddress?.emailAddress || '',
+            avatar_url: user.imageUrl,
+            last_sign_in_at: now,
+            updated_at: now,
+          }
+          
+          // Only update name fields from Clerk if they don't exist in Supabase
+          // Supabase is the single source of truth for profile data
+          if (!existingProfile.first_name && user.firstName) {
+            updateData.first_name = user.firstName
+          }
+          if (!existingProfile.last_name && user.lastName) {
+            updateData.last_name = user.lastName
+          }
+
           const { data: updatedProfile, error: updateError } = await supabase
             .from('profiles')
-            .update({
-              email: user.primaryEmailAddress?.emailAddress || '',
-              first_name: user.firstName,
-              last_name: user.lastName,
-              avatar_url: user.imageUrl,
-              last_sign_in_at: now,
-              updated_at: now,
-            })
+            .update(updateData)
             .eq('clerk_user_id', user.id)
             .select()
             .single()
