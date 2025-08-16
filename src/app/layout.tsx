@@ -7,6 +7,8 @@ import { RouteGuard } from '@/components/auth/route-guard'
 import { InactivityWarning } from '@/components/auth/inactivity-warning'
 import { CookieConsent } from '@/components/cookie-consent'
 import { ConsentAwareAnalytics } from '@/components/analytics/consent-aware-analytics'
+import { LiveChat } from '@/components/support/live-chat'
+import { HelpSystem } from '@/components/help/help-system'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -86,6 +88,8 @@ export default function RootLayout({
             <ConsentAwareAnalytics 
               debug={process.env.NODE_ENV === 'development'}
             />
+            <LiveChat />
+            <HelpSystem />
           </QueryProvider>
         </body>
       </ClerkProvider>

@@ -4,205 +4,244 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a B2B SaaS template project based on comprehensive research for building modern, scalable SaaS applications. The project follows API-first development and Test-Driven Development (TDD) methodologies.
+This is a production-ready B2B SaaS template built with modern web technologies and enterprise-grade features. The project implements a complete data architecture with Clerk authentication, Supabase database, and GDPR-compliant user management with soft deletion capabilities.
 
 ## Architecture & Stack
 
-### Recommended Technology Stack
-- **Frontend**: React 18+ with Next.js 14+, TypeScript
-- **Backend**: Supabase for database and real-time features
-- **Authentication**: Clerk for user management and SSO
-- **State Management**: Zustand
+### Technology Stack
+- **Frontend**: Next.js 14+ App Router, React 18+, TypeScript
+- **Database**: Supabase with Row Level Security (RLS) policies  
+- **Authentication**: Clerk with SSO support
+- **State Management**: Zustand stores (auth, notifications, app state)
+- **Real-time**: Supabase real-time subscriptions
 - **Testing**: Vitest + React Testing Library + Playwright
-- **Styling**: Tailwind CSS
-- **Monitoring**: Sentry for error tracking
+- **Styling**: Tailwind CSS + shadcn/ui components
+- **Forms**: React Hook Form + Zod validation
 
-### Development Methodology
-- **API-First Development**: Design APIs before implementation using OpenAPI specifications
-- **Test-Driven Development**: Red-Green-Refactor cycle with comprehensive test coverage
-- **Testing Strategy**: 70% unit tests, 20% integration tests, 10% E2E tests
+### Data Architecture (Production-Ready)
+- **Clerk**: Authentication and SSO only
+- **Supabase**: Single source of truth for all business data
+- **Multi-tenant**: Shared database with tenant_id isolation via RLS
+- **GDPR Compliance**: Soft deletion with anonymization, preserves analytics data
+- **Grace Period**: 30-day account deletion protection system
 
 ## Commands
 
-### Development Setup
+### Development
 ```bash
-# Initialize Next.js project
-npx create-next-app@latest saas-template --typescript --tailwind --eslint --app
+# Start development server
+npm run dev
 
-# Install core dependencies
-npm install @supabase/supabase-js @clerk/nextjs zustand @tanstack/react-query
+# Build for production  
+npm run build
 
-# Install testing dependencies
-npm install -D vitest @testing-library/react @testing-library/jest-dom @playwright/test
-```
-
-### Testing Commands
-```bash
-# Unit tests
-npm run test:unit
-
-# Integration tests
-npm run test:integration
-
-# E2E tests
-npm run test:e2e
-
-# Coverage report
-npm run coverage:check
-```
-
-### Code Quality
-```bash
-# Linting
-npm run lint
+# Start production server
+npm start
 
 # Type checking
-npm run typecheck
+npm run type-check
 
-# Format code
+# Linting and formatting
+npm run lint
 npm run format
+npm run format:check
 ```
 
-## Key Features to Implement
+### Testing
+```bash
+# Run all unit tests
+npm run test:unit
 
-### Phase 1: Foundation (Weeks 1-4)
-1. **Core Architecture Setup**
-   - Next.js with TypeScript
-   - Supabase database configuration
-   - Clerk authentication integration
-   - Basic testing setup
+# Run integration tests  
+npm run test:integration
 
-2. **Multi-Tenant Database Design**
-   - Tenant isolation with RLS policies
-   - Organization and membership tables
-   - Security-first approach
+# Run E2E tests (or use Playwright MCP tools)
+npm run test:e2e
 
-### Phase 2: Core Features (Weeks 5-8)
-1. **Authentication Flow**
-   - Sign up/sign in pages
-   - Password reset functionality with secure tokens
-   - Rate limiting for security
+# Interactive test UI
+npm run test:ui
 
-2. **Dashboard Layout**
-   - Responsive sidebar navigation
-   - User management interface
-   - Real-time features with Supabase
+# Watch mode for development
+npm run test:watch  
 
-### Phase 3: Advanced Features (Weeks 9-12)
-1. **GDPR Compliance**
-   - Cookie consent management
-   - Data export functionality
-   - Account deletion with 30-day grace period
-   - Audit logging system
+# Test coverage report
+npm run test:coverage
 
-2. **Security Features**
-   - Row Level Security (RLS) policies
-   - Password hashing with bcrypt
-   - Security headers middleware
+# Full CI test suite
+npm run test:ci
+```
 
-## Code Conventions
+### Database Operations
+```bash
+# Apply Supabase migrations manually
+# Run .sql files from supabase/migrations/ in Supabase dashboard
 
-### File Structure
+# Check migration status and logs
+# Use Supabase MCP tools: mcp__supabase__list_migrations
+```
+
+## Key Architecture Components
+
+### Authentication Flow
+- **Clerk Integration**: Handles SSO, MFA, user authentication
+- **User Sync**: Automatic sync from Clerk to Supabase profiles table
+- **Route Guards**: Component-based authentication protection
+- **Inactivity Warning**: Auto-logout after inactivity period
+
+### Data Models (Supabase Schema)
+```sql
+-- Core tables with RLS policies
+profiles: User profiles (single source of truth)
+tenants: Multi-tenant organization data  
+organizations: Organization management
+organization_memberships: User-organization relationships
+deletion_requests: GDPR deletion workflow with grace period
+gdpr_audit_logs: Compliance audit trail
+notifications: Real-time notification system
+```
+
+### GDPR Compliance System
+- **Soft Deletion**: Anonymizes PII while preserving analytics data
+- **Grace Period**: 30-day cancellation window for deletion requests  
+- **Data Export**: Comprehensive user data export (v2.0 architecture)
+- **Audit Logging**: Complete GDPR activity tracking
+- **Cookie Consent**: EU compliance with analytics integration
+
+### Real-time Features  
+- **Dashboard Metrics**: Live KPI updates via Supabase subscriptions
+- **Notifications**: Database-backed real-time notifications
+- **User Presence**: Activity status and session management
+
+## File Structure & Patterns
+
+### App Directory (Next.js 14+ App Router)
+```
+src/app/
+├── api/                    # API routes
+│   ├── user/              # User management endpoints
+│   ├── admin/             # Admin operations  
+│   └── cron/              # Background job processing
+├── dashboard/             # Protected dashboard pages
+└── (auth)/                # Authentication pages
+```
+
+### Component Architecture (Atomic Design)
+```
+src/components/
+├── ui/                    # shadcn/ui base components
+├── atoms/                 # Basic reusable elements  
+├── molecules/             # Simple compound components
+├── organisms/             # Complex UI sections
+└── templates/             # Page-level layouts
+```
+
+### Business Logic Organization
 ```
 src/
-├── components/
-│   ├── atoms/          # Basic UI elements
-│   ├── molecules/      # Simple compound components
-│   ├── organisms/      # Complex UI sections
-│   └── templates/      # Page-level layouts
-├── features/           # Business logic modules
-│   ├── auth/
-│   ├── dashboard/
-│   └── settings/
-└── shared/            # Cross-cutting concerns
-    ├── hooks/
-    ├── utils/
-    └── types/
+├── lib/                   # Core utilities and configurations
+│   ├── deletion/          # GDPR deletion system
+│   └── gdpr/             # Privacy and compliance tools
+├── hooks/                 # Custom React hooks  
+├── store/                 # Zustand state management
+└── features/              # Feature-specific modules
 ```
 
-### API Standards
-- **Naming**: Resources use plural-kebab-case (/organizations)
-- **Versioning**: URL path versioning (/v1, /v2)
-- **Pagination**: Cursor-based with limit parameter
-- **Error Format**: RFC7807 Problem Details format
+### Database Migrations
+```
+supabase/migrations/
+├── 001_create_core_schema.sql          # Base multi-tenant structure
+├── 002_create_rls_functions_and_policies.sql  # Security policies
+├── 003_create_gdpr_tables.sql          # GDPR compliance tables
+├── 011_grace_period_prevention.sql     # Deletion protection
+└── 012_extend_profiles_for_data_architecture.sql  # Recent enhancements
+```
 
-### Database Patterns
-- **Multi-tenancy**: Shared database with tenant_id isolation
-- **Security**: Row Level Security (RLS) on all tables
-- **Performance**: Proper indexing on tenant_id and foreign keys
+## Critical Implementation Details
 
-## Security Requirements
+### User Data Synchronization
+- **Clerk → Supabase**: Automatic sync via `useUserSync()` hook
+- **Conflict Resolution**: Supabase data takes precedence over Clerk  
+- **Profile Updates**: All changes saved to Supabase as single source of truth
+- **Real-time Sync**: Cross-component state updates via events
 
-### Authentication Security
-- bcrypt password hashing with cost factor 12
-- Secure token generation for password resets
-- Rate limiting on sensitive endpoints
-- Session management with short-lived JWT tokens
+### Grace Period Protection System
+- **Trigger**: User requests account deletion → creates pending deletion_request
+- **Protection**: Blocks profile changes, settings updates, data creation  
+- **Duration**: 30-day configurable grace period
+- **Cancellation**: User can cancel deletion and restore full access
+- **Automation**: Cron job processes expired deletion requests
 
-### Data Protection
-- Encryption at rest (AES-256) and in transit (TLS 1.3)
-- GDPR compliance with data export and deletion
-- Audit logging for all data processing activities
-- Privacy by design architecture
+### API Patterns
+- **Authentication**: Clerk auth() for user identification
+- **Authorization**: Supabase RLS policies for data access
+- **Error Handling**: Consistent error responses with audit logging
+- **Rate Limiting**: Built-in protection for sensitive endpoints
 
-## Development Workflow
-
-### Feature Development Process
-1. **Design API specification** using OpenAPI
-2. **Write failing tests** (Red phase)
-3. **Implement minimal code** to pass tests (Green phase)
-4. **Refactor** for code quality (Refactor phase)
-5. **Integration testing** with real services
-6. **E2E testing** for user workflows
-
-### Quality Gates
-- All tests must pass before merge
-- Code coverage > 80%
-- No security vulnerabilities
-- Performance budgets met (LCP < 2.5s, INP < 200ms)
-
-## Monitoring & Observability
-
-### Performance Tracking
-- Core Web Vitals monitoring
-- API response time tracking
-- Error rate monitoring with Sentry
-- Custom business metrics
-
-### Compliance Monitoring
-- GDPR audit logs
-- Security headers validation
-- Data retention policy enforcement
+### Testing Strategy (70/20/10 Coverage)
+- **Unit Tests**: Components, utilities, hooks (70%)
+- **Integration Tests**: API routes, database operations (20%)  
+- **E2E Tests**: User workflows via Playwright MCP tools (10%)
 
 ## Environment Configuration
 
-### Required Environment Variables
+### Required Variables
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-NEXT_PUBLIC_SENTRY_DSN=
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key  
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# Clerk Authentication
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+CLERK_SECRET_KEY=your_clerk_secret_key
+NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL=/onboarding
+NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL=/dashboard
+
+# Optional: Cron job security
+CRON_SECRET=your_secure_cron_secret
+
+# Optional: Monitoring
+NEXT_PUBLIC_SENTRY_DSN=your_sentry_dsn
 ```
 
-## Special Considerations
+## Development Workflows
 
-### GDPR Compliance
-- Implement cookie consent banner
-- Provide data export functionality
-- Support account deletion with grace period
-- Maintain comprehensive audit logs
+### Feature Development Process  
+1. **Plan**: Use TodoWrite tool to track complex tasks
+2. **API Design**: Create API routes following existing patterns
+3. **Database**: Add migrations to supabase/migrations/ if needed
+4. **Components**: Build using atomic design principles
+5. **Testing**: Write tests following 70/20/10 strategy
+6. **Integration**: Ensure proper RLS policies and auth guards
 
-### Multi-Tenant Architecture
-- Tenant isolation using RLS policies
-- Organization-based access control
-- Scalable database design patterns
+### Database Changes
+1. Create numbered migration file in `supabase/migrations/`
+2. Include RLS policies and indexes in same migration
+3. Test migration on development environment first
+4. Apply via Supabase dashboard or CLI
 
-### API-First Development
-- OpenAPI specifications drive development
-- Mock servers for parallel development
-- Contract testing between services
-- Automated SDK generation
+### GDPR and Privacy Considerations
+- All new user data must support soft deletion/anonymization  
+- Implement grace period protection for sensitive operations
+- Add audit logging for data processing activities
+- Ensure RLS policies prevent cross-tenant data access
 
-This template follows modern best practices for B2B SaaS development with emphasis on security, compliance, and scalability.
+## Key Integrations
+
+### MCP Tools Available
+- **Supabase MCP**: Database operations, migrations, logs
+- **Playwright MCP**: E2E testing with browser automation
+- **Context7 MCP**: Up-to-date documentation lookup
+- **shadcn-ui MCP**: Component code and examples
+
+### Real-time Features
+- **Dashboard**: Live metrics via `useRealtimeDashboard()` 
+- **Notifications**: Database notifications via `useRealtimeNotifications()`
+- **User Presence**: Activity tracking and session management
+
+### Background Jobs  
+- **Deletion Processing**: `GET /api/cron/process-deletions` 
+- **Automated Cleanup**: Processes expired grace period deletions
+- **Audit Logging**: Comprehensive GDPR compliance tracking
+
+This template provides enterprise-grade B2B SaaS functionality with complete GDPR compliance, multi-tenant architecture, and production-ready security features.

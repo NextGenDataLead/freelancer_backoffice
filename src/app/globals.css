@@ -2,28 +2,69 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Phase 6: Visual Design Polish - Typography System */
+@import '../styles/typography.css';
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Phase 6: Refined Color Palette - 3 Primary Colors + Neutrals */
+    
+    /* Primary Colors - Brand Identity */
+    --primary-blue: 221.2 83.2% 53.3%;      /* #3b82f6 - Trust, stability */
+    --primary-violet: 262.1 83.3% 57.8%;    /* #8b5cf6 - Innovation, premium */
+    --primary-emerald: 160.1 84.1% 39.4%;   /* #10b981 - Success, growth */
+    
+    /* Neutral Grays - Professional Foundation */
+    --neutral-50: 210 20% 98%;               /* #f8fafc - Light background */
+    --neutral-100: 210 17% 95%;              /* #f1f5f9 - Subtle background */
+    --neutral-200: 214.3 31.8% 91.4%;       /* #e2e8f0 - Borders */
+    --neutral-300: 212.7 26.8% 83.9%;       /* #cbd5e1 - Disabled states */
+    --neutral-400: 215.4 16.3% 56.9%;       /* #94a3b8 - Subtle text */
+    --neutral-500: 215.4 16.3% 46.9%;       /* #64748b - Muted text */
+    --neutral-600: 215.3 19.3% 34.5%;       /* #475569 - Secondary text */
+    --neutral-700: 215.3 25% 26.7%;         /* #334155 - Primary text */
+    --neutral-800: 217.2 32.6% 17.5%;       /* #1e293b - Dark text */
+    --neutral-900: 222.2 84% 4.9%;          /* #0f172a - Darkest */
+    
+    /* Semantic Colors */
+    --success: 160.1 84.1% 39.4%;           /* Emerald-600 */
+    --warning: 38.0 92.0% 50.0%;            /* Amber-500 */
+    --error: 0 84.2% 60.2%;                 /* Red-500 */
+    --info: var(--primary-blue);            /* Blue-500 */
+    
+    /* Component Colors - Using refined palette */
+    --background: var(--neutral-50);
+    --foreground: var(--neutral-900);
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: var(--neutral-900);
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --popover-foreground: var(--neutral-900);
+    --primary: var(--primary-blue);
+    --primary-foreground: var(--neutral-50);
+    --secondary: var(--neutral-100);
+    --secondary-foreground: var(--neutral-900);
+    --muted: var(--neutral-100);
+    --muted-foreground: var(--neutral-500);
+    --accent: var(--primary-violet);
+    --accent-foreground: var(--neutral-50);
+    --destructive: var(--error);
+    --destructive-foreground: var(--neutral-50);
+    --border: var(--neutral-200);
+    --input: var(--neutral-200);
+    --ring: var(--primary-blue);
     --radius: 0.5rem;
+    
+    /* Gradients - Professional brand gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary-blue)) 0%, hsl(var(--primary-violet)) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(var(--primary-emerald)) 0%, hsl(160.1 84.1% 29.4%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(var(--neutral-50)) 0%, hsl(220 13% 95%) 100%);
+    
+    /* Shadows - Consistent elevation */
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
   }
 
   .dark {
@@ -54,6 +95,232 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    font-family: var(--font-sans);
+  }
+}
+
+/* Phase 6: Strategic Whitespace & Visual Hierarchy */
+@layer components {
+  /* Consistent spacing system - 8px grid */
+  .space-grid-xs { @apply space-y-1; }     /* 4px */
+  .space-grid-sm { @apply space-y-2; }     /* 8px */
+  .space-grid-md { @apply space-y-4; }     /* 16px */
+  .space-grid-lg { @apply space-y-6; }     /* 24px */
+  .space-grid-xl { @apply space-y-8; }     /* 32px */
+  .space-grid-2xl { @apply space-y-12; }   /* 48px */
+  .space-grid-3xl { @apply space-y-16; }   /* 64px */
+  .space-grid-4xl { @apply space-y-24; }   /* 96px */
+  
+  /* Content width constraints for optimal readability */
+  .content-width-sm { max-width: 45ch; }   /* ~45 characters optimal for reading */
+  .content-width-md { max-width: 65ch; }   /* ~65 characters comfortable */
+  .content-width-lg { max-width: 75ch; }   /* ~75 characters maximum */
+  
+  /* Visual hierarchy through consistent elevation */
+  .elevation-xs { box-shadow: var(--shadow-xs); }
+  .elevation-sm { box-shadow: var(--shadow-sm); }
+  .elevation-md { box-shadow: var(--shadow-md); }
+  .elevation-lg { box-shadow: var(--shadow-lg); }
+  .elevation-xl { box-shadow: var(--shadow-xl); }
+  
+  /* Interactive states with consistent feedback */
+  .interactive-base {
+    @apply transition-all duration-200 ease-out;
+  }
+  
+  .interactive-hover:hover {
+    @apply transform -translate-y-0.5 elevation-md;
+  }
+  
+  .interactive-press:active {
+    @apply transform translate-y-0 elevation-sm;
+  }
+  
+  /* Gradient backgrounds using refined palette */
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+  
+  .gradient-success {
+    background: var(--gradient-success);
+  }
+  
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+  
+  /* Typography combinations for common patterns */
+  .headline-primary {
+    @apply text-heading-xl text-slate-900 font-bold tracking-tight;
+  }
+  
+  .headline-secondary {
+    @apply text-heading-lg text-slate-700 font-semibold;
+  }
+  
+  .body-primary {
+    @apply text-body-base text-slate-600 leading-relaxed content-width-md;
+  }
+  
+  .body-secondary {
+    @apply text-body-sm text-slate-500 leading-normal content-width-lg;
+  }
+  
+  .label-primary {
+    @apply text-label-md text-slate-700 font-medium;
+  }
+  
+  .label-secondary {
+    @apply text-label-sm text-slate-500 font-medium tracking-wide uppercase;
+  }
+  
+  /* Enhanced section containers with mobile-first spacing */
+  .section-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-12;
+  }
+  
+  .section-container-tight {
+    @apply max-w-6xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .section-container-wide {
+    @apply max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-16;
+  }
+  
+  .section-spacing-xs {
+    @apply py-8 sm:py-10 lg:py-12;
+  }
+  
+  .section-spacing-sm {
+    @apply py-12 sm:py-16 lg:py-20;
+  }
+  
+  .section-spacing-md {
+    @apply py-16 sm:py-20 lg:py-24 xl:py-28;
+  }
+  
+  .section-spacing-lg {
+    @apply py-20 sm:py-24 lg:py-32 xl:py-40;
+  }
+  
+  /* Enhanced card patterns with mobile-optimized spacing */
+  .card-elevated {
+    @apply bg-white rounded-lg sm:rounded-xl border border-slate-200 elevation-sm interactive-base;
+  }
+  
+  .card-elevated:hover {
+    @apply elevation-md border-slate-300;
+  }
+  
+  .card-featured {
+    @apply card-elevated ring-2 ring-blue-100 border-blue-200;
+  }
+  
+  .card-compact {
+    @apply card-elevated p-3 sm:p-4 lg:p-6;
+  }
+  
+  .card-standard {
+    @apply card-elevated p-4 sm:p-6 lg:p-8;
+  }
+  
+  .card-hero {
+    @apply card-elevated p-6 sm:p-8 lg:p-12;
+  }
+  
+  /* Focus management for accessibility */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md;
+  }
+  
+  /* Responsive text scaling */
+  .text-responsive-xl {
+    @apply text-3xl sm:text-4xl lg:text-5xl;
+  }
+  
+  .text-responsive-lg {
+    @apply text-2xl sm:text-3xl lg:text-4xl;
+  }
+  
+  .text-responsive-md {
+    @apply text-xl sm:text-2xl lg:text-3xl xl:text-4xl;
+  }
+  
+  .text-responsive-sm {
+    @apply text-lg sm:text-xl lg:text-2xl;
+  }
+  
+  .text-responsive-xs {
+    @apply text-base sm:text-lg lg:text-xl;
+  }
+}
+
+/* Mobile-first layout utilities */
+@layer utilities {
+  /* Flexbox responsive patterns */
+  .flex-mobile-col {
+    @apply flex flex-col sm:flex-row;
+  }
+  
+  .flex-mobile-col-reverse {
+    @apply flex flex-col-reverse sm:flex-row;
+  }
+  
+  .flex-tablet-col {
+    @apply flex flex-col md:flex-row;
+  }
+  
+  /* Grid responsive patterns */
+  .grid-mobile-1 {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+  
+  .grid-mobile-2 {
+    @apply grid grid-cols-1 md:grid-cols-2;
+  }
+  
+  .grid-mobile-3 {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3;
+  }
+  
+  /* Mobile-optimized spacing */
+  .gap-mobile {
+    @apply gap-4 sm:gap-6 lg:gap-8;
+  }
+  
+  .gap-mobile-sm {
+    @apply gap-2 sm:gap-3 lg:gap-4;
+  }
+  
+  .gap-mobile-lg {
+    @apply gap-6 sm:gap-8 lg:gap-12;
+  }
+  
+  /* Touch-friendly interactive elements */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] touch-manipulation;
+  }
+  
+  .touch-target-lg {
+    @apply min-h-[48px] min-w-[48px] touch-manipulation;
+  }
+  
+  /* Mobile navigation patterns */
+  .nav-mobile-hidden {
+    @apply hidden md:flex;
+  }
+  
+  .nav-mobile-only {
+    @apply flex md:hidden;
+  }
+  
+  /* Responsive image patterns */
+  .img-mobile-full {
+    @apply w-full h-auto object-cover rounded-lg sm:rounded-xl;
+  }
+  
+  .img-mobile-constrained {
+    @apply max-w-full h-auto object-contain;
   }
 }
