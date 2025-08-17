@@ -152,8 +152,10 @@ supabase/migrations/
 ├── 001_create_core_schema.sql          # Base multi-tenant structure
 ├── 002_create_rls_functions_and_policies.sql  # Security policies
 ├── 003_create_gdpr_tables.sql          # GDPR compliance tables
+├── 004_create_documents_table.sql      # Document management
+├── 005_create_notifications_system.sql # Real-time notifications
 ├── 011_grace_period_prevention.sql     # Deletion protection
-└── 012_extend_profiles_for_data_architecture.sql  # Recent enhancements
+└── 012_extend_profiles_for_data_architecture.sql  # Enhanced profiles + onboarding tracking
 ```
 
 ## Critical Implementation Details

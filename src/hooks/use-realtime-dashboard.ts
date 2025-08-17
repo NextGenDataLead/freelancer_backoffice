@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useSupabaseClient } from './use-supabase-client'
+import { useClerkSupabaseClient } from '@/lib/supabase/client'
 import { useAuth } from '@clerk/nextjs'
 import { RealtimeChannel } from '@supabase/supabase-js'
 
@@ -33,8 +33,9 @@ export interface MetricData {
  * Subscribes to dashboard_metrics table and provides real-time updates
  */
 export function useRealtimeDashboard() {
-  const { supabase, isAuthenticated } = useSupabaseClient()
-  const { userId } = useAuth()
+  const supabase = useClerkSupabaseClient()
+  const { userId, isLoaded } = useAuth()
+  const isAuthenticated = isLoaded && !!userId
   const channelRef = useRef<RealtimeChannel | null>(null)
   const [metrics, setMetrics] = useState<Record<string, DashboardMetric>>({})
   const [isConnected, setIsConnected] = useState(false)

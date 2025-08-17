@@ -1,0 +1,150 @@
+{
+  "id": "01k2vdjkh407j0yxwkx20frzn4",
+  "status": "completed",
+  "instructions": "I want to use Clerk only as Authenticator I want the rest of the user data to be in Supabase. How to streamline this best as possible ",
+  "schema": {
+    "description": "Schema describing strategies to use Clerk solely as an authenticator while managing user data in Supabase, including best practices and reasoning",
+    "type": "object",
+    "required": [
+      "strategies"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "strategies": {
+        "type": "array",
+        "description": "List of strategies to streamline using Clerk for authentication and Supabase for user data management",
+        "items": {
+          "type": "object",
+          "required": [
+            "step",
+            "description",
+            "reasoning"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "step": {
+              "type": "string",
+              "description": "Step or action to implement the strategy"
+            },
+            "description": {
+              "type": "string",
+              "description": "Detailed explanation of the step"
+            },
+            "reasoning": {
+              "type": "string",
+              "description": "Why this step is important or beneficial"
+            },
+            "sourceURLs": {
+              "type": "array",
+              "description": "Links to documentation or resources supporting the strategy",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "model": "exa-research",
+  "data": {
+    "strategies": [
+      {
+        "step": "Set up Clerk as a third-party auth provider in Supabase",
+        "description": "In the Clerk Dashboard, activate the Supabase integration to obtain your Clerk domain. Then, in the Supabase Dashboard under Authentication > Sign In / Up, add Clerk as a third-party provider using the Clerk domain. This allows Supabase to recognize Clerk's session tokens for authentication.",
+        "reasoning": "This step enables Supabase to accept Clerk's authentication tokens, allowing seamless user identity verification while delegating authentication to Clerk.",
+        "sourceURLs": [
+          "https://clerk.com/docs/integrations/databases/supabase"
+        ]
+      },
+      {
+        "step": "Create Row-Level Security (RLS) policies in Supabase using Clerk user IDs",
+        "description": "Create a user_id column in your Supabase tables that defaults to the Clerk user's ID extracted from the JWT token. Then, define RLS policies that restrict data access to only those rows where the user_id matches the authenticated Clerk user's ID.",
+        "reasoning": "RLS policies enforce fine-grained access control, ensuring users can only access their own data in the shared Supabase database, leveraging Clerk's user identity for security.",
+        "sourceURLs": [
+          "https://clerk.com/docs/integrations/databases/supabase"
+        ]
+      },
+      {
+        "step": "Use Clerk session tokens to authenticate Supabase client requests",
+        "description": "Configure your Supabase client to include the Clerk session token as an access token in request headers. This can be done by creating a custom Supabase client that asynchronously fetches the Clerk session token and passes it on every request.",
+        "reasoning": "Passing the Clerk session token to Supabase allows Supabase to verify the user's identity and enforce RLS policies based on that identity, maintaining secure and authenticated data operations.",
+        "sourceURLs": [
+          "https://clerk.com/docs/integrations/databases/supabase"
+        ]
+      },
+      {
+        "step": "Sync user data from Clerk to Supabase using webhooks and Supabase Edge Functions",
+        "description": "Set up Clerk webhooks to trigger on user-related events (e.g., user.created, user.updated). Create a Supabase Edge Function to receive these webhook payloads and update your Supabase user tables accordingly with the latest user data from Clerk.",
+        "reasoning": "This approach keeps your Supabase user data in sync with Clerk, ensuring your application has local access to user metadata for analytics, reporting, or advanced queries without querying Clerk in real-time.",
+        "sourceURLs": [
+          "https://clerk.com/blog/sync-clerk-user-data-to-supabase"
+        ]
+      },
+      {
+        "step": "Implement Clerk authentication UI and middleware in your application",
+        "description": "Use Clerk's SDK (e.g., @clerk/nextjs for Next.js apps) to add authentication UI components like sign-in, sign-up, and user profile management. Use Clerk middleware to protect routes and manage session state across your app.",
+        "reasoning": "This provides a seamless and secure user authentication experience managed by Clerk, while your app focuses on user data management in Supabase.",
+        "sourceURLs": [
+          "https://supertokens.com/blog/how-to-integrate-clerk-with-supabase"
+        ]
+      },
+      {
+        "step": "Configure environment variables and install necessary client libraries",
+        "description": "Add Supabase project URL and anon/public API keys to your environment variables with appropriate prefixes (e.g., NEXT_PUBLIC_SUPABASE_URL). Install Supabase client libraries and Clerk SDK in your project to enable integration.",
+        "reasoning": "Proper configuration and installation are essential for your app to communicate securely and effectively with both Clerk and Supabase services.",
+        "sourceURLs": [
+          "https://clerk.com/docs/integrations/databases/supabase",
+          "https://supertokens.com/blog/how-to-integrate-clerk-with-supabase"
+        ]
+      }
+    ]
+  },
+  "citations": {
+    "strategies": [
+      {
+        "id": "https://clerk.com/docs/integrations/databases/supabase",
+        "url": "https://clerk.com/docs/integrations/databases/supabase",
+        "title": "Integrate Supabase with Clerk",
+        "snippet": "Integrating Supabase with Clerk gives you the benefits of using a Supabase database while leveraging Clerk's authentication, prebuilt components, and webhooks."
+      },
+      {
+        "id": "https://clerk.com/blog/sync-clerk-user-data-to-supabase",
+        "url": "https://clerk.com/blog/sync-clerk-user-data-to-supabase",
+        "title": "Synchronize user data from Clerk to Supabase",
+        "snippet": "In this article, you'll learn how to access user information using Clerk's Backend API, and how to sync Clerk users to your Supabase database using Webhooks ..."
+      },
+      {
+        "id": "https://supertokens.com/blog/how-to-integrate-clerk-with-supabase",
+        "url": "https://supertokens.com/blog/how-to-integrate-clerk-with-supabase",
+        "title": "How to Integrate Clerk with Supabase (Plus another option ...",
+        "snippet": "In this guide, we'll walk through integrating Clerk with Supabase step-by-step. We start with a basic, no-auth Next.js app and gradually add ..."
+      },
+      {
+        "id": "https://reddit.com/r/Supabase/comments/1j5vcdz/syncing_clerk_user_data_with_supabase_for_user",
+        "url": "https://www.reddit.com/r/Supabase/comments/1j5vcdz/syncing_clerk_user_data_with_supabase_for_user",
+        "title": "Syncing Clerk User Data with Supabase for ...",
+        "snippet": "I'm trying to figure out the best way to sync user data between Clerk and Supabase so that I can use Supabase's user impersonation feature for debugging and ..."
+      },
+      {
+        "id": "https://supabase.com/partners/clerk",
+        "url": "https://supabase.com/partners/clerk",
+        "title": "Clerk | Works With Supabase",
+        "snippet": "Use the Clerk Supabase integration helper in your code to authenticate with Supabase and execute queries. 1: Create a function to check the incoming user ID."
+      },
+      {
+        "id": "https://clerk.com/blog/how-clerk-integrates-with-supabase-auth",
+        "url": "https://clerk.com/blog/how-clerk-integrates-with-supabase-auth",
+        "title": "How Clerk integrates with Supabase",
+        "snippet": "In this article, we'll compare Supabase Auth with Clerk, looking at the differences in implementation and covering some of the additional capabilities offered ..."
+      },
+      {
+        "id": "https://reddit.com/r/Supabase/comments/1hh5l9d/integrating_supabase_and_clerk",
+        "url": "https://www.reddit.com/r/Supabase/comments/1hh5l9d/integrating_supabase_and_clerk",
+        "title": "Integrating Supabase and Clerk - Reddit",
+        "snippet": "I setup full authentication in 20 mins. The last step was to add supabase -> after a user signs up I want their data to be added to my own database."
+      }
+    ]
+  },
+  "timeMs": 17576
+}

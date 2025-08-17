@@ -1,14 +1,15 @@
 'use client'
 
 import { useUser } from '@clerk/nextjs'
-import { useSupabaseClient } from '@/hooks/use-supabase-client'
+import { useClerkSupabaseClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 export function SupabaseUserTest() {
   const { user: clerkUser, isLoaded } = useUser()
-  const { supabase, isAuthenticated } = useSupabaseClient()
+  const supabase = useClerkSupabaseClient()
+  const isAuthenticated = isLoaded && !!clerkUser
   const [supabaseProfile, setSupabaseProfile] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

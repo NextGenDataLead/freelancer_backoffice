@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useUser } from '@clerk/nextjs'
-import { useSupabaseClient } from '@/hooks/use-supabase-client'
+import { useClerkSupabaseClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/auth-store'
 
 /**
@@ -31,8 +31,11 @@ export interface UserProfile {
  */
 export function useUserSync() {
   const { user, isLoaded } = useUser()
-  const { supabase, isAuthenticated } = useSupabaseClient()
+  const supabase = useClerkSupabaseClient()
   const { setUserProfile, setIsAuthenticated, setIsLoading } = useAuthStore()
+  
+  // Determine authentication status based on Clerk user
+  const isAuthenticated = isLoaded && !!user
 
   useEffect(() => {
     if (!isLoaded) {
@@ -157,7 +160,7 @@ export function useUserSync() {
     }
 
     syncUserProfile()
-  }, [user, isLoaded, isAuthenticated, supabase, setUserProfile, setIsAuthenticated, setIsLoading])
+  }, [user, isLoaded, isAuthenticated, setUserProfile, setIsAuthenticated, setIsLoading])
 
   return {
     user,

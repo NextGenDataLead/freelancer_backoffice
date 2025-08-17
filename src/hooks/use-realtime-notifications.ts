@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { useSupabaseClient } from './use-supabase-client'
+import { useClerkSupabaseClient } from '@/lib/supabase/client'
 import { useAuth } from '@clerk/nextjs'
 import { useNotificationsStore, type Notification } from '@/store/notifications-store'
 import { RealtimeChannel } from '@supabase/supabase-js'
@@ -28,8 +28,9 @@ interface DatabaseNotification {
  * Subscribes to the notifications table and updates the local store
  */
 export function useRealtimeNotifications() {
-  const { supabase, isAuthenticated } = useSupabaseClient()
-  const { userId } = useAuth()
+  const supabase = useClerkSupabaseClient()
+  const { userId, isLoaded } = useAuth()
+  const isAuthenticated = isLoaded && !!userId
   const { addNotification, removeNotification, markAsRead } = useNotificationsStore()
   const channelRef = useRef<RealtimeChannel | null>(null)
 
