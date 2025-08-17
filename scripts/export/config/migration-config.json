@@ -1,0 +1,213 @@
+{
+  "migration": {
+    "name": "Supabase SaaS Template Migration",
+    "version": "1.0.0",
+    "description": "Complete environment migration for production-ready SaaS template with Clerk integration",
+    "author": "Supabase Export Scripts",
+    "created": "2025-01-17"
+  },
+  "database": {
+    "export": {
+      "includeSchema": true,
+      "includeData": true,
+      "includeRoles": true,
+      "includeMigrationHistory": true,
+      "includeExtensions": true,
+      "includeTriggers": true,
+      "includeViews": true,
+      "includeFunctions": true,
+      "includeSequences": true
+    },
+    "import": {
+      "useSingleTransaction": true,
+      "enableErrorHandling": true,
+      "setReplicationRole": true,
+      "validateConstraints": true,
+      "rebuildIndexes": false,
+      "updateStatistics": true
+    },
+    "schemas": {
+      "include": ["public", "auth", "storage"],
+      "exclude": ["information_schema", "pg_catalog"],
+      "customSchemas": []
+    },
+    "tables": {
+      "priority": [
+        "tenants",
+        "profiles", 
+        "organizations",
+        "organization_memberships",
+        "deletion_requests",
+        "gdpr_audit_logs",
+        "notifications"
+      ],
+      "exclude": [],
+      "verifyIntegrity": true
+    }
+  },
+  "storage": {
+    "migration": {
+      "enabled": true,
+      "skipExisting": true,
+      "preserveMetadata": true,
+      "batchSize": 5,
+      "maxConcurrency": 10,
+      "retryAttempts": 3,
+      "retryDelay": 1000
+    },
+    "buckets": {
+      "includeAll": true,
+      "preserveSettings": true,
+      "recreatePolicies": true
+    },
+    "objects": {
+      "maxFileSize": "100MB",
+      "supportedTypes": ["*"],
+      "preservePath": true,
+      "preserveTimestamps": false
+    }
+  },
+  "functions": {
+    "export": {
+      "enabled": true,
+      "includeCode": true,
+      "includeConfig": true,
+      "includeEnvVars": true,
+      "excludeSecrets": true
+    },
+    "deployment": {
+      "autoDeployAfterExport": false,
+      "validateCode": true,
+      "setEnvVars": false,
+      "testAfterDeploy": true
+    }
+  },
+  "verification": {
+    "enabled": true,
+    "checks": {
+      "tableCount": true,
+      "rowCount": true,
+      "dataIntegrity": true,
+      "constraintValidation": true,
+      "indexValidation": true,
+      "functionValidation": true,
+      "triggerValidation": true,
+      "sequenceValidation": true
+    },
+    "sampling": {
+      "enabled": true,
+      "sampleSize": 1000,
+      "randomSeed": 42
+    },
+    "reports": {
+      "generateDetailed": true,
+      "includeMetrics": true,
+      "exportToFile": true
+    }
+  },
+  "logging": {
+    "level": "info",
+    "output": {
+      "console": true,
+      "file": true,
+      "structured": false
+    },
+    "retention": {
+      "days": 30,
+      "maxSize": "100MB"
+    }
+  },
+  "security": {
+    "encryption": {
+      "enabled": false,
+      "algorithm": "AES-256-GCM",
+      "keyRotation": false
+    },
+    "access": {
+      "requireTokens": true,
+      "validatePermissions": true,
+      "auditAccess": true
+    },
+    "cleanup": {
+      "removeTemporaryFiles": true,
+      "sanitizeLogs": false,
+      "clearCache": true
+    }
+  },
+  "performance": {
+    "database": {
+      "connectionPool": 5,
+      "queryTimeout": 300000,
+      "statementTimeout": 600000,
+      "lockTimeout": 30000
+    },
+    "storage": {
+      "downloadTimeout": 120000,
+      "uploadTimeout": 300000,
+      "maxRetries": 3
+    },
+    "functions": {
+      "deployTimeout": 180000,
+      "verificationTimeout": 60000
+    }
+  },
+  "rollback": {
+    "enabled": true,
+    "automatic": {
+      "onError": true,
+      "timeoutMinutes": 30,
+      "preservePartialData": false
+    },
+    "manual": {
+      "createRestorePoint": true,
+      "backupLocation": "./backups",
+      "compressionEnabled": true
+    }
+  },
+  "notifications": {
+    "progress": {
+      "enabled": true,
+      "intervalSeconds": 30,
+      "includeMetrics": true
+    },
+    "completion": {
+      "enabled": true,
+      "includeSummary": true,
+      "includeErrors": true
+    },
+    "webhooks": {
+      "enabled": false,
+      "endpoints": [],
+      "authentication": "bearer"
+    }
+  },
+  "customizations": {
+    "saasTemplate": {
+      "preserveGDPRSystem": true,
+      "preserveMultiTenancy": true,
+      "preserveClerkIntegration": true,
+      "preserveRealtimeFeatures": true,
+      "preserveGracePeriod": true,
+      "preserveAuditLogs": true
+    },
+    "hooks": {
+      "preExport": [],
+      "postExport": [],
+      "preImport": [],
+      "postImport": [],
+      "onError": [],
+      "onComplete": []
+    }
+  },
+  "compatibility": {
+    "sourceVersion": ">=1.0.0",
+    "targetVersion": ">=1.0.0",
+    "features": {
+      "rls": true,
+      "realtime": true,
+      "storage": true,
+      "functions": true,
+      "auth": true
+    }
+  }
+}

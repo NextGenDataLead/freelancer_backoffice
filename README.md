@@ -116,15 +116,21 @@ npm run dev
    ```json
    {
      "aud": "authenticated",
-     "exp": "{{session.expire_at}}",
-     "iat": "{{session.issued_at}}",
-     "iss": "{{clerk_domain}}",
-     "nbf": "{{session.issued_at}}",
-     "sub": "{{user.id}}",
+     "role": "authenticated",
      "email": "{{user.primary_email_address}}",
-     "role": "authenticated"
+     "app_metadata": {
+       "role": "{{user.public_metadata.role}}",
+       "provider": "clerk",
+       "tenant_id": "{{user.public_metadata.tenant_id}}"
+     },
+     "user_metadata": {
+       "first_name": "{{user.first_name}}",
+       "last_name": "{{user.last_name}}",
+       "avatar_url": "{{user.image_url}}"
+     }
    }
    ```
+   > **Note:** Don't include `sub`, `exp`, `iat`, `iss`, or `nbf` claims - Clerk automatically includes these standard JWT claims.
 
 3. **Set Environment Variables**
 
