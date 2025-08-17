@@ -63,7 +63,21 @@ export function SupabaseUserTest() {
 
   useEffect(() => {
     if (isLoaded && clerkUser && isAuthenticated) {
-      testSupabaseConnection()
+      // Check if we're coming from onboarding (recent redirect)
+      const fromOnboarding = document.referrer.includes('/onboarding') || 
+                            sessionStorage.getItem('just-completed-onboarding')
+      
+      if (fromOnboarding) {
+        console.log('🔄 Coming from onboarding, waiting 3 seconds for profile to be ready...')
+        // Clear the flag
+        sessionStorage.removeItem('just-completed-onboarding')
+        // Wait a bit for profile to be fully ready
+        setTimeout(() => {
+          testSupabaseConnection()
+        }, 3000)
+      } else {
+        testSupabaseConnection()
+      }
     }
   }, [isLoaded, clerkUser, isAuthenticated])
 

@@ -99,7 +99,7 @@ export function DashboardContent() {
   const unreadCount = useUnreadCount()
   const { showInfo } = useNotificationActions()
   
-  // Initialize user synchronization with Supabase
+  // Initialize user synchronization with Supabase for data fetching
   const { isAuthenticated } = useUserSync()
   
   // Initialize real-time dashboard metrics

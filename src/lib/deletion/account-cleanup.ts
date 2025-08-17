@@ -38,7 +38,7 @@ export interface ModernDeletionResult {
   success: boolean
   method: 'soft_deletion' | 'hard_deletion'
   userAnonymized: boolean
-  clerkAnonymized: boolean
+  clerkDeleted: boolean
   error?: string
   anonymizedUserId?: string
   originalEmail?: string
@@ -520,7 +520,7 @@ export async function executeModernAccountDeletion(
     // Use the soft deletion approach with anonymization
     const result = await performSoftDeletion(clerkUserId, reason)
     
-    // Create audit log entry for the deletion process
+    // Update deletion request status and create audit log
     if (result.success && result.anonymizedUserId) {
       try {
         const supabaseAdmin = createClient(
@@ -528,6 +528,27 @@ export async function executeModernAccountDeletion(
           process.env.SUPABASE_SERVICE_ROLE_KEY!
         )
 
+        // Update deletion request status
+        console.log('📝 Updating deletion request status to completed...')
+        await supabaseAdmin
+          .from('deletion_requests')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            metadata: {
+              ...reason && { reason },
+              clerk_user_id: clerkUserId,
+              requested_via: 'privacy_dashboard',
+              deletion_method: 'soft_deletion_with_anonymization',
+              clerk_deleted: result.clerkDeleted,
+              supabase_anonymized: result.userAnonymized,
+              completed_at: new Date().toISOString()
+            }
+          })
+          .eq('user_id', result.anonymizedUserId)
+          .eq('status', 'pending')
+
+        // Create audit log entry for the deletion process
         await supabaseAdmin
           .from('gdpr_audit_logs')
           .insert({
@@ -538,12 +559,14 @@ export async function executeModernAccountDeletion(
               clerk_user_id: clerkUserId,
               original_email: result.originalEmail,
               reason: reason || 'User requested account deletion',
-              clerk_anonymized: result.clerkAnonymized,
+              clerk_deleted: result.clerkDeleted,
               supabase_anonymized: result.userAnonymized
             }
           })
+          
+        console.log('✅ Updated deletion request status to completed')
       } catch (auditError) {
-        console.warn('Failed to create completion audit log:', auditError)
+        console.warn('Failed to create completion audit log or update status:', auditError)
         // Don't fail the whole operation for audit issues
       }
     }
@@ -552,7 +575,7 @@ export async function executeModernAccountDeletion(
       success: result.success,
       method: 'soft_deletion',
       userAnonymized: result.userAnonymized,
-      clerkAnonymized: result.clerkAnonymized,
+      clerkDeleted: result.clerkDeleted,
       error: result.error,
       anonymizedUserId: result.anonymizedUserId,
       originalEmail: result.originalEmail
@@ -565,7 +588,7 @@ export async function executeModernAccountDeletion(
       success: false,
       method: 'soft_deletion',
       userAnonymized: false,
-      clerkAnonymized: false,
+      clerkDeleted: false,
       error: error instanceof Error ? error.message : 'Unknown error'
     }
   }

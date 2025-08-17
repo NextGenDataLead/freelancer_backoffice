@@ -48,7 +48,14 @@ export function useUserSync() {
       return
     }
 
-    const syncUserProfile = async () => {
+    const syncUserProfile = async (retryCount = 0) => {
+      // Check if we just completed onboarding and should wait a bit
+      const justCompletedOnboarding = sessionStorage.getItem('just-completed-onboarding')
+      if (justCompletedOnboarding && retryCount === 0) {
+        console.log('🔄 UserSync: Just completed onboarding, waiting 2 seconds before sync...')
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
+      
       // Ensure user has tenant_id in public metadata
       if (!user.publicMetadata.tenant_id) {
         try {
@@ -80,12 +87,21 @@ export function useUserSync() {
         }
       }
       try {
+        console.log('🔍 UserSync: Checking for existing profile for user:', user.id)
+        
         // First, try to get existing profile by clerk_user_id
         const { data: existingProfile, error: fetchError } = await supabase
           .from('profiles')
           .select('*')
           .eq('clerk_user_id', user.id)
           .single()
+
+        console.log('🔍 UserSync: Profile lookup result:', {
+          found: !!existingProfile,
+          error: fetchError?.message,
+          errorCode: fetchError?.code,
+          profileId: existingProfile?.id
+        })
 
         if (fetchError && fetchError.code !== 'PGRST116') {
           // PGRST116 is "not found", which is expected for new users
@@ -96,6 +112,8 @@ export function useUserSync() {
         const now = new Date().toISOString()
 
         if (existingProfile) {
+          console.log('✅ UserSync: Profile found, updating with latest data')
+          
           // Update existing profile - preserve first_name/last_name if they exist in Supabase (single source of truth)
           const updateData: any = {
             email: user.primaryEmailAddress?.emailAddress || '',
@@ -122,97 +140,16 @@ export function useUserSync() {
 
           if (updateError) {
             console.error('Error updating user profile:', updateError)
+            // Still set the existing profile if update fails
+            setUserProfile(existingProfile)
           } else {
             setUserProfile(updatedProfile)
           }
         } else {
-          // Profile doesn't exist - use server-side sync endpoint
-          console.log('Profile not found, calling sync endpoint...')
-          try {
-            const response = await fetch('/api/user/sync', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              }
-            })
-
-            if (response.ok) {
-              const result = await response.json()
-              console.log('User sync successful:', result.action, result.profile?.id)
-              setUserProfile(result.profile)
-            } else {
-              const error = await response.json()
-              console.error('User sync failed:', error)
-              
-              // Fallback: try direct Supabase creation
-              await createProfileFallback()
-            }
-          } catch (error) {
-            console.error('Error calling sync endpoint:', error)
-            // Fallback: try direct Supabase creation
-            await createProfileFallback()
-          }
-        }
-
-        // Fallback profile creation function
-        async function createProfileFallback() {
-          console.log('Attempting fallback profile creation...')
-          const tenantId = user.publicMetadata.tenant_id as string
-          
-          if (tenantId) {
-            // First, ensure the tenant exists
-            const { data: existingTenant, error: tenantFetchError } = await supabase
-              .from('tenants')
-              .select('*')
-              .eq('id', tenantId)
-              .single()
-            
-            if (tenantFetchError && tenantFetchError.code === 'PGRST116') {
-              // Tenant doesn't exist, create it
-              const { error: tenantInsertError } = await supabase
-                .from('tenants')
-                .insert([{
-                  id: tenantId,
-                  name: `${user.firstName || 'User'}'s Organization`,
-                  created_at: now,
-                  updated_at: now,
-                  subscription_status: 'active',
-                  max_users: 10,
-                  max_storage_gb: 5
-                }])
-                
-              if (tenantInsertError) {
-                console.error('Error creating tenant:', tenantInsertError)
-                return
-              }
-            }
-          }
-          
-          const newProfile = {
-            clerk_user_id: user.id,
-            tenant_id: tenantId,
-            email: user.primaryEmailAddress?.emailAddress || '',
-            first_name: user.firstName,
-            last_name: user.lastName,
-            avatar_url: user.imageUrl,
-            role: (user.publicMetadata.role as 'owner' | 'admin' | 'member' | 'viewer') || 'owner',
-            last_sign_in_at: now,
-            is_active: true,
-            preferences: {},
-          }
-
-          const { data: insertedProfile, error: insertError } = await supabase
-            .from('profiles')
-            .insert([newProfile])
-            .select()
-            .single()
-
-          if (insertError) {
-            console.error('Fallback profile creation failed:', insertError)
-          } else {
-            console.log('Fallback profile created successfully')
-            setUserProfile(insertedProfile)
-          }
+          console.log('⚠️ UserSync: Profile not found - this should not happen with new flow')
+          // Profile should already exist (created on onboarding page load)
+          // Just set the profile to null and let the user know
+          setUserProfile(null)
         }
       } catch (error) {
         console.error('Error syncing user profile:', error)

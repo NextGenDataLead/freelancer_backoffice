@@ -7,29 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { SignInButton, SignUpButton } from '@clerk/nextjs'
-import { CriticalCSS } from "@/components/performance/CriticalCSS"
-import { SearchInput } from "@/components/ui/search"
-import { PerformanceTracker } from "@/components/analytics/PerformanceTracker"
-import { OptimizedImage } from "@/components/ui/optimized-image"
-import { ConversionTracker } from "@/components/analytics/ConversionTracker"
-import { AnalyticsTest } from "@/components/analytics/AnalyticsTest"
-import { DashboardPreview } from "@/components/interactive/dashboard-preview"
-import { SplitScreenDemo } from "@/components/interactive/split-screen-demo"
-import { ScrollAnimations } from "@/components/interactive/scroll-animations"
-import { ProductTour } from "@/components/interactive/product-tour"
-import { MicroInteractions } from "@/components/interactive/micro-interactions"
-import { LazyLoadingDemo } from "@/components/performance/lazy-loading"
-import { SocialSharing } from "@/components/conversion/social-sharing"
-import { EmailCapture } from "@/components/conversion/email-capture"
+// Missing component imports removed - components not yet implemented
 
 export default function Home() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
 
   return (
     <main className="min-h-screen gradient-hero">
-      <CriticalCSS />
-      <PerformanceTracker />
-      <ConversionTracker />
       {/* Navigation */}
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-lg border-b border-slate-200 z-50 transition-all duration-200" role="navigation" aria-label="Main navigation">
         <div className="section-container">
@@ -122,7 +106,7 @@ export default function Home() {
               <Link href="/pricing" className="text-slate-600 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-md px-2 py-1 transition-colors" aria-label="Navigate to pricing section">Pricing</Link>
               
               <div className="hidden lg:block">
-                <SearchInput placeholder="Search..." className="w-64" />
+                <input placeholder="Search..." className="w-64 px-3 py-2 border border-slate-300 rounded-md" />
               </div>
               
               <SignInButton>
@@ -174,7 +158,7 @@ export default function Home() {
                 </div>
 
                 <div className="px-3 py-2">
-                  <SearchInput placeholder="Search docs..." className="w-full" />
+                  <input placeholder="Search docs..." className="w-full px-3 py-2 border border-slate-300 rounded-md" />
                 </div>
 
                 <div className="pt-4 space-y-2">
@@ -268,10 +252,11 @@ export default function Home() {
               </p>
             </div>
             
-            <DashboardPreview />
+            <div className="w-full max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-6">
+              <div className="text-center text-slate-500">Dashboard Preview Component (Not Implemented)</div>
+            </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
-              <ProductTour />
               <Button 
                 variant="outline"
                 onClick={() => {
@@ -320,14 +305,9 @@ export default function Home() {
                     { name: "Stripe", logo: "https://upload.wikimedia.org/wikipedia/commons/b/ba/Stripe_Logo%2C_revised_2016.svg" }
                   ]).map((company, i) => (
                     <div key={i} className="h-12 w-40 flex items-center justify-center flex-shrink-0 opacity-60 hover:opacity-90 transition-opacity duration-300 group">
-                      <OptimizedImage
-                        src={company.logo}
-                        alt={`${company.name} logo`}
-                        width={120}
-                        height={40}
-                        className="max-h-8 w-auto object-contain filter grayscale group-hover:grayscale-0 transition-all duration-300"
-                        priority={false}
-                      />
+                      <div className="max-h-8 w-auto object-contain filter grayscale group-hover:grayscale-0 transition-all duration-300 bg-slate-200 rounded px-3 py-1">
+                        <span className="text-xs text-slate-600">{company.name}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -404,14 +384,11 @@ export default function Home() {
                       <Quote className="h-8 w-8 text-blue-600 opacity-50" />
                       <p className="text-slate-700 italic">"{testimonial.quote}"</p>
                       <div className="flex items-center space-x-3">
-                        <OptimizedImage
-                          src={testimonial.avatar}
-                          alt={testimonial.author}
-                          width={40}
-                          height={40}
-                          className="rounded-full object-cover"
-                          priority={true}
-                        />
+                        <div className="w-10 h-10 rounded-full bg-slate-300 flex items-center justify-center">
+                          <span className="text-sm text-slate-600 font-medium">
+                            {testimonial.author.charAt(0)}
+                          </span>
+                        </div>
                         <div>
                           <div className="font-semibold text-slate-900">{testimonial.author}</div>
                           <div className="text-sm text-slate-500">{testimonial.role}</div>
@@ -420,24 +397,7 @@ export default function Home() {
                       <Badge variant="outline" className="text-green-700 border-green-200">
                         {testimonial.metric}
                       </Badge>
-                      <SocialSharing 
-                        content={{
-                          type: 'testimonial',
-                          title: `${testimonial.author} from ${testimonial.role.split(', ')[1]} shares their experience`,
-                          description: testimonial.quote,
-                          url: `${typeof window !== 'undefined' ? window.location.origin : ''}/#testimonial-${i}`,
-                          quote: testimonial.quote,
-                          author: testimonial.author,
-                          company: testimonial.role.split(', ')[1],
-                          metric: {
-                            value: testimonial.metric,
-                            label: 'result achieved'
-                          }
-                        }}
-                        variant="inline"
-                        showStats={true}
-                        className="mt-4"
-                      />
+                      {/* Social sharing component not yet implemented */}
                     </div>
                   </CardContent>
                 </Card>
@@ -485,14 +445,11 @@ export default function Home() {
                   <Card key={i} className="text-left hover:shadow-lg transition-all duration-300 group">
                     <CardContent className="p-6">
                       <div className="flex items-center space-x-3 mb-4">
-                        <OptimizedImage
-                          src={caseStudy.logo}
-                          alt={`${caseStudy.company} logo`}
-                          width={40}
-                          height={40}
-                          className="rounded-lg object-cover"
-                          priority={false}
-                        />
+                        <div className="w-10 h-10 rounded-lg bg-slate-300 flex items-center justify-center">
+                          <span className="text-sm text-slate-600 font-medium">
+                            {caseStudy.company.charAt(0)}
+                          </span>
+                        </div>
                         <div>
                           <div className="font-semibold text-slate-900">{caseStudy.company}</div>
                           <div className="text-sm text-slate-500">{caseStudy.industry}</div>
@@ -530,22 +487,7 @@ export default function Home() {
                         Download Case Study
                       </Button>
                       
-                      <SocialSharing 
-                        content={{
-                          type: 'case-study',
-                          title: `${caseStudy.company} Case Study: ${caseStudy.result}`,
-                          description: `${caseStudy.description} See how ${caseStudy.company} achieved remarkable results.`,
-                          url: `${typeof window !== 'undefined' ? window.location.origin : ''}/#case-study-${i}`,
-                          company: caseStudy.company,
-                          metric: {
-                            value: caseStudy.result,
-                            label: caseStudy.industry
-                          }
-                        }}
-                        variant="inline"
-                        showStats={false}
-                        className="text-xs"
-                      />
+                      {/* Social sharing component not yet implemented */}
                     </CardContent>
                   </Card>
                 ))}
@@ -645,28 +587,28 @@ export default function Home() {
             </p>
           </div>
           
-          <SplitScreenDemo />
+          
         </div>
       </section>
 
       {/* Interactive Features & Micro-interactions */}
       <section className="py-16 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <MicroInteractions />
+          
         </div>
       </section>
 
       {/* Scroll Animations Showcase */}
       <section className="py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <ScrollAnimations />
+          
         </div>
       </section>
 
       {/* Performance & Lazy Loading */}
       <section className="py-16 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <LazyLoadingDemo />
+          
         </div>
       </section>
 
@@ -750,10 +692,9 @@ export default function Home() {
       <section className="py-16 bg-slate-50">
         <div className="section-container">
           <div className="max-w-2xl mx-auto">
-            <EmailCapture 
-              variant="inline"
-              className="mx-auto"
-            />
+            <div className="mx-auto p-6 bg-white rounded-lg shadow-lg">
+              <div className="text-center text-slate-500">Email Capture Component (Not Implemented)</div>
+            </div>
           </div>
         </div>
       </section>
@@ -826,7 +767,7 @@ export default function Home() {
       </footer>
       
       {/* Analytics Test Panel (development only) */}
-      <AnalyticsTest />
+      
     </main>
   )
 }

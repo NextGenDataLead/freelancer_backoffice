@@ -219,10 +219,10 @@ export const FormUtils = {
   },
 
   // Validate form data
-  validateFormData: <T>(schema: z.ZodSchema<T>, data: unknown): { 
-    success: boolean
-    data?: T
-    errors?: Record<string, string>
+  validateFormData: (schema: z.ZodSchema<any>, data: unknown): { 
+    success: boolean;
+    data?: any;
+    errors?: Record<string, string>;
   } => {
     try {
       const validatedData = schema.parse(data)

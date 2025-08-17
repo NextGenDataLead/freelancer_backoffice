@@ -16,17 +16,23 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     console.log('Request body:', body)
-    const { tenant_id, role } = body
+    const { tenant_id, role, onboardingComplete } = body
     
     console.log('Attempting to update user metadata for user:', userId)
     
     // Create Clerk client and update user's public metadata via Clerk's server-side API
     const client = await clerkClient()
+    
+    // Build metadata object with existing data preservation
+    const updateData: any = {}
+    if (tenant_id !== undefined) updateData.tenant_id = tenant_id
+    if (role !== undefined) updateData.role = role
+    if (onboardingComplete !== undefined) updateData.onboardingComplete = onboardingComplete
+    
+    console.log('Updating metadata with:', updateData)
+    
     const result = await client.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        tenant_id,
-        role
-      }
+      publicMetadata: updateData
     })
     
     console.log('Update result:', result)

@@ -1,5 +1,5 @@
 import { useUser, useOrganization } from '@clerk/nextjs'
-import { useSupabaseClient } from '@/lib/supabase'
+import { useSupabaseClient } from '@/hooks/use-supabase-client'
 import { useQuery } from '@tanstack/react-query'
 
 export interface UserProfile {
@@ -19,7 +19,7 @@ export interface UserProfile {
 
 export const useUserProfile = () => {
   const { user } = useUser()
-  const supabase = useSupabaseClient()
+  const { supabase } = useSupabaseClient()
 
   return useQuery({
     queryKey: ['user-profile', user?.id],
@@ -77,7 +77,7 @@ export const useUserPermissions = () => {
 
 export const useUserOrganizations = () => {
   const { user } = useUser()
-  const supabase = useSupabaseClient()
+  const { supabase } = useSupabaseClient()
 
   return useQuery({
     queryKey: ['user-organizations', user?.id],

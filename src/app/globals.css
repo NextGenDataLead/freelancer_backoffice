@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* Phase 6: Visual Design Polish - Typography System */
-@import '../styles/typography.css';
+/* Typography styles are integrated below in the component layer */
 
 @layer base {
   :root {

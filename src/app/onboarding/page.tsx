@@ -1,14 +1,98 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
+import { useAuth } from '@clerk/nextjs'
 import { AuthGuard } from '@/components/auth/auth-guard'
 import { CheckCircle, User, Building, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { completeOnboarding } from './actions'
+import { createUserProfile } from './create-profile-action'
+import { AccountPreparationLoading } from '@/components/ui/account-preparation-loading'
+import { useState, useTransition, useEffect } from 'react'
 
 export default function OnboardingPage() {
   const { user, isLoaded } = useUser()
+  const { getToken } = useAuth()
+  const router = useRouter()
+  const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const [showLoading, setShowLoading] = useState(false)
+  const [profileCreated, setProfileCreated] = useState(false)
+  const [profileCreationAttempted, setProfileCreationAttempted] = useState(false)
+
+  // Create profile immediately when page loads
+  useEffect(() => {
+    if (isLoaded && user && !profileCreationAttempted) {
+      setProfileCreationAttempted(true)
+      
+      const createProfile = async () => {
+        try {
+          console.log('🔄 Auto-creating profile on onboarding page load for user:', user?.id)
+          const result = await createUserProfile()
+          console.log('✅ Profile creation result:', {
+            action: result.action,
+            profileId: result.profile?.id,
+            userId: result.profile?.clerk_user_id
+          })
+          setProfileCreated(true)
+        } catch (error) {
+          console.error('❌ Profile creation failed on page load:', error)
+          console.error('❌ Current user info:', {
+            userId: user?.id,
+            email: user?.primaryEmailAddress?.emailAddress,
+            isLoaded
+          })
+          // Don't show error to user - just log it. User can still try the button.
+        }
+      }
+      
+      createProfile()
+    }
+  }, [isLoaded, user, profileCreationAttempted])
+
+  const handleCompleteOnboarding = async () => {
+    setError(null)
+    setShowLoading(true)
+    
+    try {
+      console.log('🔄 Starting onboarding completion...')
+      
+      // The server action now handles everything: profile creation + onboarding completion
+      await completeOnboarding()
+      console.log('✅ Onboarding completed successfully')
+      
+      // Set flag to indicate we're coming from onboarding
+      sessionStorage.setItem('just-completed-onboarding', 'true')
+      
+      // Small delay to ensure everything is processed
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      console.log('🚀 Redirecting to dashboard!')
+      router.push('/dashboard')
+      
+    } catch (err) {
+      console.error('❌ Error in onboarding completion:', err)
+      setError(err instanceof Error ? err.message : 'Failed to complete onboarding')
+      setShowLoading(false)
+    }
+  }
+
+
+  // Show loading screen during onboarding completion
+  if (showLoading) {
+    return (
+      <AccountPreparationLoading 
+        onComplete={() => {
+          // This will be called when countdown finishes, but redirect should happen earlier
+          router.push('/dashboard')
+        }}
+        initialCount={20}
+      />
+    )
+  }
 
   if (!isLoaded) {
     return (
@@ -129,12 +213,18 @@ export default function OnboardingPage() {
                 </div>
                 
                 <div className="pt-4">
-                  <Link href="/dashboard">
-                    <Button size="lg" className="w-full">
-                      Continue to Dashboard
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
+                  <Button 
+                    onClick={handleCompleteOnboarding}
+                    size="lg" 
+                    className="w-full" 
+                    disabled={showLoading}
+                  >
+                    {showLoading ? 'Preparing your account...' : 'Continue to Dashboard'}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                  {error && (
+                    <p className="text-red-600 text-sm mt-2">{error}</p>
+                  )}
                 </div>
               </CardContent>
             </Card>

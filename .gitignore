@@ -45,13 +45,13 @@ pnpm-debug.log*
 # Project-specific ignores
 # Temporary notes and documentation files
 2025-08-02-caveat-the-messages-below-were-generated-by-the-u.txt
-E2EGemini.md
-GEMINI_TESTS.md
+# E2EGemini.md
+# GEMINI_TESTS.md
 
 # AI tool state and configuration
 # Remove this line if you intend to share this history with your team.
-.claude/
-CLAUDE.md
+# .claude/
+# CLAUDE.md
 
 
 # Temporary screenshots and assets
@@ -64,8 +64,11 @@ clerk-nextjs-demo-app-router/
 # Development and testing files
 src/app/dashboard/page-complex.tsx
 src/app/test/
-src/middleware.ts
+# src/middleware.ts
 
 # Optional: Uncomment if you want to ignore all test files during development
 # src/__tests__/
 # tests/
+
+# clerk configuration (can include secrets)
+# /.clerk/

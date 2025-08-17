@@ -14,7 +14,7 @@ import { clerkClient } from '@clerk/nextjs/server'
 export interface SoftDeletionResult {
   success: boolean
   userAnonymized: boolean
-  clerkAnonymized: boolean
+  clerkDeleted: boolean
   error?: string
   anonymizedUserId: string
   originalEmail: string
@@ -119,44 +119,34 @@ export async function anonymizeUserInSupabase(
 }
 
 /**
- * Anonymize user data in Clerk while preserving authentication record
+ * Hard delete user from Clerk authentication system
+ * This removes the user completely, forcing immediate logout and preventing re-login
  */
-export async function anonymizeUserInClerk(clerkUserId: string): Promise<boolean> {
+export async function deleteUserFromClerk(clerkUserId: string): Promise<boolean> {
   try {
-    console.log(`Starting Clerk anonymization for user: ${clerkUserId}`)
+    console.log(`Starting Clerk hard deletion for user: ${clerkUserId}`)
     
     const client = await clerkClient()
     
-    // Get current user data for audit trail
-    const user = await client.users.getUser(clerkUserId)
-    const originalEmail = user.primaryEmailAddress?.emailAddress
+    // Get current user data for audit trail before deletion
+    let originalEmail = ''
+    try {
+      const user = await client.users.getUser(clerkUserId)
+      originalEmail = user.primaryEmailAddress?.emailAddress || ''
+    } catch (error) {
+      console.warn('Could not retrieve user data before deletion:', error)
+    }
 
-    // Option 1: Update user with anonymized data (preserves auth record)
-    const anonymizedEmail = `deleted-${clerkUserId}@anonymized.local`
-    
-    await client.users.updateUser(clerkUserId, {
-      firstName: '[DELETED]',
-      lastName: '[DELETED]',
-      // Note: We cannot change the primary email in Clerk easily
-      // Consider using privateMetadata to track anonymization instead
-      privateMetadata: {
-        ...user.privateMetadata,
-        accountDeleted: true,
-        deletedAt: new Date().toISOString(),
-        anonymized: true,
-        originalEmail: originalEmail, // Keep for audit purposes
-        deletionMethod: 'soft_anonymization'
-      }
-    })
+    // Hard delete the user from Clerk
+    // This will immediately revoke all sessions and prevent re-login
+    await client.users.deleteUser(clerkUserId)
 
-    // Option 2: Alternatively, you could ban the user to prevent login
-    // await client.users.banUser(clerkUserId)
-
-    console.log(`✅ Successfully anonymized user in Clerk: ${clerkUserId}`)
+    console.log(`✅ Successfully hard deleted user from Clerk: ${clerkUserId}`)
+    console.log(`   Original email was: ${originalEmail}`)
     return true
     
   } catch (error) {
-    console.error(`❌ Failed to anonymize user in Clerk (${clerkUserId}):`, error)
+    console.error(`❌ Failed to hard delete user from Clerk (${clerkUserId}):`, error)
     return false
   }
 }
@@ -170,7 +160,7 @@ export async function performSoftDeletion(
   reason?: string
 ): Promise<SoftDeletionResult> {
   let userAnonymized = false
-  let clerkAnonymized = false
+  let clerkDeleted = false
   let originalEmail = ''
   let anonymizedUserId = ''
 
@@ -185,7 +175,7 @@ export async function performSoftDeletion(
       return {
         success: false,
         userAnonymized: false,
-        clerkAnonymized: false,
+        clerkDeleted: false,
         error: supabaseResult.error || 'Supabase anonymization failed',
         anonymizedUserId: '',
         originalEmail: ''
@@ -196,14 +186,14 @@ export async function performSoftDeletion(
     originalEmail = supabaseResult.profile?.email || ''
     anonymizedUserId = supabaseResult.profile?.id || ''
 
-    // Step 2: Anonymize in Clerk (preserve auth record for SSO)
-    console.log('Step 2: Anonymizing user data in Clerk...')
-    clerkAnonymized = await anonymizeUserInClerk(clerkUserId)
+    // Step 2: Hard delete in Clerk (remove auth record completely)
+    console.log('Step 2: Hard deleting user from Clerk...')
+    clerkDeleted = await deleteUserFromClerk(clerkUserId)
 
-    const overallSuccess = userAnonymized && clerkAnonymized
+    const overallSuccess = userAnonymized && clerkDeleted
 
     if (!overallSuccess) {
-      console.warn(`⚠️ Partial soft deletion for ${clerkUserId}: Supabase=${userAnonymized}, Clerk=${clerkAnonymized}`)
+      console.warn(`⚠️ Partial soft deletion for ${clerkUserId}: Supabase=${userAnonymized}, Clerk=${clerkDeleted}`)
     } else {
       console.log(`✅ Soft deletion completed successfully for ${clerkUserId}`)
     }
@@ -211,7 +201,7 @@ export async function performSoftDeletion(
     return {
       success: overallSuccess,
       userAnonymized,
-      clerkAnonymized,
+      clerkDeleted,
       anonymizedUserId,
       originalEmail,
       error: overallSuccess ? undefined : 'Partial anonymization - some systems failed'
@@ -223,7 +213,7 @@ export async function performSoftDeletion(
     return {
       success: false,
       userAnonymized,
-      clerkAnonymized,
+      clerkDeleted,
       error: error instanceof Error ? error.message : 'Unknown error',
       anonymizedUserId,
       originalEmail
