@@ -175,23 +175,18 @@ This enables Supabase to authenticate users via Clerk JWT tokens.
 ```json
 {
   "aud": "authenticated",
-  "exp": "{{user.session_expiry}}",
-  "iat": "{{user.session_issued_at}}",
-  "iss": "https://your-clerk-frontend-api.clerk.accounts.dev",
-  "sub": "{{user.id}}",
+  "role": "authenticated",
   "email": "{{user.primary_email_address}}",
-  "phone": "{{user.primary_phone_number}}",
   "app_metadata": {
+    "role": "{{user.public_metadata.role}}",
     "provider": "clerk",
-    "providers": ["clerk"]
+    "tenant_id": "{{user.public_metadata.tenant_id}}"
   },
   "user_metadata": {
-    "first_name": "{{user.first_name}}",
     "last_name": "{{user.last_name}}",
-    "full_name": "{{user.full_name}}",
-    "avatar_url": "{{user.image_url}}"
-  },
-  "role": "authenticated"
+    "avatar_url": "{{user.image_url}}",
+    "first_name": "{{user.first_name}}"
+  }
 }
 ```
 

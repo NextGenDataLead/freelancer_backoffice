@@ -13,20 +13,19 @@ The Clerk Session Token Template was not configured to include user metadata (`o
 2. **JWT Template Update**: ❌ User updated WRONG template - updated JWT Template Claim instead of Session Token Template
 ```json
 {
-    "aud": "authenticated",
-    "role": "authenticated", 
-    "email": "{{user.primary_email_address}}",
-    "app_metadata": {
-        "role": "{{user.public_metadata.role}}",
-        "provider": "clerk",
-        "tenant_id": "{{user.public_metadata.tenant_id}}",
-        "onboardingComplete": "{{user.public_metadata.onboardingComplete}}"
-    },
-    "user_metadata": {
-        "last_name": "{{user.last_name}}",
-        "avatar_url": "{{user.image_url}}",
-        "first_name": "{{user.first_name}}"
-    }
+  "aud": "authenticated",
+  "role": "authenticated",
+  "email": "{{user.primary_email_address}}",
+  "app_metadata": {
+    "role": "{{user.public_metadata.role}}",
+    "provider": "clerk",
+    "tenant_id": "{{user.public_metadata.tenant_id}}"
+  },
+  "user_metadata": {
+    "last_name": "{{user.last_name}}",
+    "avatar_url": "{{user.image_url}}",
+    "first_name": "{{user.first_name}}"
+  }
 }
 ```
 
