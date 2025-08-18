@@ -1,5 +1,5 @@
 {
-  "name": "supabase-import-tools", 
+  "name": "supabase-import-tools",
   "version": "1.0.0",
   "description": "End user tools for importing SaaS template to new Supabase project",
   "main": "import-environment.sh",
@@ -7,7 +7,7 @@
     "import": "./import-environment.sh",
     "verify": "node verify-migration.js",
     "import-database-only": "./import-environment.sh --database-only",
-    "import-storage-only": "./import-environment.sh --storage-only", 
+    "import-storage-only": "./import-environment.sh --storage-only",
     "import-functions-only": "./import-environment.sh --functions-only",
     "dry-run": "./import-environment.sh --dry-run"
   },
@@ -21,7 +21,10 @@
   "author": "SaaS Template",
   "license": "MIT",
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0"
+    "@supabase/supabase-js": "^2.39.0",
+    "node-jq": "^6.1.0",
+    "pg": "^8.16.3",
+    "supabase": "^2.34.3"
   },
   "engines": {
     "node": ">=18.0.0"
