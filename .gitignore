@@ -2,6 +2,7 @@
 
 # Dependencies
 /node_modules
+node_modules
 
 # Build output
 /.next/
@@ -12,6 +13,7 @@
 
 # Logs
 /logs
+logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -21,6 +23,8 @@ pnpm-debug.log*
 .env
 .env*.local
 .env.migration
+.env.export
+.env.import
 
 # Test results and reports
 /coverage
@@ -80,6 +84,10 @@ server.log
 
 # Windows files (Zone.Identifier from Windows file transfers)
 *.Zone.Identifier
+
+# Export system - sensitive data
+scripts/export/developer/.env.export
+scripts/export/config/.env.migration*
 
 # Playwright MCP browser automation state
 .playwright-mcp/

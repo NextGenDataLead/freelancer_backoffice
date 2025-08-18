@@ -1,0 +1,34 @@
+Supabase Edge Functions Export Summary
+=====================================
+
+Export Date: Mon Aug 18 15:05:42 CEST 2025
+Source Project: jkennqbxyotnslpsthqf
+Export Location: ./exports/functions
+Total Export Size: 0B
+Functions Exported: 0
+
+Exported Functions:
+------------------
+None
+
+Files per Function:
+------------------
+None
+
+Deployment Instructions:
+-----------------------
+1. Set up your target project environment:
+   export NEW_PROJECT_REF="your-new-project-ref"
+   export SUPABASE_ACCESS_TOKEN="your-access-token"
+
+2. Run the deployment script:
+   ./deploy-functions.sh
+
+3. Verify functions in your new project dashboard
+
+Important Notes:
+---------------
+- No Edge Functions found in source project
+- This is normal for projects without functions
+- Deploy script created for future use
+

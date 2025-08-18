@@ -1,0 +1,14 @@
+Export Validation Report
+========================
+Date: Mon Aug 18 15:07:21 CEST 2025
+Files: 5
+Total Size: 66K
+Status: PASSED
+
+Files:
+-rw-r--r-- 1 jimbojay jimbojay 24 Aug 18 14:59 exports/migration-history.sql
+-rw-r--r-- 1 jimbojay jimbojay 0 Aug 18 15:07 exports/validation-report.txt
+-rwxr-xr-x 1 jimbojay jimbojay 923 Aug 18 15:05 exports/deploy-functions.sh
+-rw-r--r-- 1 jimbojay jimbojay 796 Aug 18 15:05 exports/functions-export-summary.txt
+-rw-r--r-- 1 jimbojay jimbojay 35K Aug 18 14:59 exports/schema.sql
+-rw-r--r-- 1 jimbojay jimbojay 30K Aug 18 14:59 exports/data.sql

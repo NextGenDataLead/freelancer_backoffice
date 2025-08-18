@@ -1,0 +1,31 @@
+{
+  "name": "supabase-export-tools",
+  "version": "1.0.0",
+  "description": "Developer tools for exporting Supabase environments",
+  "private": true,
+  "scripts": {
+    "export": "./export-database.sh && node migrate-storage.js && ./export-functions.sh",
+    "export-database": "./export-database.sh",
+    "export-storage": "node migrate-storage.js",
+    "export-functions": "./export-functions.sh"
+  },
+  "keywords": [
+    "supabase",
+    "export",
+    "database",
+    "storage",
+    "functions",
+    "developer-tools"
+  ],
+  "author": "SaaS Template Developer",
+  "license": "PRIVATE",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "supabase": "^2.34.3"
+  }
+}
