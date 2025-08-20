@@ -33,3 +33,6 @@ export interface PaginatedResponse<T = unknown> extends ApiResponse<T[]> {
     totalPages: number
   }
 }
+
+// Re-export financial types
+export * from './types/financial';

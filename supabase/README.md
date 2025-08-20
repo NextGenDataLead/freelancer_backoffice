@@ -1,80 +1,87 @@
-# Supabase Database Setup
+# Supabase Migration Scripts
 
-This directory contains all the database migrations and seed data for the multi-tenant SaaS application.
+This directory contains ordered migration scripts that reproduce the complete B2B SaaS database schema from the exported `schema.sql` and `data.sql` files.
 
-## Migration Files
+## Execution Order
 
-Run these SQL files in order in your Supabase SQL Editor:
+Run these scripts in the following order to set up a complete Supabase environment:
 
-1. **001_create_core_schema.sql** - Creates the core multi-tenant tables (tenants, profiles, organizations, organization_memberships)
-2. **002_create_rls_functions_and_policies.sql** - Creates RLS helper functions and tenant isolation policies
-3. **003_create_gdpr_tables.sql** - Creates GDPR compliance tables (password_reset_tokens, deletion_requests, gdpr_audit_logs)
-4. **004_create_triggers_and_functions.sql** - Creates utility functions and updated_at triggers
-5. **005_setup_vector_and_storage.sql** - Enables vector extension and creates documents table
-6. **006_storage_policies.sql** - Creates RLS policies for storage buckets
-7. **007_enable_realtime.sql** - Enables real-time subscriptions on key tables
+### Schema Setup (001-017)
+1. **001_extensions_and_settings.sql** - PostgreSQL extensions and database settings
+2. **002_basic_functions.sql** - Core security and utility functions  
+3. **003_core_tables.sql** - Foundational tables (tenants, profiles, organizations)
+4. **004_gdpr_compliance_tables.sql** - GDPR deletion and audit tables
+5. **005_gdpr_functions.sql** - Grace period protection functions
+6. **006_document_notification_tables.sql** - Document and notification system tables
+7. **007_zzp_financial_schema.sql** - Dutch ZZP financial tables and enums
+8. **008_zzp_financial_constraints_policies.sql** - Financial foreign keys and RLS policies
+9. **009_notification_functions.sql** - Notification management functions
+10. **010_primary_keys_constraints.sql** - Primary keys and unique constraints
+11. **011_foreign_key_relationships.sql** - Foreign key relationships
+12. **012_performance_indexes.sql** - Performance optimization indexes
+13. **013_triggers_updates.sql** - Automatic timestamp update triggers
+14. **014_row_level_security.sql** - Enable RLS on all tables
+15. **015_security_policies.sql** - Core RLS policies for multi-tenant security
+16. **016_document_notification_policies.sql** - RLS policies for documents and notifications
+17. **017_permissions_publications.sql** - Database permissions and real-time publications
 
-## Seed Data
+### Data Setup (018)
+18. **018_sample_data.sql** - Sample tenant and profile data for testing
 
-After running all migrations, run **seed.sql** to populate development and test data.
+## What You Get
 
-## Manual Steps Required
+This complete setup provides:
 
-### 1. Storage Buckets
-If the storage buckets weren't created automatically, go to **Storage** in your Supabase dashboard and create:
-- `avatars` (public)
-- `documents` (private)
-- `exports` (private)
+### Core Features
+- ✅ Multi-tenant B2B SaaS architecture
+- ✅ Clerk authentication integration
+- ✅ Complete user profile management
+- ✅ Organization and membership system
 
-### 2. Authentication Settings
-Go to **Authentication > Settings** and configure:
-- Enable email confirmations
-- Set site URL to your application URL
-- Configure OAuth providers as needed
+### GDPR Compliance
+- ✅ 30-day grace period for account deletion
+- ✅ Soft deletion with anonymization
+- ✅ Complete audit logging
+- ✅ Data export capabilities
 
-### 3. API Settings
-Go to **Settings > API** and note your:
-- Project URL
-- anon/public key
-- service_role key
+### Real-time Notifications
+- ✅ Priority-based notification system
+- ✅ Event tracking (created, read, dismissed)
+- ✅ Automatic cleanup of expired notifications
+- ✅ Real-time subscriptions
 
-## Security Notes
+### Security & Performance
+- ✅ Row Level Security with tenant isolation
+- ✅ Grace period protection (prevents data creation during deletion)
+- ✅ Comprehensive performance indexes
+- ✅ Automatic timestamp updates
 
-- All tables have Row Level Security (RLS) enabled
-- Tenant isolation is enforced at the database level
-- Storage policies prevent cross-tenant data access
-- GDPR compliance features are built-in
+### Document Management
+- ✅ Vector embedding support for AI features
+- ✅ Multi-tenant document isolation
+- ✅ Organization-level document access
 
-## Testing the Setup
+### Dutch ZZP Financial Suite
+- ✅ Multi-tenant client/supplier management with EU VAT support
+- ✅ Invoice creation with standard and reverse-charge VAT (BTW verlegd)
+- ✅ Expense tracking with OCR data support and VAT handling
+- ✅ Time and kilometer tracking with billing integration
+- ✅ Financial reporting with P&L and VAT return calculations
+- ✅ Dutch VAT rates (21% standard, 9% reduced, exempt, reverse charge)
+- ✅ KOR (Kleineondernemersregeling) small business scheme support
+- ✅ Complete audit trail for all financial transactions
 
-After running all migrations, you can test with:
+## Alternative: Single File Execution
 
-```sql
--- Test tenant isolation
-SELECT * FROM tenants; -- Should only show tenants the user has access to
+If you prefer, you can run the original files directly:
+1. `schema.sql` - Contains the complete database structure
+2. `data.sql` - Contains the sample data
 
--- Test RLS functions
-SELECT get_current_tenant_id(); -- Should return current tenant ID
-SELECT get_current_user_profile(); -- Should return current user profile ID
-```
+The migration scripts are provided for better understanding, version control, and incremental deployment scenarios.
 
-## Database Schema Overview
+## Dependencies
 
-```
-tenants
-├── profiles (users within tenants)
-├── organizations (teams within tenants)
-└── documents (AI-ready with vector embeddings)
-
-organization_memberships (many-to-many: users ↔ organizations)
-
-GDPR Compliance:
-├── password_reset_tokens
-├── deletion_requests
-└── gdpr_audit_logs
-
-Storage Buckets:
-├── avatars (public)
-├── documents (private, tenant-isolated)
-└── exports (private, user-isolated)
-```
+These scripts assume you have:
+- Supabase project with required extensions available
+- Proper authentication setup for RLS policies
+- Real-time subscriptions enabled
