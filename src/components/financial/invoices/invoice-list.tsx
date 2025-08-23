@@ -11,13 +11,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Edit, Eye, Send, Check, AlertCircle, Clock, FileText } from 'lucide-react'
+import { Plus, Edit, Eye, Send, Check, AlertCircle, Clock, FileText, Download } from 'lucide-react'
 import type { InvoiceWithClient } from '@/lib/types/financial'
 
 interface InvoiceListProps {
   onAddInvoice?: () => void
   onEditInvoice?: (invoice: InvoiceWithClient) => void
   onViewInvoice?: (invoice: InvoiceWithClient) => void
+  statusFilter?: string
 }
 
 interface InvoicesResponse {
@@ -30,7 +31,7 @@ interface InvoicesResponse {
   }
 }
 
-export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice }: InvoiceListProps) {
+export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, statusFilter }: InvoiceListProps) {
   const [invoices, setInvoices] = useState<InvoiceWithClient[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +41,17 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice }: Invo
   const fetchInvoices = async (page: number = 1) => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/invoices?page=${page}&limit=20`)
+      
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '20'
+      })
+      
+      if (statusFilter) {
+        params.append('status', statusFilter)
+      }
+      
+      const response = await fetch(`/api/invoices?${params.toString()}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch invoices')
@@ -59,7 +70,7 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice }: Invo
 
   useEffect(() => {
     fetchInvoices()
-  }, [])
+  }, [statusFilter])
 
   const handleStatusUpdate = async (invoice: InvoiceWithClient, newStatus: string) => {
     try {
@@ -78,6 +89,30 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice }: Invo
       fetchInvoices(currentPage)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error updating status')
+    }
+  }
+
+  const handlePDFDownload = async (invoice: InvoiceWithClient) => {
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}/pdf`)
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to generate PDF')
+      }
+
+      // Create download link
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `invoice-${invoice.invoice_number}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error downloading PDF')
     }
   }
 
@@ -292,6 +327,16 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice }: Invo
                     
                     <TableCell>
                       <div className="flex space-x-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handlePDFDownload(invoice)}
+                          className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20"
+                          title="Download PDF"
+                        >
+                          <Download className="h-3 w-3" />
+                        </Button>
+                        
                         <Button
                           variant="ghost"
                           size="icon"

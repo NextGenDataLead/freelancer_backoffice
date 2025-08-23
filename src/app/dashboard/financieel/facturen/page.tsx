@@ -5,28 +5,112 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InvoiceList } from '@/components/financial/invoices/invoice-list'
 import { InvoiceForm } from '@/components/financial/invoices/invoice-form'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { FileText, Plus, ArrowLeft, Euro, Clock, AlertTriangle } from 'lucide-react'
+import { InvoiceDetailModal } from '@/components/financial/invoices/invoice-detail-modal'
+import { ClientInvoiceWizard } from '@/components/financial/invoices/client-invoice-wizard'
+import { DashboardMetrics } from '@/components/financial/invoices/dashboard-metrics'
+import { ComprehensiveInvoicingWizard } from '@/components/financial/invoices/comprehensive-invoicing-wizard'
+import { FileText, Plus, ArrowLeft, Euro, Clock, Send, Receipt } from 'lucide-react'
 import Link from 'next/link'
+import type { ClientInvoicingSummary } from '@/lib/types/financial'
 
 export default function InvoicesPage() {
-  const [showCreateForm, setShowCreateForm] = useState(false)
+  // Core state management
   const [editingInvoice, setEditingInvoice] = useState<any>(null)
+  const [viewingInvoice, setViewingInvoice] = useState<any>(null)
+  const [selectedClientForInvoicing, setSelectedClientForInvoicing] = useState<ClientInvoicingSummary | null>(null)
+  
+  // Modal states
+  const [showComprehensiveWizard, setShowComprehensiveWizard] = useState(false)
+  const [showManualInvoiceForm, setShowManualInvoiceForm] = useState(false) 
+  const [showClientInvoiceWizard, setShowClientInvoiceWizard] = useState(false)
+  
+  // Action modal states
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false)
+  const [showRemindersModal, setShowRemindersModal] = useState(false)
+  const [showVATOverview, setShowVATOverview] = useState(false)
 
   const handleInvoiceCreated = (invoice: any) => {
-    setShowCreateForm(false)
-    // Refresh the list - this would normally trigger a refetch
+    setShowManualInvoiceForm(false)
+    // Refresh the invoice list
     window.location.reload()
   }
 
   const handleInvoiceUpdated = (invoice: any) => {
     setEditingInvoice(null)
-    // Refresh the list
+    // Refresh the invoice list
     window.location.reload()
   }
 
   const handleEditInvoice = (invoice: any) => {
     setEditingInvoice(invoice)
+  }
+
+  const handleViewInvoice = (invoice: any) => {
+    setViewingInvoice(invoice)
+  }
+
+  const handleInvoiceStatusUpdate = async (invoice: any, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to update status')
+      }
+
+      // Close the modal and refresh data
+      setViewingInvoice(null)
+      window.location.reload()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Error updating status')
+      throw err
+    }
+  }
+
+  // Comprehensive wizard handlers
+  const handleOpenComprehensiveWizard = () => {
+    setShowComprehensiveWizard(true)
+  }
+
+  const handleComprehensiveWizardSuccess = (invoices: any[]) => {
+    setShowComprehensiveWizard(false)
+    // Show success message and refresh the page
+    console.log('Generated invoices:', invoices)
+    window.location.reload()
+  }
+  
+  const handleCreateInvoiceFromClient = (client: ClientInvoicingSummary) => {
+    setSelectedClientForInvoicing(client)
+    setShowClientInvoiceWizard(true)
+  }
+
+  const handleClientInvoiceSuccess = (invoice: any) => {
+    setShowClientInvoiceWizard(false)
+    setSelectedClientForInvoicing(null)
+    // Optionally show the created invoice
+    setViewingInvoice(invoice)
+  }
+
+  const handleCloseClientInvoiceWizard = () => {
+    setShowClientInvoiceWizard(false)
+    setSelectedClientForInvoicing(null)
+  }
+
+  // Action handlers
+  const handleShowTemplates = () => {
+    setShowTemplatesModal(true)
+  }
+  
+  const handleShowReminders = () => {
+    setShowRemindersModal(true)
+  }
+  
+  const handleShowVATOverview = () => {
+    setShowVATOverview(true)
   }
 
   return (
@@ -41,102 +125,45 @@ export default function InvoicesPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Facturenbeheer</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Facturen</h1>
             <p className="text-muted-foreground mt-1">
-              Maak en beheer je facturen met automatische BTW berekening
+              Beheer je facturen en houd je financiële overzicht bij
             </p>
           </div>
         </div>
-        
-        <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Nieuwe Factuur
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Nieuwe Factuur Maken</DialogTitle>
-            </DialogHeader>
-            <InvoiceForm 
-              onSuccess={handleInvoiceCreated}
-              onCancel={() => setShowCreateForm(false)}
-            />
-          </DialogContent>
-        </Dialog>
+        <Button 
+          onClick={handleOpenComprehensiveWizard}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Start Factuur Wizard
+        </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Deze Maand</CardTitle>
-            <Euro className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">€12.450,00</div>
-            <p className="text-xs text-muted-foreground">
-              +15% t.o.v. vorige maand
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Openstaand</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">€3.850,00</div>
-            <p className="text-xs text-muted-foreground">
-              5 facturen wachten op betaling
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Achterstallig</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">€1.200,00</div>
-            <p className="text-xs text-muted-foreground">
-              2 facturen over de vervaldatum
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">BTW Geïnd</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">€2.614,50</div>
-            <p className="text-xs text-muted-foreground">
-              21% BTW deze maand
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Actions */}
+      {/* Dashboard Metrics - Top Row */}
+      <DashboardMetrics />
+      
+      {/* Action Cards - Middle Row */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
+        <Card 
+          className="hover:bg-accent/50 transition-colors cursor-pointer"
+          onClick={handleShowTemplates}
+        >
           <CardContent className="flex items-center p-4">
             <FileText className="h-6 w-6 text-blue-600 mr-3" />
             <div>
-              <h3 className="font-semibold">Concepten</h3>
-              <p className="text-sm text-muted-foreground">3 concept facturen</p>
+              <h3 className="font-semibold">Templates</h3>
+              <p className="text-sm text-muted-foreground">Beheer factuur templates</p>
             </div>
           </CardContent>
         </Card>
         
-        <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
+        <Card 
+          className="hover:bg-accent/50 transition-colors cursor-pointer"
+          onClick={handleShowReminders}
+        >
           <CardContent className="flex items-center p-4">
-            <Clock className="h-6 w-6 text-orange-600 mr-3" />
+            <Send className="h-6 w-6 text-orange-600 mr-3" />
             <div>
               <h3 className="font-semibold">Herinneringen</h3>
               <p className="text-sm text-muted-foreground">Verstuur betalingsherinneringen</p>
@@ -144,42 +171,175 @@ export default function InvoicesPage() {
           </CardContent>
         </Card>
         
-        <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
+        <Card 
+          className="hover:bg-accent/50 transition-colors cursor-pointer"
+          onClick={handleShowVATOverview}
+        >
           <CardContent className="flex items-center p-4">
-            <Euro className="h-6 w-6 text-green-600 mr-3" />
+            <Receipt className="h-6 w-6 text-green-600 mr-3" />
             <div>
               <h3 className="font-semibold">BTW Overzicht</h3>
-              <p className="text-sm text-muted-foreground">Bekijk BTW gegevens</p>
+              <p className="text-sm text-muted-foreground">Bekijk BTW gegevens en aangifte</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Invoice List */}
+      {/* Complete Invoice List - Bottom Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Alle Facturen</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Alle Facturen
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <InvoiceList onEditInvoice={handleEditInvoice} />
+          <InvoiceList 
+            onEditInvoice={handleEditInvoice}
+            onViewInvoice={handleViewInvoice}
+          />
         </CardContent>
       </Card>
 
-      {/* Edit Invoice Dialog */}
-      <Dialog open={!!editingInvoice} onOpenChange={() => setEditingInvoice(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Factuur Bewerken</DialogTitle>
-          </DialogHeader>
-          {editingInvoice && (
-            <InvoiceForm 
-              invoice={editingInvoice}
-              onSuccess={handleInvoiceUpdated}
-              onCancel={() => setEditingInvoice(null)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Comprehensive Invoicing Wizard */}
+      <ComprehensiveInvoicingWizard
+        isOpen={showComprehensiveWizard}
+        onClose={() => setShowComprehensiveWizard(false)}
+        onSuccess={handleComprehensiveWizardSuccess}
+      />
+
+      {/* Manual Invoice Creation Modal */}
+      {showManualInvoiceForm && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold">Nieuwe Handmatige Factuur</h2>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setShowManualInvoiceForm(false)}
+                >
+                  <Plus className="h-4 w-4 rotate-45" />
+                </Button>
+              </div>
+              <InvoiceForm 
+                onSuccess={handleInvoiceCreated}
+                onCancel={() => setShowManualInvoiceForm(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Client Invoice Wizard Modal */}
+      <ClientInvoiceWizard
+        client={selectedClientForInvoicing}
+        isOpen={showClientInvoiceWizard}
+        onClose={handleCloseClientInvoiceWizard}
+        onSuccess={handleClientInvoiceSuccess}
+      />
+
+      {/* Edit Invoice Modal */}
+      {editingInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold">Factuur Bewerken</h2>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setEditingInvoice(null)}
+                >
+                  <Plus className="h-4 w-4 rotate-45" />
+                </Button>
+              </div>
+              <InvoiceForm 
+                invoice={editingInvoice}
+                onSuccess={handleInvoiceUpdated}
+                onCancel={() => setEditingInvoice(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Detail Modal */}
+      <InvoiceDetailModal
+        invoice={viewingInvoice}
+        isOpen={!!viewingInvoice}
+        onClose={() => setViewingInvoice(null)}
+        onEdit={(invoice) => {
+          setViewingInvoice(null)
+          setEditingInvoice(invoice)
+        }}
+        onStatusUpdate={handleInvoiceStatusUpdate}
+      />
+
+      {/* Action Modals - Placeholder implementations */}
+      {showTemplatesModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Factuur Templates</h2>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowTemplatesModal(false)}
+              >
+                <Plus className="h-4 w-4 rotate-45" />
+              </Button>
+            </div>
+            <div className="p-8 text-center text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Templates functionaliteit komt binnenkort beschikbaar.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRemindersModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Betalingsherinneringen</h2>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowRemindersModal(false)}
+              >
+                <Plus className="h-4 w-4 rotate-45" />
+              </Button>
+            </div>
+            <div className="p-8 text-center text-muted-foreground">
+              <Send className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Herinneringen functionaliteit komt binnenkort beschikbaar.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVATOverview && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-lg max-w-4xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">BTW Overzicht</h2>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowVATOverview(false)}
+              >
+                <Plus className="h-4 w-4 rotate-45" />
+              </Button>
+            </div>
+            <div className="p-8 text-center text-muted-foreground">
+              <Receipt className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>BTW overzicht en aangifte functionaliteit komt binnenkort beschikbaar.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

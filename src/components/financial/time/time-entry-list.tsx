@@ -16,21 +16,21 @@ import {
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuTrigger 
+  DropdownMenuTrigger,
+  DropdownMenuPortal 
 } from '@/components/ui/dropdown-menu'
 import { 
   Clock, 
   MoreHorizontal, 
   Edit2, 
   Trash2, 
-  FileText, 
   Building2,
-  CheckCircle,
-  XCircle,
   Calendar,
   Euro
 } from 'lucide-react'
-import type { TimeEntryWithClient } from '@/lib/types/financial'
+import type { TimeEntryWithClient, Client } from '@/lib/types/financial'
+import { getTimeEntryStatus } from '@/lib/utils/time-entry-status'
+import { TimeEntryStatusBadge } from '@/components/financial/time-entries/time-entry-status-badge'
 
 interface TimeEntryListProps {
   onEdit?: (timeEntry: TimeEntryWithClient) => void
@@ -41,34 +41,59 @@ interface TimeEntryListProps {
 
 export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: TimeEntryListProps) {
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithClient[]>([])
+  const [clients, setClients] = useState<Map<string, Client>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
   const [pagination, setPagination] = useState({
     page: 1,
     totalPages: 0,
     total: 0
   })
 
+  const fetchClients = async () => {
+    try {
+      const response = await fetch('/api/clients?limit=100', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        const clientMap = new Map<string, Client>()
+        data.data?.forEach((client: Client) => {
+          if (client.id) {
+            clientMap.set(client.id, client)
+          }
+        })
+        setClients(clientMap)
+      }
+    } catch (err) {
+      console.error('Error fetching clients:', err)
+    }
+  }
+
   const fetchTimeEntries = async () => {
     try {
       setLoading(true)
-      const params = new URLSearchParams()
-      if (limit) params.set('limit', limit.toString())
-      // Add timestamp to prevent caching
-      params.set('_t', Date.now().toString())
       
-      const response = await fetch(`/api/time-entries?${params.toString()}`, {
-        cache: 'no-store', // Prevent caching
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      })
+      // Fetch both time entries and clients in parallel
+      const [timeEntriesPromise, clientsPromise] = await Promise.all([
+        fetch(`/api/time-entries?${new URLSearchParams({
+          ...(limit && { limit: limit.toString() }),
+          _t: Date.now().toString()
+        }).toString()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' }
+        }),
+        fetchClients()
+      ])
       
-      if (!response.ok) {
+      if (!timeEntriesPromise.ok) {
         throw new Error('Failed to fetch time entries')
       }
       
-      const data = await response.json()
+      const data = await timeEntriesPromise.json()
       console.log('Fetched time entries:', data.data?.length || 0, 'entries')
       setTimeEntries(data.data || [])
       setPagination({
@@ -277,8 +302,8 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
             </p>
           </div>
         ) : (
-          <div className="rounded-lg border">
-            <Table>
+          <div className="rounded-lg border overflow-visible">
+            <Table className="overflow-visible">
               <TableHeader>
                 <TableRow>
                   <TableHead>Datum</TableHead>
@@ -348,58 +373,118 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
                     </TableCell>
                     
                     <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Badge 
-                          variant={entry.billable ? "default" : "secondary"}
-                          className="cursor-pointer"
-                          onClick={() => handleToggleBillable(entry)}
-                        >
-                          {entry.billable ? (
-                            <>
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Factureerbaar
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="h-3 w-3 mr-1" />
-                              Niet factureerbaar
-                            </>
-                          )}
-                        </Badge>
-                        
-                        {entry.billable && entry.invoiced && (
-                          <Badge variant="outline" className="text-green-600">
-                            <FileText className="h-3 w-3 mr-1" />
-                            Gefactureerd
-                          </Badge>
-                        )}
+                      <div className="flex items-center justify-center">
+                        {(() => {
+                          // Get the client for this time entry to determine status based on invoice frequency
+                          const client = clients.get(entry.client_id || '')
+                          
+                          if (!client) {
+                            // Fallback to simple logic if client data is not available
+                            // Create a mock status info object to maintain consistency
+                            if (entry.invoiced || entry.invoice_id) {
+                              const statusInfo = {
+                                status: 'gefactureerd' as const,
+                                label: 'Gefactureerd',
+                                color: 'purple' as const,
+                                reason: entry.invoice_id 
+                                  ? `Gefactureerd op factuur ${entry.invoice_id}`
+                                  : 'Reeds gefactureerd'
+                              }
+                              return (
+                                <TimeEntryStatusBadge 
+                                  statusInfo={statusInfo}
+                                  size="sm"
+                                  showTooltip={true}
+                                  showIcon={true}
+                                />
+                              )
+                            } else if (!entry.billable) {
+                              const statusInfo = {
+                                status: 'niet-factureerbaar' as const,
+                                label: 'Niet-factureerbaar',
+                                color: 'red' as const,
+                                reason: 'Markeerd als niet-factureerbaar'
+                              }
+                              return (
+                                <TimeEntryStatusBadge 
+                                  statusInfo={statusInfo}
+                                  size="sm"
+                                  showTooltip={true}
+                                  showIcon={true}
+                                />
+                              )
+                            } else {
+                              // Default to factureerbaar (green) when client data is missing
+                              const statusInfo = {
+                                status: 'factureerbaar' as const,
+                                label: 'Factureerbaar',
+                                color: 'green' as const,
+                                reason: 'Klant data niet beschikbaar - standaard factureerbaar'
+                              }
+                              return (
+                                <TimeEntryStatusBadge 
+                                  statusInfo={statusInfo}
+                                  size="sm"
+                                  showTooltip={true}
+                                  showIcon={true}
+                                />
+                              )
+                            }
+                          }
+                          
+                          // Use the comprehensive status determination with full client data
+                          const statusInfo = getTimeEntryStatus(entry, client)
+                          return (
+                            <TimeEntryStatusBadge 
+                              statusInfo={statusInfo}
+                              size="sm"
+                              showTooltip={true}
+                              showIcon={true}
+                            />
+                          )
+                        })()}
                       </div>
                     </TableCell>
                     
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem 
-                            onClick={() => onEdit?.(entry)}
-                            className="cursor-pointer"
+                      <div className="relative">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-8 w-8 p-0"
+                          onClick={() => setOpenDropdown(openDropdown === entry.id ? null : entry.id)}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                        
+                        {openDropdown === entry.id && (
+                          <div 
+                            className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg min-w-[160px] z-50"
+                            onBlur={() => setOpenDropdown(null)}
                           >
-                            <Edit2 className="h-4 w-4 mr-2" />
-                            Bewerken
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDelete(entry.id)}
-                            className="cursor-pointer text-red-600 dark:text-red-400"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Verwijderen
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            <div 
+                              className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer flex items-center"
+                              onClick={() => {
+                                onEdit?.(entry)
+                                setOpenDropdown(null)
+                              }}
+                            >
+                              <Edit2 className="h-4 w-4 mr-2" />
+                              Bewerken
+                            </div>
+                            <div 
+                              className="px-3 py-2 text-sm hover:bg-red-50 cursor-pointer flex items-center text-red-600"
+                              onClick={() => {
+                                handleDelete(entry.id)
+                                setOpenDropdown(null)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Verwijderen
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

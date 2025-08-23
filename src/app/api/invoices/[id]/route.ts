@@ -307,6 +307,26 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json(conflictError, { status: conflictError.status })
     }
 
+    // First, unlink any associated time entries
+    const { data: linkedTimeEntries, error: unlinkError } = await supabaseAdmin
+      .from('time_entries')
+      .update({
+        invoiced: false,
+        invoice_id: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('invoice_id', invoiceId)
+      .eq('tenant_id', profile.tenant_id)
+      .select('id, description, entry_date, hours')
+
+    if (unlinkError) {
+      console.error('Error unlinking time entries:', unlinkError)
+      return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+    }
+
+    const unlinkedCount = linkedTimeEntries?.length || 0
+    console.log(`Unlinked ${unlinkedCount} time entries from invoice ${existingInvoice.invoice_number}`)
+
     // Delete invoice (items will be deleted via CASCADE)
     const { error: deleteError } = await supabaseAdmin
       .from('invoices')
@@ -333,7 +353,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      message: `Invoice ${existingInvoice.invoice_number} deleted successfully`
+      message: `Invoice ${existingInvoice.invoice_number} deleted successfully${unlinkedCount > 0 ? ` and ${unlinkedCount} time entries unlinked` : ''}`,
+      unlinked_time_entries: unlinkedCount
     })
 
   } catch (error) {

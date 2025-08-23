@@ -24,14 +24,14 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Building2, User, Globe, Phone, Mail, MapPin } from 'lucide-react'
-import { CreateClientSchema } from '@/lib/validations/financial'
-import type { ClientFormData, ClientWithInvoices } from '@/lib/types/financial'
+import { Loader2, Building2, User, Globe, Phone, Mail, MapPin, Calendar, Clock } from 'lucide-react'
+import { CreateClientSchema, UpdateClientSchema } from '@/lib/validations/financial'
+import type { Client } from '@/lib/types/financial'
 import { z } from 'zod'
 
 interface ClientFormProps {
-  client?: ClientWithInvoices
-  onSuccess?: (client: ClientWithInvoices) => void
+  client?: Client
+  onSuccess?: (client: Client) => void
   onCancel?: () => void
 }
 
@@ -74,9 +74,11 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
     message: string
   }>({ isValidating: false, isValid: null, message: '' })
 
-  const form = useForm<z.infer<typeof CreateClientSchema>>({
-    resolver: zodResolver(CreateClientSchema),
+  const schema = client ? UpdateClientSchema : CreateClientSchema
+  const form = useForm({
+    resolver: zodResolver(schema),
     defaultValues: {
+      ...(client ? { id: client.id } : {}), // Include id for updates
       name: client?.name || '',
       company_name: client?.company_name || '',
       email: client?.email || '',
@@ -90,6 +92,9 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       is_supplier: client?.is_supplier || false,
       default_payment_terms: client?.default_payment_terms || 30,
       notes: client?.notes || '',
+      // Invoicing frequency fields
+      invoicing_frequency: client?.invoicing_frequency || 'on_demand',
+      auto_invoice_enabled: client?.auto_invoice_enabled || false,
     },
   })
 
@@ -153,22 +158,30 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
     }
   }, [watchedVatNumber, watchedCountry, watchedIsBusiness])
 
-  const onSubmit = async (data: z.infer<typeof CreateClientSchema>) => {
+  const onSubmit = async (data: any) => {
+    console.log('Form submitted with data:', data)
+    console.log('Client exists:', !!client)
+    console.log('Schema being used:', client ? 'UpdateClientSchema' : 'CreateClientSchema')
+    
     setIsSubmitting(true)
 
     try {
       const url = client ? `/api/clients/${client.id}` : '/api/clients'
       const method = client ? 'PUT' : 'POST'
 
+      // For updates, include the client ID
+      const requestData = client ? { ...data, id: client.id } : data
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(requestData)
       })
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.message || `Failed to ${client ? 'update' : 'create'} client`)
+        console.error('API Error:', error)
+        throw new Error(error.error || error.message || `Failed to ${client ? 'update' : 'create'} client`)
       }
 
       const result = await response.json()
@@ -202,7 +215,10 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
 
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit, (errors) => {
+            console.log('Form validation errors:', errors)
+            console.log('Form state:', form.formState)
+          })} className="space-y-6">
             {/* Business Type Toggle */}
             <FormField
               control={form.control}
@@ -474,6 +490,67 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                       />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Invoicing Configuration */}
+            <div className="space-y-4 border-t pt-4">
+              <div>
+                <h3 className="text-lg font-medium flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Facturering configuratie
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Stel in hoe vaak deze klant gefactureerd moet worden
+                </p>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="invoicing_frequency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Facturerings frequentie</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecteer frequentie" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="on_demand">Op aanvraag</SelectItem>
+                        <SelectItem value="weekly">Wekelijks</SelectItem>
+                        <SelectItem value="monthly">Maandelijks</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Op aanvraag = handmatige facturering, wekelijks/maandelijks = automatische herinnering
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="auto_invoice_enabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Automatisch factureren</FormLabel>
+                      <FormDescription>
+                        Automatisch facturen aanmaken op basis van onfactureert tijd (toekomst functionaliteit)
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled
+                      />
+                    </FormControl>
                   </FormItem>
                 )}
               />

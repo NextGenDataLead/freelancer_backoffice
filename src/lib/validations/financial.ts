@@ -104,7 +104,10 @@ export const CreateClientSchema = z.object({
   is_business: z.boolean().default(true),
   is_supplier: z.boolean().default(false),
   default_payment_terms: z.number().int().min(1).max(365).default(30),
-  notes: z.string().max(1000, "Notes too long").optional()
+  notes: z.string().max(1000, "Notes too long").optional(),
+  // Invoicing frequency fields  
+  invoicing_frequency: z.enum(['weekly', 'monthly', 'on_demand']).default('on_demand'),
+  auto_invoice_enabled: z.boolean().default(false)
 });
 
 export const UpdateClientSchema = z.object({
@@ -114,14 +117,19 @@ export const UpdateClientSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
-  postal_code: DutchPostalCodeSchema.optional(),
+  postal_code: z.string().max(10, "Postal code too long").optional(),
   city: z.string().optional(),
   country_code: z.string().length(2).optional(),
   vat_number: z.string().optional(),
   is_business: z.boolean().optional(),
   is_supplier: z.boolean().optional(),
   default_payment_terms: z.number().int().min(1).max(365).optional(),
-  notes: z.string().optional()
+  notes: z.string().optional(),
+  // Invoicing frequency fields
+  invoicing_frequency: z.enum(['weekly', 'monthly', 'on_demand']).optional(),
+  last_invoiced_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  next_invoice_due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  auto_invoice_enabled: z.boolean().optional()
 });
 
 // ====================

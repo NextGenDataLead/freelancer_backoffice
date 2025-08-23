@@ -5,7 +5,7 @@
 // ENUM TYPES
 // ====================
 
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'partial' | 'overdue' | 'cancelled';
 
 export type VATType = 'standard' | 'reverse_charge' | 'exempt' | 'reduced';
 
@@ -21,6 +21,10 @@ export type ExpenseCategory =
   | 'other';
 
 export type BusinessType = 'sole_trader' | 'partnership' | 'bv' | 'other';
+
+export type PaymentMethod = 'bank_transfer' | 'credit_card' | 'cash' | 'paypal' | 'other';
+
+export type InvoicingFrequency = 'weekly' | 'monthly' | 'on_demand';
 
 // ====================
 // DATABASE TYPES
@@ -43,6 +47,11 @@ export interface Client {
   is_supplier: boolean; // Default: false
   default_payment_terms: number; // Default: 30
   notes?: string;
+  // Invoicing configuration
+  invoicing_frequency: InvoicingFrequency; // Default: 'on_demand'
+  last_invoiced_date?: Date;
+  next_invoice_due_date?: Date;
+  auto_invoice_enabled: boolean; // Default: false
   created_at: Date;
   updated_at: Date;
 }
@@ -70,6 +79,7 @@ export interface Invoice {
   subtotal: number; // Default: 0
   vat_amount: number; // Default: 0
   total_amount: number; // Default: 0
+  paid_amount: number; // Default: 0
   vat_type: VATType; // Default: 'standard'
   vat_rate: number; // Default: 0.21
   currency: string; // Default: 'EUR'
@@ -90,6 +100,20 @@ export interface InvoiceItem {
   unit_price: number;
   line_total: number;
   created_at: Date;
+}
+
+export interface InvoicePayment {
+  id: string;
+  invoice_id: string;
+  tenant_id: string;
+  recorded_by: string;
+  amount: number;
+  payment_date: Date;
+  payment_method: PaymentMethod; // Default: 'bank_transfer'
+  reference?: string;
+  notes?: string;
+  created_at: Date;
+  updated_at: Date;
 }
 
 export interface Expense {
@@ -299,6 +323,7 @@ export interface InvoiceCalculation {
   total_amount: number;
   vat_rate: number;
   vat_type: VATType;
+  explanation?: string;
 }
 
 export interface VATReturnData {
@@ -479,6 +504,16 @@ export interface ZZPProfileFormData {
 // ====================
 
 export type EntityWithRelations<T, R> = T & R;
+
+// Client with invoicing summary data
+export interface ClientInvoicingSummary extends Client {
+  unbilled_hours: number;
+  unbilled_amount: number;
+  last_invoice_date?: Date;
+  days_since_last_invoice?: number;
+  ready_for_invoicing: boolean;
+  overdue_for_invoicing: boolean;
+}
 
 export type InvoiceWithItems = EntityWithRelations<Invoice, {
   items: InvoiceItem[];

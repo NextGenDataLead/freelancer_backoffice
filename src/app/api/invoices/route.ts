@@ -175,12 +175,25 @@ export async function POST(request: Request) {
     let vatType: 'standard' | 'reverse_charge' | 'exempt' = 'standard'
     let vatRate = 0.21 // Default Dutch VAT rate
 
-    if (client.is_business && client.country_code !== 'NL' && client.vat_number) {
-      // EU B2B with VAT number = reverse charge
-      vatType = 'reverse_charge'
-      vatRate = 0
-    } else if (client.country_code !== 'NL') {
-      // Non-EU = exempt
+    // Normalize country code (handles "België" -> "BE" etc.)
+    const normalizedCountry = normalizeCountryCode(client.country_code)
+
+    if (normalizedCountry === 'NL') {
+      // Domestic (Netherlands) - always standard VAT
+      vatType = 'standard'
+      vatRate = 0.21
+    } else if (isEUCountry(normalizedCountry)) {
+      if (client.is_business && client.vat_number) {
+        // EU B2B with VAT number - reverse charge (BTW verlegd)
+        vatType = 'reverse_charge'
+        vatRate = 0
+      } else {
+        // EU B2C or B2B without VAT number - Dutch VAT applies
+        vatType = 'standard'
+        vatRate = 0.21
+      }
+    } else {
+      // Non-EU - export, no VAT
       vatType = 'exempt'
       vatRate = 0
     }
@@ -276,4 +289,98 @@ export async function POST(request: Request) {
     console.error('Invoice creation error:', error)
     return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
   }
+}
+
+/**
+ * EU country codes for VAT calculation
+ */
+const EU_COUNTRIES = [
+  'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES', 
+  'FI', 'FR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 
+  'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'
+]
+
+/**
+ * Country name to ISO code mapping for Dutch names
+ */
+const COUNTRY_NAME_MAPPING: Record<string, string> = {
+  // Dutch country names to ISO codes
+  'belgië': 'BE',
+  'belgie': 'BE',
+  'duitsland': 'DE', 
+  'frankrijk': 'FR',
+  'spanje': 'ES',
+  'italië': 'IT',
+  'italie': 'IT',
+  'oostenrijk': 'AT',
+  'portugal': 'PT',
+  'griekenland': 'GR',
+  'polen': 'PL',
+  'tsjechië': 'CZ',
+  'tsjechie': 'CZ',
+  'hongarije': 'HU',
+  'slovenië': 'SI',
+  'slovenie': 'SI',
+  'slowakije': 'SK',
+  'kroatië': 'HR',
+  'kroatie': 'HR',
+  'bulgarije': 'BG',
+  'roemenië': 'RO',
+  'roemenie': 'RO',
+  'letland': 'LV',
+  'litouwen': 'LT',
+  'estland': 'EE',
+  'finland': 'FI',
+  'zweden': 'SE',
+  'denemarken': 'DK',
+  'ierland': 'IE',
+  'cyprus': 'CY',
+  'malta': 'MT',
+  'luxemburg': 'LU',
+  'nederland': 'NL',
+  'netherlands': 'NL',
+  
+  // Common non-EU countries
+  'verenigd koninkrijk': 'GB',
+  'groot-brittannië': 'GB',
+  'engeland': 'GB',
+  'verenigde staten': 'US',
+  'america': 'US',
+  'canada': 'CA',
+  'australië': 'AU',
+  'australie': 'AU',
+  'nieuw-zeeland': 'NZ',
+  'zwitserland': 'CH',
+  'noorwegen': 'NO',
+  'ijsland': 'IS'
+}
+
+/**
+ * Normalizes country code or name to ISO country code
+ */
+function normalizeCountryCode(countryInput: string): string {
+  if (!countryInput) return 'NL' // Default to Netherlands
+  
+  const input = countryInput.trim().toLowerCase()
+  
+  // If it's already a 2-letter ISO code, return uppercase
+  if (input.length === 2 && /^[a-z]{2}$/i.test(input)) {
+    return input.toUpperCase()
+  }
+  
+  // Check if it's a mapped country name
+  const mappedCode = COUNTRY_NAME_MAPPING[input]
+  if (mappedCode) {
+    return mappedCode
+  }
+  
+  // If no mapping found, assume it's already a country code and return uppercase
+  return input.toUpperCase()
+}
+
+/**
+ * Checks if a country code is in the EU for VAT purposes
+ */
+function isEUCountry(countryCode: string): boolean {
+  return EU_COUNTRIES.includes(countryCode.toUpperCase())
 }

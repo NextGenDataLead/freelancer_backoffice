@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { 
   BarChart3, 
   Users, 
@@ -17,26 +18,62 @@ import {
   MessageSquare,
   Table,
   Shield,
-  User
+  User,
+  Calculator,
+  Clock,
+  Euro,
+  Receipt,
+  ChevronRight
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSidebar } from '@/hooks/use-app-state'
 
 const navigationItems = [
-  { name: 'Overview', icon: Home, href: '/dashboard', active: true },
-  { name: 'Analytics', icon: BarChart3, href: '/dashboard/analytics', active: false },
-  { name: 'Forms', icon: FileText, href: '/dashboard/forms', active: false },
-  { name: 'Modals', icon: MessageSquare, href: '/dashboard/modals', active: false },
-  { name: 'Tables', icon: Table, href: '/dashboard/tables', active: false },
-  { name: 'Users', icon: Users, href: '/dashboard/users', active: false },
-  { name: 'Revenue', icon: DollarSign, href: '/dashboard/revenue', active: false },
-  { name: 'Profile', icon: User, href: '/dashboard/profile', active: false },
-  { name: 'Privacy', icon: Shield, href: '/dashboard/privacy', active: false },
-  { name: 'Settings', icon: Settings, href: '/dashboard/settings', active: false },
+  { name: 'Overview', icon: Home, href: '/dashboard' },
+  { name: 'Analytics', icon: BarChart3, href: '/dashboard/analytics' },
+  {
+    name: 'Financieel',
+    icon: Calculator,
+    href: '/dashboard/financieel',
+    children: [
+      { name: 'Dashboard', icon: Home, href: '/dashboard/financieel' },
+      { name: 'Facturen', icon: FileText, href: '/dashboard/financieel/facturen' },
+      { name: 'Klanten', icon: Users, href: '/dashboard/financieel/klanten' },
+      { name: 'Tijdregistratie', icon: Clock, href: '/dashboard/financieel/tijd' },
+      { name: 'Uitgaven', icon: Euro, href: '/dashboard/financieel/uitgaven' },
+      { name: 'Rapporten', icon: TrendingUp, href: '/dashboard/financieel/rapporten' }
+    ]
+  },
+  { name: 'Forms', icon: FileText, href: '/dashboard/forms' },
+  { name: 'Modals', icon: MessageSquare, href: '/dashboard/modals' },
+  { name: 'Tables', icon: Table, href: '/dashboard/tables' },
+  { name: 'Users', icon: Users, href: '/dashboard/users' },
+  { name: 'Revenue', icon: DollarSign, href: '/dashboard/revenue' },
+  { name: 'Profile', icon: User, href: '/dashboard/profile' },
+  { name: 'Privacy', icon: Shield, href: '/dashboard/privacy' },
+  { name: 'Settings', icon: Settings, href: '/dashboard/settings' },
 ]
 
 export function Sidebar() {
   const { sidebarOpen, closeSidebar } = useSidebar()
+  const pathname = usePathname()
+  const [expandedFinancial, setExpandedFinancial] = React.useState(
+    pathname.startsWith('/dashboard/financieel')
+  )
+
+  // Auto-expand financial section when on financial pages
+  React.useEffect(() => {
+    if (pathname.startsWith('/dashboard/financieel')) {
+      setExpandedFinancial(true)
+    }
+  }, [pathname])
+
+  const isActivePage = (href: string) => {
+    if (href === '/dashboard') {
+      return pathname === '/dashboard'
+    }
+    return pathname.startsWith(href)
+  }
 
   return (
     <>
@@ -73,16 +110,51 @@ export function Sidebar() {
         <nav className="mt-6 px-4">
           <div className="space-y-1">
             {navigationItems.map((item) => (
-              <Link key={item.name} href={item.href}>
-                <Button
-                  variant={item.active ? "default" : "ghost"}
-                  className="w-full justify-start text-left"
-                  size="sm"
-                >
-                  <item.icon className="mr-3 h-4 w-4" />
-                  {item.name}
-                </Button>
-              </Link>
+              <div key={item.name}>
+                {item.children ? (
+                  // Financial section with submenu
+                  <div>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start text-left"
+                      size="sm"
+                      onClick={() => setExpandedFinancial(!expandedFinancial)}
+                    >
+                      <item.icon className="mr-3 h-4 w-4" />
+                      {item.name}
+                      <ChevronRight className={`ml-auto h-3 w-3 transition-transform ${expandedFinancial ? 'rotate-90' : ''}`} />
+                    </Button>
+                    {expandedFinancial && (
+                      <div className="ml-6 mt-1 space-y-1">
+                        {item.children.map((child) => (
+                          <Link key={child.name} href={child.href}>
+                            <Button
+                              variant={isActivePage(child.href) ? "default" : "ghost"}
+                              className="w-full justify-start text-left text-sm"
+                              size="sm"
+                            >
+                              <child.icon className="mr-2 h-3 w-3" />
+                              {child.name}
+                            </Button>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  // Regular navigation item
+                  <Link href={item.href}>
+                    <Button
+                      variant={isActivePage(item.href) ? "default" : "ghost"}
+                      className="w-full justify-start text-left"
+                      size="sm"
+                    >
+                      <item.icon className="mr-3 h-4 w-4" />
+                      {item.name}
+                    </Button>
+                  </Link>
+                )}
+              </div>
             ))}
           </div>
         </nav>

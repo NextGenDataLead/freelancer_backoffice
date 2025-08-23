@@ -35,7 +35,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { CreateInvoiceSchema } from '@/lib/validations/financial'
-import type { InvoiceWithClient, Client, VATCalculationResult } from '@/lib/types/financial'
+import type { InvoiceWithClient, Client, InvoiceCalculation } from '@/lib/types/financial'
 import { z } from 'zod'
 
 interface InvoiceFormProps {
@@ -50,6 +50,7 @@ interface ClientOption {
   company_name?: string
   is_business: boolean
   country_code: string
+  vat_number?: string
   default_payment_terms: number
 }
 
@@ -57,7 +58,7 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [clients, setClients] = useState<ClientOption[]>([])
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null)
-  const [vatCalculation, setVatCalculation] = useState<VATCalculationResult | null>(null)
+  const [vatCalculation, setVatCalculation] = useState<InvoiceCalculation | null>(null)
   const [isCalculatingVAT, setIsCalculatingVAT] = useState(false)
 
   const form = useForm<z.infer<typeof CreateInvoiceSchema>>({
@@ -83,7 +84,7 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const response = await fetch('/api/clients?limit=1000')
+        const response = await fetch('/api/clients?limit=100')
         if (response.ok) {
           const data = await response.json()
           setClients(data.data)
@@ -126,12 +127,11 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           client_country: client.country_code,
-          is_business_client: client.is_business,
+          client_is_business: client.is_business,
+          client_has_vat_number: !!client.vat_number,
           items: items.map(item => ({
-            description: item.description,
             quantity: item.quantity,
-            unit_price: item.unit_price,
-            total: item.quantity * item.unit_price
+            unit_price: item.unit_price
           }))
         })
       })
