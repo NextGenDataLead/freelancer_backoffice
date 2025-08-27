@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FACTUUR F2024-001</title>
+    <style>
+        /* Professional Invoice Template Styles */
+        /* Generated with Claude Code (https://claude.ai/code) */
+        
+        :root {
+            /* Brand Colors */
+      --brand-primary: #635bff;
+      --brand-secondary: #0a2540;
+      --brand-accent: #00d4ff;
+      --brand-text: #1f2937;
+      --brand-background: #ffffff;
+      --brand-font: Inter;
+      
+      /* RGB Values for Gradients */
+      --brand-primary-rgb: 99, 91, 255;
+      --brand-secondary-rgb: 10, 37, 64;
+      --brand-accent-rgb: 0, 212, 255;
+      
+      /* Enhanced Typography Scale */
+      --font-hero: 36px;
+      --font-heading: 28px;
+      --font-subheading: 20px;
+      --font-body: 14px;
+      --font-caption: 12px;
+      --font-small: 11px;
+      
+      /* Font Weights */
+      --weight-light: 300;
+      --weight-normal: 400;
+      --weight-medium: 500;
+      --weight-semibold: 600;
+      --weight-bold: 700;
+      --weight-black: 800;
+      
+      /* Spacing Scale (Based on 8px grid) */
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
+      --spacing-2xl: 48px;
+      --spacing-3xl: 64px;
+      
+      /* Border Radius */
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      
+      /* Professional Shadows */
+      --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.04);
+      --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.06);
+      --shadow-strong: 0 8px 32px rgba(0, 0, 0, 0.08);
+      --shadow-glow: 0 0 20px rgba(var(--brand-primary-rgb), 0.15);
+      
+      /* Success and Error Colors */
+      --success-color: #10b981;
+      --error-color: #ef4444;
+      --warning-color: #f59e0b;
+      
+      /* Modern Gradients */
+      --gradient-brand: linear-gradient(135deg, var(--brand-primary) 0%, rgba(var(--brand-primary-rgb), 0.8) 100%);
+      --gradient-subtle: linear-gradient(135deg, rgba(var(--brand-primary-rgb), 0.05) 0%, rgba(var(--brand-primary-rgb), 0.02) 100%);
+      --gradient-surface: linear-gradient(135deg, rgba(250, 250, 250, 0.8) 0%, rgba(248, 248, 248, 0.9) 100%);
+            --spacing-xs: 2px;
+            --spacing-sm: 4px;
+            --spacing-md: 6px;
+            --spacing-lg: 8px;
+            --spacing-xl: 12px;
+            --spacing-2xl: 16px;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--brand-font), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--brand-text);
+            background-color: var(--brand-background);
+            margin: 0;
+            padding: var(--spacing-sm);
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            font-feature-settings: 'tnum' 1, 'lnum' 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .invoice-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--brand-background);
+            position: relative;
+            padding: var(--spacing-xl);
+            box-shadow: 
+                0 0 0 1px rgba(0, 0, 0, 0.05),
+                0 4px 16px rgba(0, 0, 0, 0.08),
+                0 8px 32px rgba(0, 0, 0, 0.04),
+                0 16px 64px rgba(0, 0, 0, 0.02);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .invoice-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--gradient-brand);
+            opacity: 0.8;
+            z-index: 1;
+        }
+
+        /* Watermark Styles */
+
+        /* Enhanced Header with Premium Visual Elements */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: var(--spacing-xl);
+            padding: var(--spacing-xl);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
+            border-radius: var(--radius-lg);
+            box-shadow: 
+                0 0 0 1px rgba(0, 0, 0, 0.04),
+                0 2px 8px rgba(0, 0, 0, 0.08),
+                0 4px 16px rgba(0, 0, 0, 0.04);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, 
+                rgba(255, 255, 255, 0.1) 0%, 
+                transparent 50%, 
+                rgba(0, 0, 0, 0.05) 100%);
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .business-info {
+            flex: 1;
+        }
+
+        .business-info h1 {
+            margin: 0 0 var(--spacing-sm) 0;
+            color: var(--brand-primary);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            line-height: 1.2;
+        }
+
+        .business-info .business-details {
+            color: var(--brand-secondary);
+            font-size: 13px;
+            line-height: 1.6;
+            font-weight: 400;
+        }
+
+        .business-info .business-details p {
+            margin: 2px 0;
+        }
+
+        .logo-container {
+            flex: 0 0 auto;
+            margin-right: var(--spacing-xl);
+            display: flex;
+            align-items: flex-start;
+            padding: var(--spacing-md);
+            border-radius: var(--radius-lg);
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 
+                0 0 0 1px rgba(255, 255, 255, 0.2),
+                0 4px 12px rgba(0, 0, 0, 0.08),
+                0 2px 6px rgba(0, 0, 0, 0.04);
+            backdrop-filter: blur(8px);
+            position: relative;
+        }
+
+        .logo-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(135deg, 
+                rgba(255, 255, 255, 0.3) 0%, 
+                transparent 50%, 
+                rgba(0, 0, 0, 0.02) 100%);
+            pointer-events: none;
+        }
+
+        .logo-container img {
+            max-height: 90px;
+            max-width: 220px;
+            height: auto;
+            width: auto;
+            object-fit: contain;
+            filter: 
+                drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))
+                drop-shadow(0 1px 2px rgba(0, 0, 0, 0.06));
+            position: relative;
+            z-index: 3;
+        }
+
+        .invoice-title {
+            text-align: right;
+            flex: 0 0 auto;
+            order: 1;
+        }
+
+        .invoice-title h2 {
+            margin: 0 0 var(--spacing-sm) 0;
+            font-size: 36px;
+            color: var(--brand-text);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            font-feature-settings: 'ss01' 1;
+        }
+
+        .invoice-number {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--brand-primary);
+            letter-spacing: 0.05em;
+            font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+        }
+
+        /* Meta Information Grid */
+        .invoice-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-lg);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .info-section {
+            padding: var(--spacing-lg);
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: var(--radius-md);
+            box-shadow: 
+                0 0 0 1px rgba(255, 255, 255, 0.5),
+                0 2px 8px rgba(0, 0, 0, 0.06),
+                0 4px 16px rgba(0, 0, 0, 0.03);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .info-section h3 {
+            margin: 0 0 var(--spacing-md) 0;
+            color: var(--brand-text);
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            opacity: 0.8;
+        }
+
+        .info-section p {
+            margin: var(--spacing-sm) 0;
+            color: var(--brand-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+            font-weight: 400;
+        }
+
+        .info-section .highlight {
+            color: var(--brand-text);
+            font-weight: 600;
+        }
+
+        /* Enhanced Table Header Section */
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+            padding: 0 var(--spacing-sm);
+        }
+
+        .table-title {
+            font-size: var(--font-heading);
+            font-weight: var(--weight-semibold);
+            color: var(--brand-primary);
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+
+        .item-count {
+            font-size: var(--font-caption);
+            color: var(--brand-secondary);
+            background: rgba(var(--brand-primary-rgb), 0.08);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: var(--radius-sm);
+            font-weight: var(--weight-medium);
+        }
+
+        /* Enhanced Table Container */
+        .table-container {
+            position: relative;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            background: var(--brand-background);
+            box-shadow: 
+                0 0 0 1px rgba(0, 0, 0, 0.03),
+                0 2px 8px rgba(0, 0, 0, 0.05),
+                0 4px 16px rgba(0, 0, 0, 0.04),
+                0 8px 32px rgba(0, 0, 0, 0.02);
+        }
+
+        .table-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(var(--brand-primary-rgb), 0.3) 50%, 
+                transparent 100%);
+            z-index: 1;
+        }
+
+        /* Advanced Items Table */
+        .items-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 0;
+            background: var(--brand-background);
+            position: relative;
+        }
+
+        /* Enhanced Table Headers with Advanced Layout */
+        .items-table th {
+            background: linear-gradient(135deg, var(--brand-primary) 0%, rgba(var(--brand-primary-rgb), 0.9) 100%);
+            color: white;
+            padding: var(--spacing-lg);
+            text-align: left;
+            font-weight: var(--weight-bold);
+            border: none;
+            position: relative;
+            box-shadow: 
+                inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+            vertical-align: top;
+        }
+
+        .header-text {
+            display: block;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: var(--weight-bold);
+            margin-bottom: 2px;
+        }
+
+        .header-subtitle {
+            display: block;
+            font-size: 10px;
+            opacity: 0.8;
+            font-weight: var(--weight-normal);
+            text-transform: none;
+            letter-spacing: 0.02em;
+        }
+
+        .spacer-header {
+            background: none !important;
+            box-shadow: none !important;
+        }
+        }
+
+        .items-table td {
+            padding: var(--spacing-md) var(--spacing-lg);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .items-table tbody tr:nth-child(even) {
+            background: linear-gradient(90deg, 
+                rgba(248, 250, 252, 0.4) 0%, 
+                rgba(248, 250, 252, 0.6) 50%, 
+                rgba(248, 250, 252, 0.4) 100%);
+        }
+        
+        .items-table tbody tr:hover {
+            background: linear-gradient(90deg, 
+                rgba(var(--brand-primary-rgb), 0.03) 0%, 
+                rgba(var(--brand-primary-rgb), 0.05) 50%, 
+                rgba(var(--brand-primary-rgb), 0.03) 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        /* Enhanced Table Cells and Layout */
+        .items-table td {
+            padding: var(--spacing-lg);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+            font-size: var(--font-body);
+            line-height: 1.5;
+            vertical-align: top;
+        }
+
+        .item-row {
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .item-row:last-child td {
+            border-bottom: none;
+        }
+
+        .description-cell {
+            position: relative;
+        }
+
+        .item-description {
+            font-weight: var(--weight-semibold);
+            color: var(--brand-text);
+            font-size: var(--font-body);
+            line-height: 1.4;
+            margin-bottom: 2px;
+        }
+
+        .item-details {
+            font-size: var(--font-caption);
+            color: var(--brand-secondary);
+            line-height: 1.3;
+            opacity: 0.8;
+        }
+
+        .quantity-cell, .rate-cell, .amount-cell {
+            position: relative;
+        }
+
+        .quantity-value, .rate-value, .amount-value {
+            font-variant-numeric: tabular-nums;
+            font-weight: var(--weight-semibold);
+            display: inline-block;
+        }
+
+        .amount-value {
+            font-weight: var(--weight-bold);
+            color: var(--brand-primary);
+        }
+
+        .spacer-cell {
+            border-bottom: none;
+            background: none;
+        }
+
+        /* Enhanced Table Footer */
+        .items-table tfoot {
+            background: linear-gradient(135deg, rgba(var(--brand-primary-rgb), 0.03) 0%, rgba(var(--brand-primary-rgb), 0.01) 100%);
+        }
+
+        .summary-row td {
+            padding: var(--spacing-lg);
+            border-bottom: none;
+            border-top: 2px solid rgba(var(--brand-primary-rgb), 0.2);
+        }
+
+        .summary-label {
+            font-size: var(--font-body);
+            font-weight: var(--weight-semibold);
+            color: var(--brand-primary);
+        }
+
+        .summary-amount {
+            font-size: var(--font-subheading);
+            font-weight: var(--weight-bold);
+            color: var(--brand-primary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .items-table .text-right {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .items-table .text-center {
+            text-align: center;
+        }
+
+        .items-table .description-cell {
+            font-weight: 500;
+            color: var(--brand-text);
+        }
+
+        /* Totals Section */
+        .totals {
+            float: right;
+            width: 380px;
+            margin-top: var(--spacing-xl);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
+            padding: var(--spacing-lg);
+            border-radius: calc(var(--border-radius) + 2px);
+            box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        /* Enhanced Totals Section with Professional Typography */
+        .totals {
+            background: linear-gradient(135deg, rgba(250, 250, 250, 0.8) 0%, rgba(248, 248, 248, 0.9) 100%);
+            border-radius: 12px;
+            padding: var(--spacing-xl);
+            margin-top: var(--spacing-xl);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.02);
+        }
+
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-md) 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .totals-row:last-child {
+            border-bottom: none;
+        }
+
+        .totals-row.subtotal {
+            font-weight: 500;
+            color: rgba(0, 0, 0, 0.8);
+        }
+
+        .totals-row.discount {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .totals-row.vat {
+            color: var(--brand-secondary);
+            font-weight: 500;
+        }
+
+        .totals-row.total {
+            border-top: 2px solid var(--brand-primary);
+            border-bottom: none;
+            font-weight: 700;
+            font-size: 18px;
+            margin-top: var(--spacing-sm);
+            padding: var(--spacing-lg) 0;
+            background: linear-gradient(135deg, rgba(var(--brand-primary-rgb), 0.08) 0%, rgba(var(--brand-primary-rgb), 0.03) 100%);
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .totals-row.total::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--brand-primary) 0%, rgba(var(--brand-primary-rgb), 0.6) 100%);
+            border-radius: 2px;
+        }
+
+        .totals-amount {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .totals-row.total .totals-amount {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--brand-primary);
+        }
+
+        /* VAT Information Notices */
+        .vat-notice {
+            border-radius: var(--border-radius);
+            padding: var(--spacing-md);
+            margin: var(--spacing-lg) 0;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .vat-notice strong {
+            display: block;
+            margin-bottom: var(--spacing-xs);
+            font-weight: 600;
+        }
+
+        /* Payment Terms Section */
+        .payment-terms {
+            margin-top: var(--spacing-lg);
+            padding: var(--spacing-md);
+            background: #f0f9ff;
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--brand-primary);
+        }
+
+        .payment-terms h4 {
+            margin: 0 0 var(--spacing-sm) 0;
+            color: var(--brand-primary);
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .payment-terms p {
+            margin: var(--spacing-sm) 0;
+            color: var(--brand-text);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .payment-terms .amount-due {
+            font-weight: 700;
+            color: var(--brand-primary);
+        }
+
+        .payment-terms .due-date {
+            font-weight: 600;
+            color: var(--brand-text);
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: var(--spacing-lg);
+            padding-top: var(--spacing-md);
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+        }
+
+        .footer p {
+            margin: var(--spacing-xs) 0;
+            font-size: 12px;
+            color: var(--brand-secondary);
+        }
+
+        .footer .generation-info {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: var(--spacing-sm);
+        }
+
+        /* Custom Footer Text */
+        .custom-footer {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--border-radius);
+            padding: var(--spacing-md);
+            margin-top: var(--spacing-lg);
+            font-size: 13px;
+            color: var(--brand-secondary);
+            font-style: italic;
+        }
+
+        /* Page Numbers */
+        .page-number {
+            position: fixed;
+            bottom: var(--spacing-md);
+            right: var(--spacing-md);
+            font-size: 12px;
+            color: var(--brand-secondary);
+        }
+
+        /* Enhanced Accessibility & Cross-Device Compatibility */
+        
+        /* High Contrast Mode Support */
+        @media (prefers-contrast: high) {
+            .header {
+                border: 2px solid var(--brand-primary) !important;
+                box-shadow: none !important;
+            }
+            .info-section {
+                border: 2px solid rgba(0, 0, 0, 0.3) !important;
+                box-shadow: none !important;
+            }
+            .items-table th {
+                border-bottom: 2px solid white !important;
+            }
+            .totals-row.total {
+                border-top: 3px solid var(--brand-primary) !important;
+            }
+        }
+        
+        /* Reduced Motion Support */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                transition: none !important;
+                animation: none !important;
+                transform: none !important;
+            }
+        }
+        
+        /* Print Optimization */
+        @media print {
+            .invoice-container {
+                box-shadow: none;
+                border: 1px solid #000;
+                max-width: none;
+                margin: 0;
+                padding: 20px;
+            }
+            .header::after,
+            .logo-container::before,
+            .invoice-container::before {
+                display: none;
+            }
+            .items-table tbody tr:hover {
+                transform: none;
+                box-shadow: none;
+            }
+            /* Force desktop layout for PDF generation */
+            .invoice-meta {
+                grid-template-columns: 1fr 1fr !important;
+                gap: var(--spacing-lg) !important;
+            }
+        }
+        
+        /* PDF Generation Override - Force desktop layout */
+        body.pdf-generation .invoice-meta {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: var(--spacing-lg) !important;
+        }
+        
+        /* Enhanced Mobile Responsive Design */
+        @media (max-width: 768px) {
+            .invoice-container {
+                padding: var(--spacing-lg);
+            }
+            
+            /* Only apply mobile layout for non-PDF contexts */
+            body:not(.pdf-generation) .invoice-meta {
+                grid-template-columns: 1fr;
+                gap: var(--spacing-lg);
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: var(--spacing-lg);
+                padding: var(--spacing-lg);
+            }
+            
+            .invoice-title {
+                text-align: left;
+            }
+            
+            .totals {
+                float: none;
+                width: 100%;
+                margin: var(--spacing-lg) 0;
+            }
+            
+            .table-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--spacing-sm);
+            }
+            
+            .table-title {
+                font-size: var(--font-subheading);
+            }
+            
+            .items-table {
+                font-size: 12px;
+            }
+            
+            .items-table th {
+                padding: var(--spacing-md);
+            }
+            
+            .items-table td {
+                padding: var(--spacing-sm) var(--spacing-md);
+            }
+            
+            .header-text {
+                font-size: 11px;
+            }
+            
+            .header-subtitle {
+                font-size: 9px;
+            }
+            
+            .item-description {
+                font-size: 13px;
+            }
+            
+            .item-details {
+                font-size: 11px;
+            }
+            
+            .logo-container {
+                margin-right: 0;
+                margin-bottom: var(--spacing-md);
+            }
+        }
+        
+        /* Very Small Screen Optimization */
+        @media (max-width: 480px) {
+            .spacer-header,
+            .spacer-cell {
+                display: none;
+            }
+            
+            .items-table th,
+            .items-table td {
+                font-size: 11px;
+                padding: var(--spacing-sm);
+            }
+            
+            .table-header {
+                padding: 0;
+            }
+            
+            .table-title {
+                font-size: var(--font-body);
+            }
+            
+            .item-count {
+                font-size: 10px;
+                padding: 2px var(--spacing-xs);
+            }
+        }
+        
+        /* Large Screen Optimization */
+        @media (min-width: 1200px) {
+            .invoice-container {
+                max-width: 900px;
+                padding: var(--spacing-3xl);
+            }
+            
+            .header {
+                padding: var(--spacing-2xl);
+            }
+            
+            .table-container {
+                border-radius: var(--radius-xl);
+            }
+            
+            .items-table th {
+                padding: var(--spacing-xl);
+            }
+            
+            .items-table td {
+                padding: var(--spacing-lg) var(--spacing-xl);
+            }
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                padding: 0;
+            }
+            
+            .invoice-container {
+                max-width: none;
+            }
+            
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        /* Enhanced Theme-specific Styling */
+        
+        /* Stripe Professional Theme */
+        .theme-stripe .header {
+            background: linear-gradient(135deg, #635bff 0%, rgba(99, 91, 255, 0.8) 100%);
+            color: white;
+        }
+        .theme-stripe .info-section {
+            background: linear-gradient(135deg, #f8faff 0%, #f1f4ff 100%);
+            border-color: #e0e7ff;
+        }
+        .theme-stripe .items-table th {
+            background: linear-gradient(135deg, #635bff 0%, rgba(99, 91, 255, 0.9) 100%);
+            color: white;
+        }
+        
+        /* Executive Black Theme */
+        .theme-black .header {
+            background: linear-gradient(135deg, #1f2937 0%, rgba(31, 41, 55, 0.9) 100%);
+            color: white;
+        }
+        .theme-black .info-section {
+            background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+            border-color: #e0e0e0;
+        }
+        .theme-black .items-table th {
+            background: linear-gradient(135deg, #374151 0%, rgba(55, 65, 81, 0.9) 100%);
+            color: white;
+        }
+        
+        /* Dutch Orange Premium Theme */
+        .theme-orange .header {
+            background: linear-gradient(135deg, #f97316 0%, rgba(249, 115, 22, 0.8) 100%);
+            color: white;
+        }
+        .theme-orange .info-section {
+            background: linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%);
+            border-color: #fb923c;
+        }
+        
+        /* Emerald Corporate Theme */
+        .theme-emerald .header {
+            background: linear-gradient(135deg, #059669 0%, rgba(5, 150, 105, 0.8) 100%);
+            color: white;
+        }
+        .theme-emerald .info-section {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            border-color: #bbf7d0;
+        }
+        
+        /* Fintech Purple Theme */
+        .theme-purple .header {
+            background: linear-gradient(135deg, #7c3aed 0%, rgba(124, 58, 237, 0.8) 100%);
+            color: white;
+        }
+        .theme-purple .info-section {
+            background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+            border-color: #e9d5ff;
+        }
+        
+        /* Burgundy Executive Theme */
+        .theme-burgundy .header {
+            background: linear-gradient(135deg, #be123c 0%, rgba(190, 18, 60, 0.8) 100%);
+            color: white;
+        }
+        .theme-burgundy .info-section {
+            background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+            border-color: #fca5a5;
+        }
+        
+        /* Platinum Minimalist Theme */
+        .theme-platinum .header {
+            background: linear-gradient(135deg, #71717a 0%, rgba(113, 113, 122, 0.8) 100%);
+            color: white;
+        }
+        .theme-platinum .info-section {
+            background: linear-gradient(135deg, #fafafa 0%, #f4f4f5 100%);
+            border-color: #e4e4e7;
+        }
+        
+        /* Legacy Theme Support */
+        .theme-blue .header {
+            background: linear-gradient(135deg, #2563eb 0%, rgba(37, 99, 235, 0.8) 100%);
+            color: white;
+        }
+        .theme-blue .info-section {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-color: #e2e8f0;
+        }
+    </style>
+</head>
+<body class="theme-stripe">
+    <div class="invoice-container">
+
+        <header class="header">
+            <div class="logo-container">
+                
+      <div class="logo-wrapper" style="
+        position: relative;
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: var(--radius-md);
+        padding: var(--spacing-xs);
+      ">
+        <img src="https://www.logoai.com/oss/icons/2021/10/27/gwBCTCVlpMwn55h.png" 
+             style="
+               width: 120px; 
+               height: auto; 
+               max-height: 90px;
+               object-fit: contain;
+               filter: 
+                 drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08))
+                 drop-shadow(0 1px 2px rgba(0, 0, 0, 0.04))
+                 contrast(1.02)
+                 saturate(1.05);
+               border-radius: var(--radius-sm);
+             " 
+             alt="Business Logo" />
+      </div>
+    
+                
+            </div>
+            
+            <div class="business-info">
+                <h1>Next-Gen Data Lead</h1>
+                
+                <div class="business-details">
+                    <p>Voorbeeldstraat 123
+1234 AB Amsterdam</p>
+                    <p><strong>KvK-nummer:</strong> 80176682</p>
+                    <p><strong>BTW-nummer:</strong> NL003403862B49</p>
+                    <p>E-mail: nextgendatalead@gmail.com</p>
+                    <p>Telefoon: +31 20 123 4567</p>
+                </div>
+            </div>
+
+            <div class="invoice-title">
+                <h2>FACTUUR</h2>
+                <p class="invoice-number">F2024-001</p>
+            </div>
+        </header>
+
+        <section class="invoice-meta">
+            <div class="info-section client-info">
+                <h3>Factureren aan:</h3>
+                    <p class="highlight">Voorbeeld Klant B.V.</p>
+                <p class="highlight">Voorbeeld Klant B.V.</p>
+                <p>Klantstraat 456
+5678 CD Rotterdam</p>
+                <p><strong>BTW:</strong> NL987654321B01</p>
+                <p>klant@voorbeeldbedrijf.nl</p>
+            </div>
+            
+            <div class="info-section invoice-details">
+                <h3>Factuurgegevens:</h3>
+                <p><strong>Factuurdatum:</strong> 27-08-2025</p>
+                <p><strong>Vervaldatum:</strong> 26-09-2025</p>
+                <p><strong>Betalingstermijn:</strong> 30 dagen</p>
+            </div>
+        </section>
+
+        <section class="invoice-items">
+            <div class="table-header">
+                <h3 class="table-title">Factuurgegevens:</h3>
+                <div class="item-count">3 items</div>
+            </div>
+            
+            <div class="table-container">
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th class="description-header" style="width: 45%">
+                                <span class="header-text">Beschrijving</span>
+                                <span class="header-subtitle">Service details</span>
+                            </th>
+                            <th class="quantity-header text-center" style="width: 12%">
+                                <span class="header-text">Aantal</span>
+                                <span class="header-subtitle">Qty</span>
+                            </th>
+                            <th class="rate-header text-right" style="width: 18%">
+                                <span class="header-text">Prijs p/e</span>
+                                <span class="header-subtitle">Rate</span>
+                            </th>
+                            <th class="amount-header text-right" style="width: 18%">
+                                <span class="header-text">Totaal</span>
+                                <span class="header-subtitle">Amount</span>
+                            </th>
+                            <th class="spacer-header" style="width: 7%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="item-row" data-index="0">
+                            <td class="description-cell">
+                                <div class="item-description">Webdesign en ontwikkeling</div>
+                            </td>
+                            <td class="quantity-cell text-center">
+                                <span class="quantity-value">40,0</span>
+                            </td>
+                            <td class="rate-cell text-right">
+                                <span class="rate-value">€ 75,00</span>
+                            </td>
+                            <td class="amount-cell text-right">
+                                <span class="amount-value">€ 3.000,00</span>
+                            </td>
+                            <td class="spacer-cell"></td>
+                        </tr>
+                        <tr class="item-row" data-index="1">
+                            <td class="description-cell">
+                                <div class="item-description">Projectmanagement</div>
+                            </td>
+                            <td class="quantity-cell text-center">
+                                <span class="quantity-value">8,0</span>
+                            </td>
+                            <td class="rate-cell text-right">
+                                <span class="rate-value">€ 85,00</span>
+                            </td>
+                            <td class="amount-cell text-right">
+                                <span class="amount-value">€ 680,00</span>
+                            </td>
+                            <td class="spacer-cell"></td>
+                        </tr>
+                        <tr class="item-row" data-index="2">
+                            <td class="description-cell">
+                                <div class="item-description">Hosting en onderhoud (1 jaar)</div>
+                            </td>
+                            <td class="quantity-cell text-center">
+                                <span class="quantity-value">1,0</span>
+                            </td>
+                            <td class="rate-cell text-right">
+                                <span class="rate-value">€ 480,00</span>
+                            </td>
+                            <td class="amount-cell text-right">
+                                <span class="amount-value">€ 480,00</span>
+                            </td>
+                            <td class="spacer-cell"></td>
+                        </tr>
+                    </tbody>
+                    
+                    <tfoot>
+                        <tr class="summary-row">
+                            <td colspan="3" class="summary-label">
+                                <strong>Subtotal (3 items)</strong>
+                            </td>
+                            <td class="summary-amount text-right">
+                                <strong>€ 4.160,00</strong>
+                            </td>
+                            <td class="spacer-cell"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        <section class="totals">
+            <div class="totals-row subtotal">
+                <span>Subtotaal:</span>
+                <span class="totals-amount">€ 4.160,00</span>
+            </div>
+            
+            
+            <div class="totals-row vat">
+                <span>BTW (21%):</span>
+                <span class="totals-amount">€ 873,60</span>
+            </div>
+            
+            <div class="totals-row total">
+                <span>Totaal:</span>
+                <span class="totals-amount">€ 5.033,60</span>
+            </div>
+        </section>
+
+        <div style="clear: both;"></div>
+
+        
+
+
+
+        <footer class="footer">
+        </footer>
+
+    </div>
+</body>
+</html>

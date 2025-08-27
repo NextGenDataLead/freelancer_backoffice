@@ -36,6 +36,7 @@ import {
 } from 'lucide-react'
 import { CreateInvoiceSchema } from '@/lib/validations/financial'
 import type { InvoiceWithClient, Client, InvoiceCalculation } from '@/lib/types/financial'
+import { BusinessProfileWarning } from '@/components/business/business-profile-warning'
 import { z } from 'zod'
 
 interface InvoiceFormProps {
@@ -238,6 +239,9 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {/* Business Profile Warning */}
+      <BusinessProfileWarning showInvoiceSpecific={true} />
+      
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

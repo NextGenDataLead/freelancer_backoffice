@@ -25,7 +25,6 @@ export default function InvoicesPage() {
   const [showClientInvoiceWizard, setShowClientInvoiceWizard] = useState(false)
   
   // Action modal states
-  const [showTemplatesModal, setShowTemplatesModal] = useState(false)
   const [showRemindersModal, setShowRemindersModal] = useState(false)
   const [showVATOverview, setShowVATOverview] = useState(false)
 
@@ -102,7 +101,8 @@ export default function InvoicesPage() {
 
   // Action handlers
   const handleShowTemplates = () => {
-    setShowTemplatesModal(true)
+    // Navigate to template settings page instead of showing modal
+    window.location.href = '/dashboard/financieel/facturen/template'
   }
   
   const handleShowReminders = () => {
@@ -277,27 +277,7 @@ export default function InvoicesPage() {
         onStatusUpdate={handleInvoiceStatusUpdate}
       />
 
-      {/* Action Modals - Placeholder implementations */}
-      {showTemplatesModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-lg max-w-2xl w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Factuur Templates</h2>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setShowTemplatesModal(false)}
-              >
-                <Plus className="h-4 w-4 rotate-45" />
-              </Button>
-            </div>
-            <div className="p-8 text-center text-muted-foreground">
-              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Templates functionaliteit komt binnenkort beschikbaar.</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Action Modals - Other modals */}
 
       {showRemindersModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">

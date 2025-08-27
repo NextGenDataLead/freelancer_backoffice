@@ -116,7 +116,7 @@ export function ReviewAndGenerateStep({
           client_id: clientId,
           type: 'time_based' as const,
           time_entry_ids: timeEntries.map(entry => entry.id),
-          notes: `Factuur gegenereerd via Factuur Wizard op ${new Date().toLocaleDateString('nl-NL')}`
+          notes: undefined
         }
 
         // Only include manual_items if there are actually items
@@ -137,7 +137,7 @@ export function ReviewAndGenerateStep({
         const manualInvoiceData: any = {
           client_id: manualInvoice.clientId,
           type: 'manual' as const,
-          notes: manualInvoice.notes || `Handmatige factuur gegenereerd via Factuur Wizard op ${new Date().toLocaleDateString('nl-NL')}`
+          notes: manualInvoice.notes || undefined
         }
 
         // Only include manual_items if there are actually items

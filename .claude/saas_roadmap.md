@@ -24,7 +24,7 @@ The fundamental goal of this SaaS is to empower the Dutch ZZP'er by building a p
         *   **Crucial:** Must support both standard (21%) VAT and **Reverse-Charged VAT (`BTW verlegd`)** for services to other EU businesses.
         *   Manually track invoice status (Sent, Paid, Overdue).
     *   **Expense Management (OCR-Assisted):**
-        *   Upload receipts/invoices via web app (PDF, JPG, PNG).
+        *   photograph receipts via mobile or upload scanned receipts/invoices via web app (PDF, JPG, PNG).
         *   **OCR Engine:** Extracts vendor, date, total amount, and VAT amount.
         *   User must manually confirm the extracted data and **assign an expense category**.
     *   **"Best-in-Class" Tracking (V1):**

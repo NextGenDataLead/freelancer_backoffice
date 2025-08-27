@@ -1,0 +1,116 @@
+export async function GET() {
+  try {
+    // Get authenticated user profile  
+    const profile = await getCurrentUserProfile()
+    
+    if (!profile) {
+      return NextResponse.json(ApiErrors.Unauthorized, { status: ApiErrors.Unauthorized.status })
+    }
+
+    // Return all available themes and configuration options
+    const themeData = {
+      themes: TEMPLATE_THEMES,
+      fonts: AVAILABLE_FONTS,
+      color_palettes: COLOR_PALETTES,
+      layout_options: {
+        formats: [
+          { value: 'A4', label: 'A4 (210 × 297 mm)', recommended: true },
+          { value: 'Letter', label: 'US Letter (8.5 × 11 in)' }
+        ],
+        orientations: [
+          { value: 'portrait', label: 'Portrait', recommended: true },
+          { value: 'landscape', label: 'Landscape' }
+        ],
+        header_styles: [
+          { value: 'modern', label: 'Modern', description: 'Clean design with colored accent line' },
+          { value: 'classic', label: 'Classic', description: 'Traditional formal header' },
+          { value: 'minimal', label: 'Minimal', description: 'Ultra-clean with maximum white space' }
+        ],
+        footer_styles: [
+          { value: 'simple', label: 'Simple', description: 'Basic footer with generation info' },
+          { value: 'detailed', label: 'Detailed', description: 'Complete business information' },
+          { value: 'minimal', label: 'Minimal', description: 'Just generation timestamp' }
+        ],
+        color_schemes: [
+          { value: 'blue', label: 'Professional Blue', description: 'Modern blue color scheme' },
+          { value: 'black', label: 'Classic Black', description: 'Traditional black and white' },
+          { value: 'orange', label: 'Dutch Orange', description: 'Netherlands-inspired orange' },
+          { value: 'gray', label: 'Neutral Gray', description: 'Minimalist gray tones' },
+          { value: 'green', label: 'Corporate Green', description: 'Professional eco-friendly' }
+        ],
+        spacing_options: [
+          { value: 'compact', label: 'Compact', description: 'Dense layout, more content per page' },
+          { value: 'comfortable', label: 'Comfortable', description: 'Balanced spacing (recommended)' },
+          { value: 'spacious', label: 'Spacious', description: 'Generous white space' }
+        ],
+        border_styles: [
+          { value: 'none', label: 'No Borders', description: 'Clean, borderless design' },
+          { value: 'subtle', label: 'Subtle Borders', description: 'Light gray borders' },
+          { value: 'bold', label: 'Bold Borders', description: 'Prominent section borders' }
+        ]
+      },
+      compliance_options: {
+        languages: [
+          { value: 'nl', label: 'Nederlands (Dutch)', recommended: true },
+          { value: 'en', label: 'English' }
+        ],
+        date_formats: [
+          { value: 'DD-MM-YYYY', label: '31-12-2024 (Dutch)', recommended: true },
+          { value: 'MM-DD-YYYY', label: '12-31-2024 (US)' },
+          { value: 'YYYY-MM-DD', label: '2024-12-31 (ISO)' }
+        ],
+        vat_display_options: [
+          { value: 'detailed', label: 'Detailed', description: 'Show full VAT breakdown', recommended: true },
+          { value: 'summary', label: 'Summary', description: 'Basic VAT information' },
+          { value: 'minimal', label: 'Minimal', description: 'VAT amount only' }
+        ]
+      },
+      feature_options: {
+        email_templates: [
+          { value: 'professional', label: 'Professional', description: 'Formal business tone' },
+          { value: 'friendly', label: 'Friendly', description: 'Warm, approachable tone' },
+          { value: 'formal', label: 'Formal', description: 'Very formal, legal tone' }
+        ],
+        watermark_presets: [
+          'CONCEPT',
+          'DRAFT',
+          'PREVIEW',
+          'SAMPLE',
+          'NOT PAID',
+          'CONFIDENTIAL'
+        ]
+      },
+      recommendations: {
+        dutch_business: {
+          theme: 'modern_blue',
+          language: 'nl',
+          date_format: 'DD-MM-YYYY',
+          include_kvk: true,
+          include_btw: true,
+          vat_display: 'detailed'
+        },
+        international_business: {
+          theme: 'minimalist_gray',
+          language: 'en',
+          date_format: 'DD-MM-YYYY',
+          include_kvk: false,
+          include_btw: false,
+          vat_display: 'summary'
+        },
+        creative_agency: {
+          theme: 'dutch_orange',
+          header_style: 'modern',
+          spacing: 'spacious',
+          border_style: 'none'
+        }
+      }
+    }
+    
+    const response = createApiResponse(themeData, 'Template themes and options retrieved successfully')
+    return NextResponse.json(response)
+
+  } catch (error) {
+    console.error('Themes API error:', error)
+    return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+  }
+}

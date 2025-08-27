@@ -11,11 +11,13 @@ import {
   Monitor,
   Key,
   Trash2,
+  Building,
   AlertTriangle
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProfileForm } from '@/components/profile/profile-form'
+import { BusinessForm } from '@/components/business/business-form'
 import { PasswordSection } from '@/components/settings/password-section'
 import { SecuritySection } from '@/components/settings/security-section'
 import { SessionsSection } from '@/components/settings/sessions-section'
@@ -62,10 +64,14 @@ export default function SettingsPage() {
 
         <Tabs defaultValue="profile" className="space-y-8">
           {/* Tab Navigation */}
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto p-1">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-7 h-auto p-1">
             <TabsTrigger value="profile" className="flex items-center space-x-2 py-3">
               <User className="h-4 w-4" />
               <span className="hidden sm:inline">Profile</span>
+            </TabsTrigger>
+            <TabsTrigger value="business" className="flex items-center space-x-2 py-3">
+              <Building className="h-4 w-4" />
+              <span className="hidden sm:inline">Business</span>
             </TabsTrigger>
             <TabsTrigger value="security" className="flex items-center space-x-2 py-3">
               <Shield className="h-4 w-4" />
@@ -107,6 +113,11 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* Business Tab */}
+          <TabsContent value="business" className="space-y-6">
+            <BusinessForm />
           </TabsContent>
 
           {/* Security Tab */}

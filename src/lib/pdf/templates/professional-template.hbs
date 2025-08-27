@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="{{compliance_settings.language}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{translations.invoice}} {{invoice.invoice_number}}</title>
+    <style>
+        /* Professional Invoice Template Styles */
+        /* Generated with Claude Code (https://claude.ai/code) */
+        
+        :root {
+            {{{template.css_variables}}}
+            --spacing-xs: 2px;
+            --spacing-sm: 4px;
+            --spacing-md: 6px;
+            --spacing-lg: 8px;
+            --spacing-xl: 12px;
+            --spacing-2xl: 16px;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--brand-font), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--brand-text);
+            background-color: var(--brand-background);
+            margin: 0;
+            padding: var(--spacing-sm);
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            font-feature-settings: 'tnum' 1, 'lnum' 1;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .invoice-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--brand-background);
+            position: relative;
+            padding: var(--spacing-xl);
+            box-shadow: 
+                0 0 0 1px rgba(0, 0, 0, 0.05),
+                0 4px 16px rgba(0, 0, 0, 0.08),
+                0 8px 32px rgba(0, 0, 0, 0.04),
+                0 16px 64px rgba(0, 0, 0, 0.02);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .invoice-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--gradient-brand);
+            opacity: 0.8;
+            z-index: 1;
+        }
+
+        /* Watermark Styles */
+        {{#if features.should_show_watermark}}
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-45deg);
+            font-size: 72px;
+            font-weight: bold;
+            color: rgba(0, 0, 0, 0.05);
+            z-index: -1;
+            pointer-events: none;
+            user-select: none;
+        }
+        {{/if}}
+
+        /* Enhanced Header with Premium Visual Elements */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: var(--spacing-xl);
+            padding: var(--spacing-xl);
+            background: var(--gradient-brand);
+            color: white;
+            border-radius: var(--radius-lg);
+            box-shadow: 
+                0 8px 32px rgba(var(--brand-primary-rgb), 0.25),
+                0 4px 16px rgba(0, 0, 0, 0.08);
+            position: relative;
+            overflow: hidden;
+            {{#ifEquals layout_settings.header_style "modern"}}
+            border-left: 4px solid var(--brand-primary);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.header_style "classic"}}
+            border-bottom: 3px solid var(--brand-primary);
+            background: var(--brand-background);
+            box-shadow: 
+                0 4px 12px rgba(0, 0, 0, 0.06),
+                0 1px 3px rgba(0, 0, 0, 0.08);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.header_style "minimal"}}
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.header_style "premium"}}
+            background: var(--gradient-brand);
+            color: white;
+            box-shadow: 
+                0 8px 32px rgba(var(--brand-primary-rgb), 0.25),
+                0 4px 16px rgba(0, 0, 0, 0.08);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.header_style "executive"}}
+            background: linear-gradient(135deg, var(--brand-primary) 0%, rgba(var(--brand-primary-rgb), 0.9) 100%);
+            color: white;
+            box-shadow: 
+                0 8px 24px rgba(var(--brand-primary-rgb), 0.2),
+                0 4px 12px rgba(0, 0, 0, 0.1);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.header_style "corporate"}}
+            background: linear-gradient(135deg, var(--brand-primary) 0%, rgba(var(--brand-primary-rgb), 0.85) 100%);
+            color: white;
+            box-shadow: 
+                0 6px 20px rgba(var(--brand-primary-rgb), 0.18),
+                0 3px 8px rgba(0, 0, 0, 0.06);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.header_style "fintech"}}
+            background: linear-gradient(135deg, var(--brand-primary) 0%, rgba(var(--brand-primary-rgb), 0.9) 100%);
+            color: white;
+            box-shadow: 
+                0 12px 40px rgba(var(--brand-primary-rgb), 0.2),
+                0 4px 12px rgba(0, 0, 0, 0.08);
+            {{/ifEquals}}
+        }
+
+        .header::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, 
+                rgba(255, 255, 255, 0.1) 0%, 
+                transparent 50%, 
+                rgba(0, 0, 0, 0.05) 100%);
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .business-info {
+            flex: 1;
+        }
+
+        .business-info h1 {
+            margin: 0 0 var(--spacing-sm) 0;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            line-height: 1.2;
+            {{#ifEquals layout_settings.header_style "minimal"}}
+            font-size: 24px;
+            font-weight: 600;
+            {{/ifEquals}}
+        }
+
+        .business-info .business-details {
+            color: rgba(255, 255, 255, 0.95);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+            font-size: 13px;
+            line-height: 1.6;
+            font-weight: 400;
+        }
+
+        .business-info .business-details p {
+            margin: 2px 0;
+        }
+
+        .logo-container {
+            flex: 0 0 auto;
+            margin-right: var(--spacing-xl);
+            display: flex;
+            align-items: center;
+            padding: var(--spacing-md);
+            border-radius: var(--radius-lg);
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 
+                0 0 0 1px rgba(255, 255, 255, 0.2),
+                0 4px 12px rgba(0, 0, 0, 0.08),
+                0 2px 6px rgba(0, 0, 0, 0.04);
+            backdrop-filter: blur(8px);
+            position: relative;
+        }
+
+        .logo-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            background: linear-gradient(135deg, 
+                rgba(255, 255, 255, 0.3) 0%, 
+                transparent 50%, 
+                rgba(0, 0, 0, 0.02) 100%);
+            pointer-events: none;
+        }
+
+        .logo-container img {
+            max-height: 90px;
+            max-width: 220px;
+            height: auto;
+            width: auto;
+            object-fit: contain;
+            filter: 
+                drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))
+                drop-shadow(0 1px 2px rgba(0, 0, 0, 0.06));
+            position: relative;
+            z-index: 3;
+        }
+
+        .invoice-title {
+            text-align: right;
+            flex: 0 0 auto;
+            {{#ifEquals brand_settings.logo_position "left"}}
+            order: 1;
+            {{/ifEquals}}
+        }
+
+        .invoice-title h2 {
+            margin: 0 0 var(--spacing-sm) 0;
+            font-size: 36px;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+            font-feature-settings: 'ss01' 1;
+            {{#ifEquals layout_settings.header_style "classic"}}
+            font-weight: 700;
+            font-size: 32px;
+            text-transform: none;
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.header_style "minimal"}}
+            font-weight: 600;
+            font-size: 30px;
+            text-transform: none;
+            letter-spacing: -0.02em;
+            {{/ifEquals}}
+        }
+
+        .invoice-number {
+            font-size: 18px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.95);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+            letter-spacing: 0.05em;
+            font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+        }
+
+        /* Meta Information Grid */
+        .invoice-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--spacing-lg);
+            margin-bottom: var(--spacing-sm);
+            {{#ifEquals layout_settings.spacing "compact"}}
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-xs);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.spacing "spacious"}}
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-sm);
+            {{/ifEquals}}
+        }
+
+        .info-section {
+            padding: var(--spacing-lg);
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: var(--radius-md);
+            box-shadow: 
+                0 0 0 1px rgba(255, 255, 255, 0.5),
+                0 2px 8px rgba(0, 0, 0, 0.06),
+                0 4px 16px rgba(0, 0, 0, 0.03);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            {{#ifEquals layout_settings.color_scheme "blue"}}
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-color: #e2e8f0;
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.color_scheme "gray"}}
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            border-color: #e5e7eb;
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.color_scheme "green"}}
+            background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+            border-color: #bbf7d0;
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.color_scheme "black"}}
+            background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+            border-color: #e0e0e0;
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.border_style "none"}}
+            border: none;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.border_style "bold"}}
+            border-width: 2px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            {{/ifEquals}}
+        }
+
+        .info-section h3 {
+            margin: 0 0 var(--spacing-md) 0;
+            color: #374151;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            opacity: 0.8;
+            {{#ifEquals layout_settings.header_style "modern"}}
+            color: var(--brand-primary);
+            {{/ifEquals}}
+        }
+
+        .info-section p {
+            margin: var(--spacing-sm) 0;
+            color: #374151;
+            font-size: 14px;
+            line-height: 1.6;
+            font-weight: 400;
+        }
+
+        .info-section .highlight {
+            color: #111827;
+            font-weight: 600;
+        }
+
+        /* Enhanced Table Header Section */
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-md);
+            padding: 0 var(--spacing-sm);
+        }
+
+        .table-title {
+            font-size: var(--font-heading);
+            font-weight: var(--weight-semibold);
+            color: var(--brand-primary);
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+
+        .item-count {
+            font-size: var(--font-caption);
+            color: #374151;
+            background: rgba(var(--brand-primary-rgb), 0.08);
+            padding: var(--spacing-xs) var(--spacing-sm);
+            border-radius: var(--radius-sm);
+            font-weight: var(--weight-medium);
+        }
+
+        /* Enhanced Table Container */
+        .table-container {
+            position: relative;
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            background: var(--brand-background);
+            box-shadow: 
+                0 0 0 1px rgba(0, 0, 0, 0.03),
+                0 2px 8px rgba(0, 0, 0, 0.05),
+                0 4px 16px rgba(0, 0, 0, 0.04),
+                0 8px 32px rgba(0, 0, 0, 0.02);
+        }
+
+        .table-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(var(--brand-primary-rgb), 0.3) 50%, 
+                transparent 100%);
+            z-index: 1;
+        }
+
+        /* Advanced Items Table */
+        .items-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-bottom: 0;
+            background: var(--brand-background);
+            position: relative;
+            {{#ifEquals layout_settings.spacing "compact"}}
+            margin-bottom: var(--spacing-md);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.spacing "spacious"}}
+            margin-bottom: var(--spacing-xl);
+            {{/ifEquals}}
+        }
+
+        /* Enhanced Table Headers with Advanced Layout */
+        .items-table th {
+            background: linear-gradient(135deg, var(--brand-primary) 0%, rgba(var(--brand-primary-rgb), 0.9) 100%);
+            color: white;
+            padding: var(--spacing-lg);
+            text-align: left;
+            font-weight: var(--weight-bold);
+            border: none;
+            position: relative;
+            box-shadow: 
+                inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+            vertical-align: top;
+        }
+
+        .header-text {
+            display: block;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: var(--weight-bold);
+            margin-bottom: 2px;
+        }
+
+        .header-subtitle {
+            display: block;
+            font-size: 10px;
+            opacity: 0.8;
+            font-weight: var(--weight-normal);
+            text-transform: none;
+            letter-spacing: 0.02em;
+        }
+
+        .spacer-header {
+            background: none !important;
+            box-shadow: none !important;
+        }
+            {{#ifEquals layout_settings.header_style "classic"}}
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            color: var(--brand-text);
+            border-bottom: 3px solid var(--brand-primary);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.header_style "minimal"}}
+            background: rgba(0, 0, 0, 0.02);
+            color: var(--brand-text);
+            border-bottom: 2px solid rgba(0, 0, 0, 0.1);
+            font-weight: 600;
+            {{/ifEquals}}
+        }
+
+        .items-table td {
+            padding: var(--spacing-md) var(--spacing-lg);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            font-size: 14px;
+            line-height: 1.5;
+            color: #111827;
+            {{#ifEquals layout_settings.spacing "compact"}}
+            padding: var(--spacing-sm) var(--spacing-md);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.spacing "spacious"}}
+            padding: var(--spacing-lg) var(--spacing-xl);
+            {{/ifEquals}}
+        }
+
+        .items-table tbody tr:nth-child(even) {
+            {{#ifNotEquals layout_settings.color_scheme "black"}}
+            background: linear-gradient(90deg, 
+                rgba(248, 250, 252, 0.4) 0%, 
+                rgba(248, 250, 252, 0.6) 50%, 
+                rgba(248, 250, 252, 0.4) 100%);
+            {{/ifNotEquals}}
+        }
+        
+        .items-table tbody tr:hover {
+            background: linear-gradient(90deg, 
+                rgba(var(--brand-primary-rgb), 0.03) 0%, 
+                rgba(var(--brand-primary-rgb), 0.05) 50%, 
+                rgba(var(--brand-primary-rgb), 0.03) 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        /* Enhanced Table Cells and Layout */
+        .items-table td {
+            padding: var(--spacing-lg);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+            font-size: var(--font-body);
+            line-height: 1.5;
+            vertical-align: top;
+            color: #111827;
+        }
+
+        .item-row {
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .item-row:last-child td {
+            border-bottom: none;
+        }
+
+        .description-cell {
+            position: relative;
+        }
+
+        .item-description {
+            font-weight: var(--weight-semibold);
+            color: #111827;
+            font-size: var(--font-body);
+            line-height: 1.4;
+            margin-bottom: 2px;
+        }
+
+        .item-details {
+            font-size: var(--font-caption);
+            color: #6b7280;
+            line-height: 1.3;
+            opacity: 0.8;
+        }
+
+        .quantity-cell, .rate-cell, .amount-cell {
+            position: relative;
+        }
+
+        .quantity-value, .rate-value, .amount-value {
+            font-variant-numeric: tabular-nums;
+            font-weight: var(--weight-semibold);
+            display: inline-block;
+            color: #111827;
+        }
+
+        .amount-value {
+            font-weight: var(--weight-bold);
+            color: var(--brand-primary);
+        }
+
+        .spacer-cell {
+            border-bottom: none;
+            background: none;
+        }
+
+        /* Enhanced Table Footer */
+        .items-table tfoot {
+            background: linear-gradient(135deg, rgba(var(--brand-primary-rgb), 0.03) 0%, rgba(var(--brand-primary-rgb), 0.01) 100%);
+        }
+
+        .summary-row td {
+            padding: var(--spacing-lg);
+            border-bottom: none;
+            border-top: 2px solid rgba(var(--brand-primary-rgb), 0.2);
+        }
+
+        .summary-label {
+            font-size: var(--font-body);
+            font-weight: var(--weight-semibold);
+            color: var(--brand-primary);
+        }
+
+        .summary-amount {
+            font-size: var(--font-subheading);
+            font-weight: var(--weight-bold);
+            color: var(--brand-primary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .items-table .text-right {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .items-table .text-center {
+            text-align: center;
+        }
+
+        .items-table .description-cell {
+            font-weight: 500;
+            color: var(--brand-text);
+        }
+
+        /* Totals Section */
+        .totals {
+            float: right;
+            width: 380px;
+            margin-top: var(--spacing-xl);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
+            padding: var(--spacing-lg);
+            border-radius: calc(var(--border-radius) + 2px);
+            box-shadow: 0 2px 16px rgba(0, 0, 0, 0.06);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            {{#ifEquals layout_settings.spacing "compact"}}
+            width: 320px;
+            padding: var(--spacing-md);
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.spacing "spacious"}}
+            width: 420px;
+            padding: var(--spacing-xl);
+            {{/ifEquals}}
+        }
+
+        /* Enhanced Totals Section with Professional Typography */
+        .totals {
+            background: linear-gradient(135deg, rgba(250, 250, 250, 0.8) 0%, rgba(248, 248, 248, 0.9) 100%);
+            border-radius: 12px;
+            padding: var(--spacing-xl);
+            margin-top: var(--spacing-xl);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.02);
+        }
+
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--spacing-md) 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .totals-row:last-child {
+            border-bottom: none;
+        }
+
+        .totals-row.subtotal {
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .totals-row.subtotal .totals-amount {
+            color: #111827;
+        }
+
+        .totals-row.discount {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .totals-row.vat {
+            color: #374151;
+            font-weight: 500;
+        }
+
+        .totals-row.vat .totals-amount {
+            color: #111827;
+        }
+
+        .totals-row.total {
+            border-top: 2px solid var(--brand-primary);
+            border-bottom: none;
+            font-weight: 700;
+            font-size: 18px;
+            margin-top: var(--spacing-sm);
+            padding: var(--spacing-lg) 0;
+            background: linear-gradient(135deg, rgba(var(--brand-primary-rgb), 0.08) 0%, rgba(var(--brand-primary-rgb), 0.03) 100%);
+            border-radius: 8px;
+            position: relative;
+            {{#ifEquals layout_settings.color_scheme "black"}}
+            color: var(--brand-text);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+            {{/ifEquals}}
+        }
+
+        .totals-row.total::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--brand-primary) 0%, rgba(var(--brand-primary-rgb), 0.6) 100%);
+            border-radius: 2px;
+            {{#ifEquals layout_settings.color_scheme "black"}}
+            background: linear-gradient(90deg, var(--brand-text) 0%, rgba(255, 255, 255, 0.6) 100%);
+            {{/ifEquals}}
+        }
+
+        .totals-amount {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .totals-row.total .totals-amount {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--brand-primary);
+            {{#ifEquals layout_settings.color_scheme "black"}}
+            color: var(--brand-text);
+            {{/ifEquals}}
+        }
+
+        /* VAT Information Notices */
+        .vat-notice {
+            {{#ifEquals invoice.vat_type "reverse_charge"}}
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #92400e;
+            {{/ifEquals}}
+            {{#ifEquals invoice.vat_type "exempt"}}
+            background: #f0f9ff;
+            border: 1px solid #0ea5e9;
+            color: #0369a1;
+            {{/ifEquals}}
+            border-radius: var(--border-radius);
+            padding: var(--spacing-md);
+            margin: var(--spacing-lg) 0;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .vat-notice strong {
+            display: block;
+            margin-bottom: var(--spacing-xs);
+            font-weight: 600;
+        }
+
+        /* Payment Terms Section */
+        .payment-terms {
+            margin-top: var(--spacing-lg);
+            padding: var(--spacing-md);
+            background: #f0f9ff;
+            border-radius: var(--border-radius);
+            border-left: 4px solid var(--brand-primary);
+            {{#ifEquals layout_settings.color_scheme "green"}}
+            background: #f0fdf4;
+            border-left-color: #22c55e;
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.color_scheme "orange"}}
+            background: #fff7ed;
+            border-left-color: #f97316;
+            {{/ifEquals}}
+        }
+
+        .payment-terms h4 {
+            margin: 0 0 var(--spacing-sm) 0;
+            color: var(--brand-primary);
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .payment-terms p {
+            margin: var(--spacing-sm) 0;
+            color: var(--brand-text);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .payment-terms .amount-due {
+            font-weight: 700;
+            color: var(--brand-primary);
+        }
+
+        .payment-terms .due-date {
+            font-weight: 600;
+            color: var(--brand-text);
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: var(--spacing-lg);
+            padding-top: var(--spacing-md);
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            {{#ifEquals layout_settings.footer_style "detailed"}}
+            text-align: left;
+            {{/ifEquals}}
+            {{#ifEquals layout_settings.footer_style "minimal"}}
+            border-top: none;
+            padding-top: var(--spacing-md);
+            {{/ifEquals}}
+        }
+
+        .footer p {
+            margin: var(--spacing-xs) 0;
+            font-size: 12px;
+            color: var(--brand-secondary);
+        }
+
+        .footer .generation-info {
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: var(--spacing-sm);
+        }
+
+        /* Custom Footer Text */
+        .custom-footer {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--border-radius);
+            padding: var(--spacing-md);
+            margin-top: var(--spacing-lg);
+            font-size: 13px;
+            color: var(--brand-secondary);
+            font-style: italic;
+        }
+
+        /* Page Numbers */
+        .page-number {
+            position: fixed;
+            bottom: var(--spacing-md);
+            right: var(--spacing-md);
+            font-size: 12px;
+            color: var(--brand-secondary);
+        }
+
+        /* Enhanced Accessibility & Cross-Device Compatibility */
+        
+        /* High Contrast Mode Support */
+        @media (prefers-contrast: high) {
+            .header {
+                border: 2px solid var(--brand-primary) !important;
+                box-shadow: none !important;
+            }
+            .info-section {
+                border: 2px solid rgba(0, 0, 0, 0.3) !important;
+                box-shadow: none !important;
+            }
+            .items-table th {
+                border-bottom: 2px solid white !important;
+            }
+            .totals-row.total {
+                border-top: 3px solid var(--brand-primary) !important;
+            }
+        }
+        
+        /* Reduced Motion Support */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                transition: none !important;
+                animation: none !important;
+                transform: none !important;
+            }
+        }
+        
+        /* Print Optimization */
+        @media print {
+            .invoice-container {
+                box-shadow: none;
+                border: 1px solid #000;
+                max-width: none;
+                margin: 0;
+                padding: 20px;
+            }
+            .header::after,
+            .logo-container::before,
+            .invoice-container::before {
+                display: none;
+            }
+            .items-table tbody tr:hover {
+                transform: none;
+                box-shadow: none;
+            }
+            /* Force desktop layout for PDF generation */
+            .invoice-meta {
+                grid-template-columns: 1fr 1fr !important;
+                gap: var(--spacing-lg) !important;
+            }
+        }
+        
+        /* PDF Generation Override - Force desktop layout for ALL elements */
+        body.pdf-generation .invoice-container {
+            max-width: none !important;
+            margin: 0 !important;
+            padding: var(--spacing-lg) !important;
+            box-shadow: none !important;
+            border: none !important;
+            width: 100% !important;
+        }
+        
+        body.pdf-generation .invoice-meta {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: var(--spacing-lg) !important;
+        }
+        
+        body.pdf-generation .header {
+            flex-direction: row !important;
+            gap: var(--spacing-lg) !important;
+            padding: var(--spacing-xl) !important;
+        }
+        
+        body.pdf-generation .invoice-title {
+            text-align: right !important;
+        }
+        
+        body.pdf-generation .totals {
+            float: right !important;
+            width: auto !important;
+            margin: 0 !important;
+        }
+        
+        body.pdf-generation .table-header {
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: var(--spacing-lg) !important;
+        }
+        
+        body.pdf-generation .logo-container {
+            margin-right: var(--spacing-lg) !important;
+            margin-bottom: 0 !important;
+            align-items: center !important;
+        }
+        
+        /* Fix hero text contrast for PDF generation */
+        body.pdf-generation .business-info h1 {
+            color: white !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        body.pdf-generation .business-info .business-details {
+            color: rgba(255, 255, 255, 0.95) !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        body.pdf-generation .invoice-title h2 {
+            color: white !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+        }
+        
+        body.pdf-generation .invoice-title .invoice-number {
+            color: rgba(255, 255, 255, 0.95) !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        /* Enhanced Mobile Responsive Design */
+        @media (max-width: 768px) {
+            .invoice-container {
+                padding: var(--spacing-lg);
+            }
+            
+            /* Only apply mobile layout for non-PDF contexts */
+            body:not(.pdf-generation) .invoice-meta {
+                grid-template-columns: 1fr;
+                gap: var(--spacing-lg);
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: var(--spacing-lg);
+                padding: var(--spacing-lg);
+            }
+            
+            .invoice-title {
+                text-align: left;
+            }
+            
+            .totals {
+                float: none;
+                width: 100%;
+                margin: var(--spacing-lg) 0;
+            }
+            
+            .table-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--spacing-sm);
+            }
+            
+            .table-title {
+                font-size: var(--font-subheading);
+            }
+            
+            .items-table {
+                font-size: 12px;
+            }
+            
+            .items-table th {
+                padding: var(--spacing-md);
+            }
+            
+            .items-table td {
+                padding: var(--spacing-sm) var(--spacing-md);
+            }
+            
+            .header-text {
+                font-size: 11px;
+            }
+            
+            .header-subtitle {
+                font-size: 9px;
+            }
+            
+            .item-description {
+                font-size: 13px;
+            }
+            
+            .item-details {
+                font-size: 11px;
+            }
+            
+            .logo-container {
+                margin-right: 0;
+                margin-bottom: var(--spacing-md);
+            }
+        }
+        
+        /* Very Small Screen Optimization */
+        @media (max-width: 480px) {
+            .spacer-header,
+            .spacer-cell {
+                display: none;
+            }
+            
+            .items-table th,
+            .items-table td {
+                font-size: 11px;
+                padding: var(--spacing-sm);
+            }
+            
+            .table-header {
+                padding: 0;
+            }
+            
+            .table-title {
+                font-size: var(--font-body);
+            }
+            
+            .item-count {
+                font-size: 10px;
+                padding: 2px var(--spacing-xs);
+            }
+        }
+        
+        /* Large Screen Optimization */
+        @media (min-width: 1200px) {
+            .invoice-container {
+                max-width: 900px;
+                padding: var(--spacing-3xl);
+            }
+            
+            .header {
+                padding: var(--spacing-2xl);
+            }
+            
+            .table-container {
+                border-radius: var(--radius-xl);
+            }
+            
+            .items-table th {
+                padding: var(--spacing-xl);
+            }
+            
+            .items-table td {
+                padding: var(--spacing-lg) var(--spacing-xl);
+            }
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                padding: 0;
+            }
+            
+            .invoice-container {
+                max-width: none;
+            }
+            
+            .page-break {
+                page-break-before: always;
+            }
+        }
+
+        /* Enhanced Theme-specific Styling */
+        
+        /* Stripe Professional Theme */
+        .theme-stripe .header {
+            background: linear-gradient(135deg, #635bff 0%, rgba(99, 91, 255, 0.8) 100%);
+            color: white;
+        }
+        .theme-stripe .info-section {
+            background: linear-gradient(135deg, #f8faff 0%, #f1f4ff 100%);
+            border-color: #e0e7ff;
+        }
+        .theme-stripe .items-table th {
+            background: linear-gradient(135deg, #635bff 0%, rgba(99, 91, 255, 0.9) 100%);
+            color: white;
+        }
+        
+        /* Executive Black Theme */
+        .theme-black .header {
+            background: linear-gradient(135deg, #1f2937 0%, rgba(31, 41, 55, 0.9) 100%);
+            color: white;
+        }
+        .theme-black .info-section {
+            background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+            border-color: #e0e0e0;
+        }
+        .theme-black .items-table th {
+            background: linear-gradient(135deg, #374151 0%, rgba(55, 65, 81, 0.9) 100%);
+            color: white;
+        }
+        
+        /* Dutch Orange Premium Theme */
+        .theme-orange .header {
+            background: linear-gradient(135deg, #f97316 0%, rgba(249, 115, 22, 0.8) 100%);
+            color: white;
+        }
+        .theme-orange .info-section {
+            background: linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%);
+            border-color: #fb923c;
+        }
+        
+        /* Emerald Corporate Theme */
+        .theme-emerald .header {
+            background: linear-gradient(135deg, #059669 0%, rgba(5, 150, 105, 0.8) 100%);
+            color: white;
+        }
+        .theme-emerald .info-section {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            border-color: #bbf7d0;
+        }
+        
+        /* Fintech Purple Theme */
+        .theme-purple .header {
+            background: linear-gradient(135deg, #7c3aed 0%, rgba(124, 58, 237, 0.8) 100%);
+            color: white;
+        }
+        .theme-purple .info-section {
+            background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+            border-color: #e9d5ff;
+        }
+        
+        /* Burgundy Executive Theme */
+        .theme-burgundy .header {
+            background: linear-gradient(135deg, #be123c 0%, rgba(190, 18, 60, 0.8) 100%);
+            color: white;
+        }
+        .theme-burgundy .info-section {
+            background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+            border-color: #fca5a5;
+        }
+        
+        /* Platinum Minimalist Theme */
+        .theme-platinum .header {
+            background: linear-gradient(135deg, #71717a 0%, rgba(113, 113, 122, 0.8) 100%);
+            color: white;
+        }
+        .theme-platinum .info-section {
+            background: linear-gradient(135deg, #fafafa 0%, #f4f4f5 100%);
+            border-color: #e4e4e7;
+        }
+        
+        /* Legacy Theme Support */
+        .theme-blue .header {
+            background: linear-gradient(135deg, #2563eb 0%, rgba(37, 99, 235, 0.8) 100%);
+            color: white;
+        }
+        .theme-blue .info-section {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-color: #e2e8f0;
+        }
+    </style>
+</head>
+<body class="{{template.theme_class}}">
+    <div class="invoice-container">
+        {{!-- Watermark --}}
+        {{#if features.should_show_watermark}}
+        <div class="watermark">{{features.watermark_text}}</div>
+        {{/if}}
+
+        {{!-- Header Section --}}
+        <header class="header">
+            {{#if brand_settings.show_logo}}
+            <div class="logo-container">
+                {{#if brand_settings.logo_url}}
+                {{{logoImage brand_settings.logo_url brand_settings.logo_width}}}
+                {{else}}{{#if business_profile.logo_url}}
+                {{{logoImage business_profile.logo_url brand_settings.logo_width}}}
+                {{/if}}{{/if}}
+            </div>
+            {{/if}}
+            
+            <div class="business-info">
+                <h1>{{#if brand_settings.business_name_override}}{{brand_settings.business_name_override}}{{else}}{{business_profile.business_name}}{{/if}}</h1>
+                
+                <div class="business-details">
+                    {{#if business_profile.formatted_address}}
+                    <p>{{business_profile.formatted_address}}</p>
+                    {{/if}}
+                    {{#if business_profile.kvk_number}}
+                    <p><strong>KvK-nummer:</strong> {{business_profile.kvk_number}}</p>
+                    {{/if}}
+                    {{#if business_profile.btw_number}}
+                    <p><strong>BTW-nummer:</strong> {{business_profile.btw_number}}</p>
+                    {{/if}}
+                    {{#if business_profile.email}}
+                    <p>E-mail: {{business_profile.email}}</p>
+                    {{/if}}
+                    {{#if business_profile.phone}}
+                    <p>Telefoon: {{business_profile.phone}}</p>
+                    {{/if}}
+                </div>
+            </div>
+
+            <div class="invoice-title">
+                <h2>{{translations.invoice}}</h2>
+                <p class="invoice-number">{{invoice.invoice_number}}</p>
+            </div>
+        </header>
+
+        {{!-- Invoice Meta Information --}}
+        <section class="invoice-meta">
+            <div class="info-section client-info">
+                <h3>{{translations.invoice_to}}</h3>
+                {{#if client.is_business}}
+                    {{#if client.company_name}}
+                    <p class="highlight">{{client.company_name}}</p>
+                    {{/if}}
+                {{/if}}
+                <p class="highlight">{{client.name}}</p>
+                {{#if client.formatted_address}}
+                <p>{{client.formatted_address}}</p>
+                {{/if}}
+                {{#if client.vat_number}}
+                <p><strong>{{translations.vat}}:</strong> {{client.vat_number}}</p>
+                {{/if}}
+                {{#if client.email}}
+                <p>{{client.email}}</p>
+                {{/if}}
+            </div>
+            
+            <div class="info-section invoice-details">
+                <h3>{{translations.invoice_details}}</h3>
+                <p><strong>{{translations.invoice_date}}</strong> {{formatDate invoice.invoice_date compliance_settings.date_format}}</p>
+                <p><strong>{{translations.due_date}}</strong> {{formatDate invoice.due_date compliance_settings.date_format}}</p>
+                <p><strong>{{translations.payment_terms}}</strong> {{invoice.payment_due_days}} {{translations.days}}</p>
+            </div>
+        </section>
+
+        {{!-- Enhanced Invoice Items Table with Advanced Layout --}}
+        <section class="invoice-items">
+            <div class="table-header">
+                <h3 class="table-title">{{translations.invoice_details}}</h3>
+                <div class="item-count">{{invoice_items.length}} {{#ifEquals invoice_items.length 1}}item{{else}}items{{/ifEquals}}</div>
+            </div>
+            
+            <div class="table-container">
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th class="description-header" style="width: 45%">
+                                <span class="header-text">{{translations.description}}</span>
+                                <span class="header-subtitle">Service details</span>
+                            </th>
+                            <th class="quantity-header text-center" style="width: 12%">
+                                <span class="header-text">{{translations.quantity}}</span>
+                                <span class="header-subtitle">Qty</span>
+                            </th>
+                            <th class="rate-header text-right" style="width: 18%">
+                                <span class="header-text">{{translations.unit_price}}</span>
+                                <span class="header-subtitle">Rate</span>
+                            </th>
+                            <th class="amount-header text-right" style="width: 18%">
+                                <span class="header-text">{{translations.total}}</span>
+                                <span class="header-subtitle">Amount</span>
+                            </th>
+                            <th class="spacer-header" style="width: 7%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{#each invoice_items}}
+                        <tr class="item-row" data-index="{{@index}}">
+                            <td class="description-cell">
+                                <div class="item-description">{{this.description}}</div>
+                                {{#if this.details}}
+                                <div class="item-details">{{this.details}}</div>
+                                {{/if}}
+                            </td>
+                            <td class="quantity-cell text-center">
+                                <span class="quantity-value">{{formatNumber this.quantity 1}}</span>
+                            </td>
+                            <td class="rate-cell text-right">
+                                <span class="rate-value">{{formatCurrency this.unit_price ../invoice.currency}}</span>
+                            </td>
+                            <td class="amount-cell text-right">
+                                <span class="amount-value">{{formatCurrency this.line_total ../invoice.currency}}</span>
+                            </td>
+                            <td class="spacer-cell"></td>
+                        </tr>
+                        {{/each}}
+                    </tbody>
+                    
+                    {{!-- Enhanced Table Footer --}}
+                    <tfoot>
+                        <tr class="summary-row">
+                            <td colspan="3" class="summary-label">
+                                <strong>Subtotal ({{invoice_items.length}} {{#ifEquals invoice_items.length 1}}item{{else}}items{{/ifEquals}})</strong>
+                            </td>
+                            <td class="summary-amount text-right">
+                                <strong>{{formatCurrency calculations.subtotal invoice.currency}}</strong>
+                            </td>
+                            <td class="spacer-cell"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </section>
+
+        {{!-- Totals Section --}}
+        <section class="totals">
+            <div class="totals-row subtotal">
+                <span>{{translations.subtotal}}</span>
+                <span class="totals-amount">{{formatCurrency calculations.subtotal invoice.currency}}</span>
+            </div>
+            
+            {{#if calculations.has_discount}}
+            <div class="totals-row discount">
+                <span>Korting:</span>
+                <span class="totals-amount">-{{formatCurrency calculations.discount_amount invoice.currency}}</span>
+            </div>
+            {{/if}}
+            
+            <div class="totals-row vat">
+                <span>{{translations.vat}} ({{formatPercentage invoice.vat_rate}}):</span>
+                <span class="totals-amount">{{formatCurrency calculations.vat_amount invoice.currency}}</span>
+            </div>
+            
+            <div class="totals-row total">
+                <span>{{translations.total_amount}}</span>
+                <span class="totals-amount">{{formatCurrency calculations.total_amount invoice.currency}}</span>
+            </div>
+        </section>
+
+        <div style="clear: both;"></div>
+
+        {{!-- VAT Information Notices --}}
+        {{#ifEquals invoice.vat_type "reverse_charge"}}
+        <div class="vat-notice">
+            <strong>BTW verlegd:</strong>
+            Voor deze levering/dienst is de BTW verlegd naar de afnemer conform artikel 12 van de BTW-wet.
+        </div>
+        {{/ifEquals}}
+        
+        {{#ifEquals invoice.vat_type "exempt"}}
+        <div class="vat-notice">
+            <strong>Export buiten EU:</strong>
+            Deze factuur betreft een export buiten de EU en is daarom vrijgesteld van BTW.
+        </div>
+        {{/ifEquals}}
+
+        {{!-- Payment Terms --}}
+        {{#if compliance_settings.show_payment_terms}}
+        <section class="payment-terms">
+            <h4>{{translations.payment_info}}</h4>
+            <p>{{translations.payment_notice}}</p>
+            <p>
+                Gelieve het verschuldigde bedrag van <span class="amount-due">{{formatCurrency calculations.total_amount invoice.currency}}</span> 
+                uiterlijk voor <span class="due-date">{{formatDate invoice.due_date compliance_settings.date_format}}</span> over te maken 
+                onder vermelding van factuurnummer <strong>{{invoice.invoice_number}}</strong>.
+            </p>
+            {{#if invoice.notes}}
+            <p><strong>{{translations.notes}}</strong> {{invoice.notes}}</p>
+            {{/if}}
+        </section>
+        {{/if}}
+
+        {{!-- Custom Footer Text --}}
+        {{#if features.custom_footer_text}}
+        <div class="custom-footer">
+            {{features.custom_footer_text}}
+        </div>
+        {{/if}}
+
+        {{!-- Footer --}}
+        <footer class="footer">
+            {{#if features.show_generation_info}}
+            <p>{{translations.footer_text}} {{formatDate template.current_date compliance_settings.date_format}} • {{business_profile.display_name}}</p>
+            {{/if}}
+            {{#ifEquals layout_settings.footer_style "detailed"}}
+            <p>{{business_profile.business_name}} | {{business_profile.kvk_number}} | {{business_profile.btw_number}}</p>
+            <p>{{business_profile.email}} | {{business_profile.phone}}</p>
+            {{/ifEquals}}
+            {{#if template.debug_mode}}
+            <div class="generation-info">
+                Template ID: {{template_config.id}} | Generated: {{template.generation_id}}
+            </div>
+            {{/if}}
+        </footer>
+
+        {{!-- Page Numbers --}}
+        {{#if features.show_page_numbers}}
+        <div class="page-number">Pagina 1</div>
+        {{/if}}
+    </div>
+</body>
+</html>
