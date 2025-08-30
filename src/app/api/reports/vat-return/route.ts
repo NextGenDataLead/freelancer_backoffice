@@ -58,12 +58,15 @@ export async function GET(request: Request) {
       return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
     }
 
-    // Get all expenses for the quarter
+    // Get all expenses for the quarter (using new VAT schema)
     const { data: expenses, error: expensesError } = await supabaseAdmin
       .from('expenses')
-      .select('*')
+      .select(`
+        *,
+        category:expense_categories(name, metadata)
+      `)
       .eq('tenant_id', profile.tenant_id)
-      .eq('is_deductible', true)
+      .eq('is_vat_deductible', true)
       .gte('expense_date', quarterStart.toISOString().split('T')[0])
       .lte('expense_date', quarterEnd.toISOString().split('T')[0])
 
@@ -155,16 +158,34 @@ function calculateVATReturn(
     }
   })
 
-  // Process expenses (calculate deductible VAT)
+  // Process expenses (calculate deductible VAT using new schema)
   let totalExpenses = 0
   let totalVATPaid = 0
+  let reverseChargeExpenses = 0
+  const euExpenseServices: ICPDeclaration[] = []
 
   expenses.forEach(expense => {
     const amount = parseFloat(expense.amount.toString())
-    const vatAmount = parseFloat(expense.vat_amount.toString())
+    const vatAmount = parseFloat((expense.vat_amount || 0).toString())
+    const businessAmount = amount * (expense.business_percentage || 100) / 100
 
-    totalExpenses += amount
-    if (expense.vat_rate > 0) {
+    totalExpenses += businessAmount
+
+    // Handle different VAT types
+    if (expense.vat_type === 'reverse_charge' && expense.is_reverse_charge) {
+      reverseChargeExpenses += businessAmount
+      
+      // Add EU B2B expense services to ICP if supplier has VAT number
+      if (expense.supplier_country_code && expense.supplier_country_code !== 'NL' && expense.supplier_vat_number) {
+        euExpenseServices.push({
+          client_name: expense.vendor_name || 'Unknown Supplier',
+          vat_number: expense.supplier_vat_number,
+          country_code: expense.supplier_country_code,
+          amount: businessAmount,
+          service_description: 'Business expense - EU services'
+        })
+      }
+    } else if (expense.is_vat_deductible && expense.vat_rate > 0) {
       totalVATPaid += vatAmount
     }
   })
@@ -181,6 +202,7 @@ function calculateVATReturn(
     total_vat_paid: Math.round(totalVATPaid * 100) / 100,
     vat_to_pay: vatToPay,
     reverse_charge_revenue: Math.round(reverseChargeRevenue * 100) / 100,
-    eu_services: euServices
+    reverse_charge_expenses: Math.round(reverseChargeExpenses * 100) / 100,
+    eu_services: [...euServices, ...euExpenseServices]
   }
 }

@@ -23,7 +23,8 @@ import {
   Clock,
   Euro,
   Receipt,
-  ChevronRight
+  ChevronRight,
+  Building2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useSidebar } from '@/hooks/use-app-state'
@@ -31,6 +32,7 @@ import { useSidebar } from '@/hooks/use-app-state'
 const navigationItems = [
   { name: 'Overview', icon: Home, href: '/dashboard' },
   { name: 'Analytics', icon: BarChart3, href: '/dashboard/analytics' },
+  { name: 'Expense Management', icon: Receipt, href: '/dashboard/expense-management' },
   {
     name: 'Financieel',
     icon: Calculator,
@@ -41,6 +43,7 @@ const navigationItems = [
       { name: 'Klanten', icon: Users, href: '/dashboard/financieel/klanten' },
       { name: 'Tijdregistratie', icon: Clock, href: '/dashboard/financieel/tijd' },
       { name: 'Uitgaven', icon: Euro, href: '/dashboard/financieel/uitgaven' },
+      { name: 'Belasting', icon: Building2, href: '/dashboard/financieel/belasting' },
       { name: 'Rapporten', icon: TrendingUp, href: '/dashboard/financieel/rapporten' }
     ]
   },

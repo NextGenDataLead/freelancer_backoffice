@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useExpenseMetrics } from '@/hooks/use-expense-metrics'
+import { formatEuropeanCurrency } from '@/lib/utils/formatEuropeanNumber'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ExpenseList } from '@/components/financial/expenses/expense-list'
@@ -12,6 +14,7 @@ import Link from 'next/link'
 export default function ExpensesPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingExpense, setEditingExpense] = useState<any>(null)
+  const { metrics, loading, error } = useExpenseMetrics()
 
   const handleExpenseCreated = (expense: any) => {
     setShowCreateForm(false)
@@ -27,6 +30,27 @@ export default function ExpensesPage() {
 
   const handleEditExpense = (expense: any) => {
     setEditingExpense(expense)
+  }
+
+  const getCategoryDisplayName = (category: string) => {
+    const categories: Record<string, string> = {
+      'meals': 'Maaltijden & Entertainment',
+      'software': 'Software & Abonnementen', 
+      'office_supplies': 'Kantoorbenodigdheden',
+      'travel': 'Reis & Verblijf',
+      'marketing': 'Marketing & Reclame',
+      'professional': 'Professionele diensten',
+      'equipment': 'Apparatuur & Hardware',
+      'telecommunications': 'Telecommunicatie',
+      'training': 'Training & Onderwijs',
+      'insurance': 'Verzekeringen',
+      'banking': 'Bankkosten',
+      'utilities': 'Nutsvoorzieningen',
+      'rent': 'Huur & Lease',
+      'repairs': 'Reparaties & Onderhoud',
+      'other': 'Overig'
+    }
+    return categories[category] || category
   }
 
   return (
@@ -96,9 +120,17 @@ export default function ExpensesPage() {
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€2.450,00</div>
+            <div className="text-2xl font-bold">
+              {loading ? '...' : formatEuropeanCurrency(metrics?.currentMonth.totalAmount || 0)}
+            </div>
             <p className="text-xs text-muted-foreground">
-              +8% t.o.v. vorige maand
+              {loading ? '...' : 
+                metrics?.currentMonth.percentageChange && metrics.currentMonth.percentageChange > 0 
+                  ? `+${metrics.currentMonth.percentageChange}% t.o.v. vorige maand`
+                  : metrics?.currentMonth.percentageChange && metrics.currentMonth.percentageChange < 0
+                  ? `${metrics.currentMonth.percentageChange}% t.o.v. vorige maand`
+                  : 'Geen wijziging t.o.v. vorige maand'
+              }
             </p>
           </CardContent>
         </Card>
@@ -109,7 +141,9 @@ export default function ExpensesPage() {
             <Euro className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€514,50</div>
+            <div className="text-2xl font-bold">
+              {loading ? '...' : formatEuropeanCurrency(metrics?.vatPaid.deductibleAmount || 0)}
+            </div>
             <p className="text-xs text-muted-foreground">
               BTW aftrekbaar
             </p>
@@ -122,9 +156,11 @@ export default function ExpensesPage() {
             <Receipt className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">18</div>
+            <div className="text-2xl font-bold">
+              {loading ? '...' : metrics?.ocrProcessed.ocrCount || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
-              75% automatisch verwerkt
+              {loading ? '...' : `${metrics?.ocrProcessed.percentageAutomatic || 0}% automatisch verwerkt`}
             </p>
           </CardContent>
         </Card>
@@ -135,7 +171,9 @@ export default function ExpensesPage() {
             <Receipt className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8</div>
+            <div className="text-2xl font-bold">
+              {loading ? '...' : metrics?.categories.uniqueCount || 0}
+            </div>
             <p className="text-xs text-muted-foreground">
               Verschillende uitgaventypes
             </p>
@@ -151,22 +189,25 @@ export default function ExpensesPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Kantoorbenodigdheden</span>
-                <span className="text-sm font-medium">€650,00</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Software & Abonnementen</span>
-                <span className="text-sm font-medium">€480,00</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Reis & Verblijf</span>
-                <span className="text-sm font-medium">€320,00</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Marketing</span>
-                <span className="text-sm font-medium">€280,00</span>
-              </div>
+              {loading ? (
+                <div className="space-y-3">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="h-4 bg-muted animate-pulse rounded w-32"></div>
+                      <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : metrics?.categories.topCategories.length ? (
+                metrics.categories.topCategories.slice(0, 4).map((category, index) => (
+                  <div key={index} className="flex items-center justify-between">
+                    <span className="text-sm">{getCategoryDisplayName(category.category)}</span>
+                    <span className="text-sm font-medium">{formatEuropeanCurrency(category.totalAmount)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-muted-foreground">Geen uitgaven deze maand</div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -177,18 +218,33 @@ export default function ExpensesPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-green-600">Hoge betrouwbaarheid</span>
-                <span className="text-sm font-medium">15 bonnetjes</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-yellow-600">Gemiddelde betrouwbaarheid</span>
-                <span className="text-sm font-medium">3 bonnetjes</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-red-600">Handmatig invoeren</span>
-                <span className="text-sm font-medium">6 bonnetjes</span>
-              </div>
+              {loading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="h-4 bg-muted animate-pulse rounded w-32"></div>
+                      <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : metrics?.ocrProcessed.totalCount ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-green-600">Automatisch verwerkt</span>
+                    <span className="text-sm font-medium">{metrics.ocrProcessed.ocrCount} bonnetjes</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-red-600">Handmatig ingevoerd</span>
+                    <span className="text-sm font-medium">{metrics.ocrProcessed.totalCount - metrics.ocrProcessed.ocrCount} bonnetjes</span>
+                  </div>
+                  <div className="flex items-center justify-between font-medium pt-2 border-t">
+                    <span className="text-sm">Totaal dit kwartaal</span>
+                    <span className="text-sm">{metrics.ocrProcessed.totalCount} uitgaven</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">Geen uitgaven deze maand</div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -199,22 +255,31 @@ export default function ExpensesPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">21% BTW</span>
-                <span className="text-sm font-medium">€445,50</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">9% BTW</span>
-                <span className="text-sm font-medium">€69,00</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">0% BTW</span>
-                <span className="text-sm font-medium">€0,00</span>
-              </div>
-              <div className="flex items-center justify-between font-medium">
-                <span className="text-sm">Totaal aftrekbaar</span>
-                <span className="text-sm">€514,50</span>
-              </div>
+              {loading ? (
+                <div className="space-y-3">
+                  {[...Array(4)].map((_, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <div className="h-4 bg-muted animate-pulse rounded w-20"></div>
+                      <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : metrics?.vatPaid.breakdown.length ? (
+                <>
+                  {metrics.vatPaid.breakdown.map((vat, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-sm">{Math.round(vat.rate * 100)}% BTW</span>
+                      <span className="text-sm font-medium">{formatEuropeanCurrency(vat.amount)}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between font-medium pt-2 border-t">
+                    <span className="text-sm">Totaal aftrekbaar</span>
+                    <span className="text-sm">{formatEuropeanCurrency(metrics.vatPaid.deductibleAmount)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-muted-foreground">Geen BTW betaald deze maand</div>
+              )}
             </div>
           </CardContent>
         </Card>

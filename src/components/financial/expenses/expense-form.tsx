@@ -46,13 +46,7 @@ interface ExpenseFormProps {
   onCancel?: () => void
 }
 
-interface SupplierOption {
-  id: string
-  name: string
-  company_name?: string
-  is_business: boolean
-  country_code: string
-}
+// Removed SupplierOption interface - using vendor_name instead
 
 // Dutch expense categories with translations
 const EXPENSE_CATEGORIES = [
@@ -82,7 +76,7 @@ const VAT_RATES = [
 
 export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [suppliers, setSuppliers] = useState<SupplierOption[]>([])
+  // Removed suppliers state - using vendor_name instead
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [ocrProcessing, setOcrProcessing] = useState(false)
   const [ocrResult, setOcrResult] = useState<any>(null)
@@ -90,7 +84,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
   const form = useForm<z.infer<typeof CreateExpenseSchema>>({
     resolver: zodResolver(CreateExpenseSchema),
     defaultValues: {
-      supplier_id: expense?.supplier_id || '',
+      vendor_name: expense?.vendor_name || '',
       expense_date: expense?.expense_date || new Date().toISOString().split('T')[0],
       description: expense?.description || '',
       category: expense?.category || 'other',
@@ -100,22 +94,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
     },
   })
 
-  // Load suppliers on component mount
-  useEffect(() => {
-    const fetchSuppliers = async () => {
-      try {
-        const response = await fetch('/api/clients?is_supplier=true&limit=1000')
-        if (response.ok) {
-          const data = await response.json()
-          setSuppliers(data.data)
-        }
-      } catch (error) {
-        console.error('Failed to load suppliers:', error)
-      }
-    }
-
-    fetchSuppliers()
-  }, [])
+  // Removed supplier fetching - using vendor_name input instead
 
   // Calculate VAT amount when amount or rate changes
   const watchedAmount = form.watch('amount')
@@ -342,29 +321,21 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="supplier_id"
+                  name="vendor_name"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-2">
                         <Building2 className="h-4 w-4" />
                         Leverancier
                       </FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecteer leverancier" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {suppliers.map((supplier) => (
-                            <SelectItem key={supplier.id} value={supplier.id}>
-                              {supplier.company_name || supplier.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Input 
+                          placeholder="Bijv. Albert Heijn, Adobe, Microsoft..."
+                          {...field} 
+                        />
+                      </FormControl>
                       <FormDescription>
-                        Leverancier niet in lijst? Voeg toe bij klanten.
+                        Naam van de leverancier/winkel waar je de uitgave deed
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

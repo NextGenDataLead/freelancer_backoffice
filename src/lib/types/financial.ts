@@ -334,7 +334,8 @@ export interface VATReturnData {
   total_expenses: number;
   total_vat_paid: number;
   vat_to_pay: number;
-  reverse_charge_revenue: number; // BTW verlegd
+  reverse_charge_revenue: number; // BTW verlegd - income
+  reverse_charge_expenses: number; // BTW verlegd - expenses
   eu_services: ICPDeclaration[];
 }
 

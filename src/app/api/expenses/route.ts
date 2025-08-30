@@ -37,20 +37,10 @@ export async function GET(request: Request) {
     
     const validatedQuery = ExpensesQuerySchema.parse(queryParams)
 
-    // Build query with optional supplier join
+    // Build query without supplier join (expenses are for tenant, not clients)
     let query = supabaseAdmin
       .from('expenses')
-      .select(`
-        *,
-        supplier:clients(
-          id,
-          name,
-          company_name,
-          email,
-          country_code,
-          vat_number
-        )
-      `, { count: 'exact' })
+      .select('id, tenant_id, title, description, expense_date, amount, currency, category_id, expense_type, payment_method, status, submitted_by, submitted_at, project_code, cost_center, vendor_name, reference_number, requires_reimbursement, client_id, tags, metadata, vat_rate, vat_amount, vat_type, is_vat_deductible, business_percentage, supplier_country_code, supplier_vat_number, is_reverse_charge, created_at, updated_at', { count: 'exact' })
       .eq('tenant_id', profile.tenant_id)
       .order('expense_date', { ascending: false })
 
@@ -60,7 +50,7 @@ export async function GET(request: Request) {
     }
 
     if (validatedQuery.supplier_id) {
-      query = query.eq('supplier_id', validatedQuery.supplier_id)
+      query = query.eq('client_id', validatedQuery.supplier_id)
     }
 
     if (validatedQuery.date_from) {
@@ -92,10 +82,29 @@ export async function GET(request: Request) {
       return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
     }
 
+    // Transform expenses to add calculated fields and supplier info
+    const transformedExpenses = (expenses || []).map(expense => ({
+      ...expense,
+      category: expense.expense_type,  // Map expense_type to category
+      is_deductible: expense.is_vat_deductible,  // Map is_vat_deductible to is_deductible
+      total_amount: parseFloat(expense.amount) + parseFloat(expense.vat_amount || 0),
+      manual_verification_required: false,
+      verified_at: null,
+      receipt_url: null,
+      supplier: expense.vendor_name ? {
+        id: null,
+        name: expense.vendor_name,
+        company_name: expense.vendor_name,
+        email: null,
+        country_code: expense.supplier_country_code || 'NL',
+        vat_number: expense.supplier_vat_number || null
+      } : null
+    }))
+
     const totalPages = count ? Math.ceil(count / validatedQuery.limit) : 0
 
     const response = createPaginatedResponse(
-      expenses || [], 
+      transformedExpenses, 
       'Expenses fetched successfully',
       {
         page: validatedQuery.page,
@@ -141,21 +150,7 @@ export async function POST(request: Request) {
     // Validate request data
     const validatedData = CreateExpenseSchema.parse(body)
 
-    // Verify supplier exists and belongs to tenant (if provided)
-    if (validatedData.supplier_id) {
-      const { data: supplier, error: supplierError } = await supabaseAdmin
-        .from('clients')
-        .select('id, name')
-        .eq('id', validatedData.supplier_id)
-        .eq('tenant_id', profile.tenant_id)
-        .eq('is_supplier', true)
-        .single()
-
-      if (supplierError || !supplier) {
-        const notFoundError = ApiErrors.NotFound('Supplier')
-        return NextResponse.json(notFoundError, { status: notFoundError.status })
-      }
-    }
+    // Note: Expenses are primarily for the tenant itself, not linked to clients
 
     // Calculate VAT amount if not provided
     let vatAmount = validatedData.vat_amount
@@ -177,18 +172,9 @@ export async function POST(request: Request) {
         ...validatedData,
         vat_amount: vatAmount,
         tenant_id: profile.tenant_id,
-        created_by: profile.id
+        submitted_by: profile.id
       })
-      .select(`
-        *,
-        supplier:clients(
-          id,
-          name,
-          company_name,
-          email,
-          country_code
-        )
-      `)
+      .select('*')
       .single()
 
     if (createError) {
