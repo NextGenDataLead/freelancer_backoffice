@@ -32,7 +32,6 @@ import { useSidebar } from '@/hooks/use-app-state'
 const navigationItems = [
   { name: 'Overview', icon: Home, href: '/dashboard' },
   { name: 'Analytics', icon: BarChart3, href: '/dashboard/analytics' },
-  { name: 'Expense Management', icon: Receipt, href: '/dashboard/expense-management' },
   {
     name: 'Financieel',
     icon: Calculator,

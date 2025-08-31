@@ -39,11 +39,13 @@ import {
 import { CreateExpenseSchema } from '@/lib/validations/financial'
 import type { ExpenseWithSupplier, Client } from '@/lib/types/financial'
 import { z } from 'zod'
+import { SupplierValidationPanel } from '@/components/financial/expenses/supplier-validation-panel'
 
 interface ExpenseFormProps {
   expense?: ExpenseWithSupplier
   onSuccess?: (expense: ExpenseWithSupplier) => void
   onCancel?: () => void
+  enableOCR?: boolean
 }
 
 // Removed SupplierOption interface - using vendor_name instead
@@ -74,7 +76,7 @@ const VAT_RATES = [
   { value: 0.00, label: '0% (Vrijgesteld/EU)' }
 ]
 
-export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) {
+export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }: ExpenseFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   // Removed suppliers state - using vendor_name instead
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -110,10 +112,10 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
     const file = event.target.files?.[0]
     if (!file) return
 
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+    // Validate file type - images and PDFs for PaddleOCR
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']
     if (!allowedTypes.includes(file.type)) {
-      alert('Alleen JPG, PNG, WebP en PDF bestanden zijn toegestaan')
+      alert('Alleen JPG, PNG, WebP afbeeldingen en PDF documenten zijn toegestaan voor OCR')
       return
     }
 
@@ -125,7 +127,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
 
     setUploadedFile(file)
     
-    // Process with OCR
+    // Process with PaddleOCR
     await processWithOCR(file)
   }
 
@@ -134,43 +136,50 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
     setOcrResult(null)
 
     try {
-      // In a real implementation, you would upload the file first
-      // For now, we'll simulate OCR processing with a mock URL
-      const mockFileUrl = 'https://example.com/receipt.jpg'
+      const formData = new FormData()
+      formData.append('receipt', file)
 
-      const response = await fetch('/api/expenses/ocr/process', {
+      const response = await fetch('/api/expenses/ocr-process', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          receipt_url: mockFileUrl,
-          file_name: file.name,
-          file_type: file.type,
-          supplier_name_hint: form.getValues('supplier_id') ? 
-            suppliers.find(s => s.id === form.getValues('supplier_id'))?.name : undefined,
-          category_hint: form.getValues('category')
-        })
+        body: formData
       })
 
-      if (response.ok) {
-        const result = await response.json()
-        setOcrResult(result.data)
-        
-        // Auto-fill form with OCR results if confidence is high
-        const expense = result.data.expense
-        const ocrResults = result.data.ocr_results
-        
-        if (ocrResults.confidence > 0.8) {
-          // Auto-fill form fields
-          form.setValue('description', expense.description)
-          form.setValue('amount', parseFloat(expense.amount))
-          form.setValue('expense_date', expense.expense_date)
-          form.setValue('category', expense.category)
-          form.setValue('vat_rate', parseFloat(expense.vat_rate))
-          
-          // Try to match supplier
-          if (expense.supplier && ocrResults.supplier_matched) {
-            form.setValue('supplier_id', expense.supplier.id)
+      if (!response.ok) {
+        throw new Error('OCR processing failed')
+      }
+
+      const result = await response.json()
+      setOcrResult(result.data)
+      
+      // Auto-fill form with OCR results if confidence is high and data exists
+      const extractedData = result.data.extracted_data
+      
+      if (extractedData && result.data.confidence > 0.7) {
+        // Auto-fill form fields
+        if (extractedData.vendor_name) {
+          form.setValue('vendor_name', extractedData.vendor_name)
+        }
+        if (extractedData.expense_date) {
+          form.setValue('expense_date', extractedData.expense_date)
+        }
+        if (extractedData.amount) {
+          form.setValue('amount', extractedData.amount)
+        }
+        if (extractedData.expense_type) {
+          // Map the expense type to our categories
+          const categoryMap: Record<string, string> = {
+            'meals': 'meals_entertainment',
+            'travel': 'travel_accommodation',
+            'equipment': 'equipment_hardware',
+            'software': 'software_subscriptions',
+            'office_supplies': 'office_supplies',
+            'other': 'other'
           }
+          const mappedCategory = categoryMap[extractedData.expense_type] || 'other'
+          form.setValue('category', mappedCategory)
+        }
+        if (extractedData.vat_rate) {
+          form.setValue('vat_rate', extractedData.vat_rate)
         }
       }
     } catch (error) {
@@ -189,6 +198,15 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
         ...data,
         vat_amount: vatAmount,
         total_amount: totalAmount,
+        // Include OCR metadata if available
+        ...(ocrResult && {
+          ocr_confidence_score: ocrResult.confidence,
+          ocr_extracted_fields: ocrResult.extracted_data,
+          ocr_raw_text: ocrResult.raw_text,
+          processing_engine: ocrResult.ocr_metadata?.processing_engine || 'PaddleOCR',
+          requires_manual_review: false, // User has reviewed and submitted
+          is_likely_foreign_supplier: ocrResult.extracted_data?.is_likely_foreign_supplier || false
+        }),
         // In a real implementation, you would upload the file and include the URL
         receipt_url: uploadedFile ? 'https://example.com/receipt.jpg' : undefined
       }
@@ -267,7 +285,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
                         <span className="font-semibold">Klik om te uploaden</span> of sleep hier
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        JPG, PNG, WebP of PDF (Max. 10MB)
+                        JPG, PNG, WebP (Max. 10MB)
                       </p>
                     </>
                   )}
@@ -285,20 +303,25 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
             {ocrResult && (
               <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
-                  {ocrResult.ocr_results.confidence > 0.8 ? (
+                  {ocrResult.confidence > 0.8 ? (
                     <CheckCircle className="h-4 w-4 text-green-600" />
                   ) : (
                     <AlertCircle className="h-4 w-4 text-yellow-600" />
                   )}
                   <span className="text-sm font-medium">
-                    OCR Resultaat ({Math.round(ocrResult.ocr_results.confidence * 100)}% betrouwbaarheid)
+                    OCR Resultaat ({Math.round(ocrResult.confidence * 100)}% betrouwbaarheid)
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {ocrResult.ocr_results.requires_verification
+                  {ocrResult.extracted_data?.requires_manual_review
                     ? 'Gegevens zijn automatisch ingevuld, controleer voor verzenden'
                     : 'Gegevens zijn met hoge betrouwbaarheid ingevuld'}
                 </p>
+                {ocrResult.extracted_data?.is_likely_foreign_supplier && (
+                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    ⚠️ Mogelijke buitenlandse leverancier - BTW Verlegd kan van toepassing zijn
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -359,6 +382,13 @@ export function ExpenseForm({ expense, onSuccess, onCancel }: ExpenseFormProps) 
                   )}
                 />
               </div>
+
+              {/* Supplier Validation Panel */}
+              {form.watch('vendor_name') && (
+                <SupplierValidationPanel 
+                  vendorName={form.watch('vendor_name')}
+                />
+              )}
 
               {/* Description and Category */}
               <FormField
