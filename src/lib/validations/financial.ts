@@ -37,6 +37,7 @@ export const ExpenseCategorySchema = z.enum([
   'equipment',
   'insurance',
   'professional_services',
+  'telecommunications',
   'other'
 ] as const);
 

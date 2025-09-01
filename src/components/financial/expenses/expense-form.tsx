@@ -152,7 +152,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
       setOcrResult(result.data)
       
       // Auto-fill form with OCR results if confidence is high and data exists
-      const extractedData = result.data.extracted_data
+      const extractedData = result.data?.extracted_data
       
       if (extractedData && result.data.confidence > 0.7) {
         // Auto-fill form fields
@@ -165,18 +165,36 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
         if (extractedData.amount) {
           form.setValue('amount', extractedData.amount)
         }
+        if (extractedData.description) {
+          form.setValue('description', extractedData.description, { 
+            shouldValidate: true, 
+            shouldDirty: true 
+          })
+        }
         if (extractedData.expense_type) {
+          
           // Map the expense type to our categories
           const categoryMap: Record<string, string> = {
-            'meals': 'meals_entertainment',
-            'travel': 'travel_accommodation',
-            'equipment': 'equipment_hardware',
-            'software': 'software_subscriptions',
+            'meals': 'meals',
+            'travel': 'travel',
+            'equipment': 'equipment',
+            'software': 'software',
             'office_supplies': 'office_supplies',
+            'telecommunicatie': 'telecommunications',
+            'utilities': 'other', // utilities not in enum, map to other
+            'financial': 'professional_services',
+            'medical': 'other', // medical not in enum, map to other
+            'marketing': 'marketing',
+            'insurance': 'insurance',
             'other': 'other'
           }
+          
           const mappedCategory = categoryMap[extractedData.expense_type] || 'other'
-          form.setValue('category', mappedCategory)
+          
+          form.setValue('category', mappedCategory, { 
+            shouldValidate: true, 
+            shouldDirty: true 
+          })
         }
         if (extractedData.vat_rate) {
           form.setValue('vat_rate', extractedData.vat_rate)
@@ -416,7 +434,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Categorie</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecteer categorie" />

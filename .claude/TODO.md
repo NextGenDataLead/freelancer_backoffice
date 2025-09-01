@@ -5,6 +5,9 @@
 - When trying to adjust time: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
 - the timer option still allows you to change the date, but after running still puts in on todays datw which is what I want, but therefore date should not be an option to choose from. Make sure it overlaps just as the hours are for the timer optino. 
 - add back support for pdfs
+- It could also be the case that reverse charge is not indicated and/or      │
+│   that tax is incorrectly added. That's why you always need to look for a    │
+│   Tax number
 
 
 

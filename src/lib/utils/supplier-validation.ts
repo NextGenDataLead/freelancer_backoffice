@@ -149,7 +149,8 @@ export async function validateSupplierForExpense(
   // If we have country code, check requirements
   if (finalCountryCode) {
     requiresReverseChargeFlag = requiresReverseCharge(finalCountryCode)
-    isEUSupplier = validateEUVATNumber('', finalCountryCode) // Just check if country has EU VAT pattern
+    // Check if country is in EU by checking if it has a VAT pattern (without validating empty VAT)
+    isEUSupplier = isEUCountry(finalCountryCode)
     
     if (requiresReverseChargeFlag) {
       warnings.push(`${getCountryName(finalCountryCode)} supplier may require reverse charge VAT`)
@@ -184,6 +185,17 @@ export async function validateSupplierForExpense(
     foreignSupplierWarnings: warnings,
     suggestedVATType
   }
+}
+
+/**
+ * Check if a country is in the EU (has VAT validation pattern)
+ */
+function isEUCountry(countryCode: string): boolean {
+  const euCountries = new Set([
+    'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES', 'FI', 'FR',
+    'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'
+  ])
+  return euCountries.has(countryCode)
 }
 
 /**
