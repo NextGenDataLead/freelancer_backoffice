@@ -152,8 +152,14 @@ function processImageWithPaddleOCR(imagePath: string): Promise<OCRResult> {
     })
 
     pythonProcess.on('close', (code) => {
+      console.log(`Python process completed with code: ${code}`)
+      console.log(`Stdout length: ${stdout.length} chars`)
+      console.log(`Stderr length: ${stderr.length} chars`)
+      
       if (code !== 0) {
-        console.error('PaddleOCR script error:', stderr)
+        console.error('PaddleOCR script error code:', code)
+        console.error('PaddleOCR stderr:', stderr)
+        console.error('PaddleOCR stdout:', stdout.substring(0, 500) + '...')
         resolve({
           success: false,
           error: `OCR processing failed with code ${code}: ${stderr}`,
@@ -192,7 +198,7 @@ function processImageWithPaddleOCR(imagePath: string): Promise<OCRResult> {
         error: 'OCR processing timeout',
         confidence: 0
       })
-    }, 30000) // 30 seconds timeout
+    }, 90000) // 90 seconds timeout for large documents with LLM-enhanced processing
   })
 }
 
@@ -218,8 +224,20 @@ async function enhanceExtractedData(data: any) {
     expenseType = categorizeExpense(data.vendor_name)
   }
 
-  // Detect reverse charge from OCR text patterns
-  const reverseChargeDetected = detectReverseChargeFromText(data.raw_text || data.description || '')
+  // Detect reverse charge from OCR text patterns and preserve OCR processor detection
+  const ocrDetectedReverseCharge = data.reverse_charge_detected_in_text || false
+  const textDetectedReverseCharge = detectReverseChargeFromText(data.raw_text || data.description || '')
+  const reverseChargeDetected = ocrDetectedReverseCharge || textDetectedReverseCharge
+  
+  // Debug logging
+  console.log('Reverse charge detection:', {
+    ocrDetectedReverseCharge,
+    textDetectedReverseCharge,
+    reverseChargeDetected,
+    hasRawText: !!(data.raw_text),
+    rawTextLength: (data.raw_text || '').length,
+    suggestedVATType: data.suggested_vat_type
+  })
   
   // Override supplier validation if reverse charge is explicitly mentioned in text
   const finalRequiresReverseCharge = reverseChargeDetected || supplierValidation.requiresReverseCharge
@@ -372,9 +390,31 @@ function categorizeExpense(vendorName: string): string {
  * Validate and correct amounts
  */
 function validateAmounts(data: any) {
-  const { amount, vat_amount, total_amount, vat_rate } = data
+  const { amount, vat_amount, total_amount, vat_rate, reverse_charge_detected_in_text } = data
   
-  // If we have total and VAT rate, calculate amounts
+  // For reverse charge scenarios, net amount equals total amount (no VAT)
+  if (reverse_charge_detected_in_text && total_amount) {
+    return {
+      amount: Math.round(total_amount * 100) / 100,
+      vat_amount: 0,
+      vat_rate: 0
+    }
+  }
+  
+  // If we have total and no explicit VAT calculation, assume 21% standard rate
+  if (total_amount && !reverse_charge_detected_in_text && !amount && !vat_amount) {
+    const vatRate = vat_rate || 0.21 // Default to 21% Dutch VAT
+    const netAmount = total_amount / (1 + vatRate)
+    const calculatedVat = total_amount - netAmount
+    
+    return {
+      amount: Math.round(netAmount * 100) / 100,
+      vat_amount: Math.round(calculatedVat * 100) / 100,
+      vat_rate: vatRate
+    }
+  }
+  
+  // If we have total and VAT rate explicitly, calculate amounts
   if (total_amount && vat_rate && !amount) {
     const netAmount = total_amount / (1 + vat_rate)
     const calculatedVat = total_amount - netAmount

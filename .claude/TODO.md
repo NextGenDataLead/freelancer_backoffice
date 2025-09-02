@@ -8,8 +8,15 @@
 - It could also be the case that reverse charge is not indicated and/or      │
 │   that tax is incorrectly added. That's why you always need to look for a    │
 │   Tax number
+- batch processing of invoices with LLM, PadleOCR extract more data.
 
-
+- KPN
+    - "Fout bij verwerken van de bon. Probeer opnieuw."
+    - wrong numbers front-end, LLM was showing the right results
+    - No "Beschrijving"
+- Mihai
+    - Marketing and reclame Category -> "Sales commission"
+    - No front-end indication of reverse charge, LLM was detecting this successfully. While is says 0 BTW, the BTW tarief is on 21% where I would expect a separate BTW tarief for this called "BTW Verlegd". The same as the section on "Leverancier Validatie" where it now also says aanbevolen BTW Type "Standaard" and I would expect reference to BTW verlegd here as well.
 
 Test:
 - Add a Belgium B2B Klant with mothly invoicing

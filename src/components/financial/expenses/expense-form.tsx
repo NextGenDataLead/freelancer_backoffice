@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   Form,
@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { 
   Receipt, 
   Upload, 
@@ -34,7 +36,8 @@ import {
   AlertCircle,
   CheckCircle,
   Building2,
-  Calendar
+  Calendar,
+  Flag
 } from 'lucide-react'
 import { CreateExpenseSchema } from '@/lib/validations/financial'
 import type { ExpenseWithSupplier, Client } from '@/lib/types/financial'
@@ -55,9 +58,9 @@ const EXPENSE_CATEGORIES = [
   { value: 'office_supplies', label: 'Kantoorbenodigdheden' },
   { value: 'software_subscriptions', label: 'Software abonnementen' },
   { value: 'marketing_advertising', label: 'Marketing & Reclame' },
+  { value: 'professional_services', label: 'Professionele diensten' },
   { value: 'travel_accommodation', label: 'Reis & Verblijf' },
   { value: 'meals_entertainment', label: 'Maaltijden & Entertainment' },
-  { value: 'professional_services', label: 'Professionele diensten' },
   { value: 'equipment_hardware', label: 'Apparatuur & Hardware' },
   { value: 'telecommunications', label: 'Telecommunicatie' },
   { value: 'training_education', label: 'Training & Onderwijs' },
@@ -73,7 +76,8 @@ const EXPENSE_CATEGORIES = [
 const VAT_RATES = [
   { value: 0.21, label: '21% (Standaard tarief)' },
   { value: 0.09, label: '9% (Verlaagd tarief)' },
-  { value: 0.00, label: '0% (Vrijgesteld/EU)' }
+  { value: 0.00, label: '0% (Vrijgesteld/EU)' },
+  { value: -1, label: 'BTW Verlegd (Reverse Charge)' }
 ]
 
 export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }: ExpenseFormProps) {
@@ -102,9 +106,12 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
   const watchedAmount = form.watch('amount')
   const watchedVatRate = form.watch('vat_rate')
   
-  const vatAmount = watchedAmount && watchedVatRate 
+  const vatAmount = watchedAmount && watchedVatRate && watchedVatRate > 0
     ? Math.round(watchedAmount * watchedVatRate * 100) / 100
-    : 0
+    : 0 // For reverse charge (BTW Verlegd), VAT amount is 0
+  
+  // Debug logging for VAT rate
+  console.log('Current VAT rate from form:', watchedVatRate)
   
   const totalAmount = watchedAmount ? watchedAmount + vatAmount : 0
 
@@ -155,15 +162,25 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
       const extractedData = result.data?.extracted_data
       
       if (extractedData && result.data.confidence > 0.7) {
+        console.log('OCR extracted data:', extractedData)
         // Auto-fill form fields
         if (extractedData.vendor_name) {
-          form.setValue('vendor_name', extractedData.vendor_name)
+          form.setValue('vendor_name', extractedData.vendor_name, {
+            shouldValidate: true, 
+            shouldDirty: true 
+          })
         }
         if (extractedData.expense_date) {
-          form.setValue('expense_date', extractedData.expense_date)
+          form.setValue('expense_date', extractedData.expense_date, {
+            shouldValidate: true, 
+            shouldDirty: true 
+          })
         }
         if (extractedData.amount) {
-          form.setValue('amount', extractedData.amount)
+          form.setValue('amount', extractedData.amount, {
+            shouldValidate: true, 
+            shouldDirty: true 
+          })
         }
         if (extractedData.description) {
           form.setValue('description', extractedData.description, { 
@@ -175,16 +192,17 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
           
           // Map the expense type to our categories
           const categoryMap: Record<string, string> = {
-            'meals': 'meals',
-            'travel': 'travel',
-            'equipment': 'equipment',
-            'software': 'software',
+            'meals': 'meals_entertainment',
+            'travel': 'travel_accommodation',
+            'equipment': 'equipment_hardware',
+            'software': 'software_subscriptions',
             'office_supplies': 'office_supplies',
             'telecommunicatie': 'telecommunications',
-            'utilities': 'other', // utilities not in enum, map to other
-            'financial': 'professional_services',
+            'telecommunications': 'telecommunications',
+            'utilities': 'utilities',
+            'financial': 'banking_fees',
             'medical': 'other', // medical not in enum, map to other
-            'marketing': 'marketing',
+            'marketing': 'professional_services', // Sales commissions are professional services
             'insurance': 'insurance',
             'other': 'other'
           }
@@ -196,8 +214,17 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
             shouldDirty: true 
           })
         }
-        if (extractedData.vat_rate) {
-          form.setValue('vat_rate', extractedData.vat_rate)
+        // Set VAT rate - prioritize reverse charge detection
+        if (extractedData.requires_reverse_charge || extractedData.suggested_vat_type === 'reverse_charge') {
+          form.setValue('vat_rate', -1, { // -1 represents 'BTW Verlegd'
+            shouldValidate: true, 
+            shouldDirty: true 
+          })
+        } else if (extractedData.vat_rate) {
+          form.setValue('vat_rate', extractedData.vat_rate, {
+            shouldValidate: true, 
+            shouldDirty: true 
+          })
         }
       }
     } catch (error) {
@@ -210,6 +237,10 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
 
   const onSubmit = async (data: z.infer<typeof CreateExpenseSchema>) => {
     setIsSubmitting(true)
+    
+    console.log('Form submission data:', data)
+    console.log('VAT rate being submitted:', data.vat_rate)
+    console.log('Calculated VAT amount:', vatAmount)
 
     try {
       const expenseData = {
@@ -401,8 +432,48 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
                 />
               </div>
 
-              {/* Supplier Validation Panel */}
-              {form.watch('vendor_name') && (
+              {/* Supplier Validation Panel - OCR Results */}
+              {ocrResult && ocrResult.extracted_data && (
+                <Card className="border-l-4 border-l-blue-500">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center space-x-2">
+                      <Building2 className="h-4 w-4 text-blue-600" />
+                      <CardTitle className="text-sm">Leverancier Validatie</CardTitle>
+                    </div>
+                    <CardDescription className="text-xs">
+                      Automatische controle voor BTW verlegd en buitenlandse leveranciers
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="text-sm font-medium text-blue-900 mb-1">
+                        Aanbevolen BTW Type:
+                      </div>
+                      <Badge variant={ocrResult.extracted_data.suggested_vat_type === 'reverse_charge' ? 'destructive' : 'default'}>
+                        {ocrResult.extracted_data.suggested_vat_type === 'reverse_charge' ? 'BTW Verlegd' : 'Standaard'}
+                      </Badge>
+                    </div>
+                    {ocrResult.extracted_data.requires_reverse_charge && (
+                      <Alert className="mt-3">
+                        <Flag className="h-4 w-4" />
+                        <AlertDescription>
+                          <div className="space-y-1">
+                            <div className="font-medium text-sm">BTW Verlegd Gedetecteerd</div>
+                            <div className="text-xs">
+                              {ocrResult.extracted_data.reverse_charge_detected_in_text 
+                                ? 'Reverse charge tekst gevonden in factuur' 
+                                : 'Buitenlandse leverancier gedetecteerd'}
+                            </div>
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* Fallback Supplier Validation Panel for manual entries */}
+              {!ocrResult && form.watch('vendor_name') && (
                 <SupplierValidationPanel 
                   vendorName={form.watch('vendor_name')}
                 />
@@ -484,7 +555,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
                       <FormLabel>BTW Tarief</FormLabel>
                       <Select 
                         onValueChange={(value) => field.onChange(parseFloat(value))}
-                        defaultValue={field.value.toString()}
+                        value={field.value.toString()}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -514,7 +585,12 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
                       <span>{formatCurrency(watchedAmount)}</span>
                     </div>
                     <div className="flex items-center justify-between text-sm">
-                      <span>BTW ({Math.round(watchedVatRate * 100)}%):</span>
+                      <span>
+                        {watchedVatRate === -1 
+                          ? 'BTW (0, verlegd):' 
+                          : `BTW (${Math.round(watchedVatRate * 100)}%):`
+                        }
+                      </span>
                       <span>{formatCurrency(vatAmount)}</span>
                     </div>
                     <div className="flex items-center justify-between font-semibold border-t pt-2 mt-2">

@@ -7,14 +7,52 @@ Extracts text from receipt images and attempts to parse structured data
 import sys
 import json
 import re
+import requests
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from paddleocr import PaddleOCR
 
 class DutchReceiptParser:
-    """Parse Dutch receipts and extract structured information"""
+    """Parse Dutch receipts and extract structured information with LLM enhancement"""
     
     def __init__(self):
+        # LLM Configuration for field extraction with WSL2/Windows compatibility
+        self.llm_config = {
+            'endpoints': [
+                'http://172.24.0.1:1234/v1',  # Windows host IP (primary)
+                'http://127.0.0.1:1234/v1',  # Direct localhost
+                'http://host.docker.internal:1234/v1',  # WSL2 fallback
+            ],
+            'model': 'microsoft_-_phi-3.5-mini-instruct',  # Updated model ID
+            'timeout': 60,  # Increased timeout for large documents (was 15)
+            'max_retries': 2,
+            'enable_caching': True
+        }
+        
+        # Add Windows host IP and mDNS hostname for WSL2 compatibility
+        try:
+            import subprocess
+            
+            # Method 1: Get Windows host via hostname.local (mDNS)
+            hostname_result = subprocess.run(
+                ["hostname"], capture_output=True, text=True, timeout=2
+            )
+            if hostname_result.returncode == 0:
+                hostname = hostname_result.stdout.strip()
+                self.llm_config['endpoints'].append(f"http://{hostname}.local:1234/v1")
+            
+            # Method 2: Get Windows host IP from resolv.conf
+            resolv_result = subprocess.run(
+                ["cat", "/etc/resolv.conf"], 
+                capture_output=True, text=True, timeout=2
+            )
+            for line in resolv_result.stdout.split('\n'):
+                if 'nameserver' in line:
+                    windows_ip = line.split()[-1]
+                    self.llm_config['endpoints'].append(f"http://{windows_ip}:1234/v1")
+                    break
+        except:
+            pass
         # Initialize PaddleOCR with Dutch support, disable document unwarping to avoid issues
         self.ocr = PaddleOCR(
             use_textline_orientation=True, 
@@ -572,10 +610,356 @@ class DutchReceiptParser:
         closest_rate = min(self.vat_rates, key=lambda x: abs(x - calculated_rate))
         return closest_rate
 
+    def truncate_ocr_text_for_llm(self, ocr_text: str, max_tokens: int = 3500) -> str:
+        """Intelligently truncate OCR text to fit LLM context while preserving key information"""
+        lines = ocr_text.split('\n')
+        
+        # Conservative estimate: 1 token ≈ 1 char (more aggressive than actual but safer)
+        estimated_tokens = len(ocr_text)
+        
+        if estimated_tokens <= max_tokens:
+            return ocr_text
+            
+        print(f"OCR text too long ({estimated_tokens} estimated tokens), truncating to {max_tokens} tokens", file=sys.stderr)
+        
+        # Simple but effective strategy: Take first 30% and last 15% of lines, fill middle with important lines
+        total_lines = len(lines)
+        
+        # Keep first 30% (headers, vendor info, start of transaction details)
+        header_count = min(int(total_lines * 0.3), 100)  # Cap at 100 lines
+        header_lines = lines[:header_count]
+        
+        # Keep last 15% (totals, summary)
+        footer_count = min(int(total_lines * 0.15), 50)  # Cap at 50 lines  
+        footer_lines = lines[-footer_count:] if footer_count > 0 else []
+        
+        # Calculate how much space we have left for middle content
+        header_text = '\n'.join(header_lines)
+        footer_text = '\n'.join(footer_lines)
+        
+        # Reserve space for prompt (~1000 chars) and section separators
+        available_chars = max_tokens - len(header_text) - len(footer_text) - 1200
+        
+        # Find important middle lines (amounts, totals, key info)
+        middle_lines = lines[header_count:-footer_count] if footer_count > 0 else lines[header_count:]
+        
+        # Score and select middle lines
+        important_middle = []
+        current_chars = 0
+        
+        # Priority patterns for key information
+        priority_patterns = [
+            (r'€\s*\d+[.,]\d+', 50),  # Euro amounts - highest priority
+            (r'\d+[.,]\d+\s*€', 50),  # Euro amounts (different format)  
+            (r'total|subtotal', 40),   # Total lines
+            (r'btw|vat|tax', 30),     # Tax information
+            (r'factuur|invoice', 20), # Invoice identifiers
+            (r'datum|date.*\d{4}', 15), # Dates
+        ]
+        
+        # Score each line
+        scored_lines = []
+        for i, line in enumerate(middle_lines):
+            score = 0
+            line_lower = line.lower().strip()
+            
+            if len(line_lower) < 3:  # Skip very short lines
+                continue
+                
+            # Apply priority scoring
+            for pattern, points in priority_patterns:
+                if re.search(pattern, line_lower):
+                    score += points
+            
+            # Basic scoring for lines with numbers
+            if re.search(r'\d', line):
+                score += 5
+                
+            scored_lines.append((score, line))
+        
+        # Sort by score (highest first) and select lines that fit
+        scored_lines.sort(reverse=True, key=lambda x: x[0])
+        
+        for score, line in scored_lines:
+            line_chars = len(line) + 1  # +1 for newline
+            if current_chars + line_chars <= available_chars:
+                important_middle.append(line)
+                current_chars += line_chars
+            if current_chars >= available_chars:
+                break
+        
+        # Combine sections
+        middle_text = '\n'.join(important_middle)
+        
+        if middle_text:
+            truncated = f"{header_text}\n\n[... {len(middle_lines) - len(important_middle)} lines truncated ...]\n{middle_text}\n\n[... summary ...]\n{footer_text}"
+        else:
+            truncated = f"{header_text}\n\n[... {len(middle_lines)} lines truncated ...]\n\n{footer_text}"
+        
+        # Final check - if still too long, aggressively cut header
+        if len(truncated) > max_tokens:
+            # Emergency truncation - just take first 50% of target length
+            emergency_length = max_tokens // 2
+            truncated = ocr_text[:emergency_length] + "\n\n[... text truncated due to length ...]"
+        
+        # Debug logging
+        final_length = len(truncated)
+        print(f"Truncated OCR: {total_lines} lines -> {len(header_lines)} header + {len(important_middle)} middle + {len(footer_lines)} footer", file=sys.stderr)
+        print(f"Original text: {len(ocr_text)} chars → Truncated: {final_length} chars (target: {max_tokens})", file=sys.stderr)
+        
+        return truncated
+
+    def extract_fields_with_llm(self, ocr_text: str) -> Optional[dict]:
+        """Use Phi-3.5-mini for intelligent field extraction from OCR text"""
+        
+        # Truncate OCR text to fit within LLM context limits
+        truncated_text = self.truncate_ocr_text_for_llm(ocr_text)
+        
+        # Create chat messages for proper Phi-3.5-mini-instruct format
+        system_message = "You are an expert invoice data extraction assistant. Extract structured data from OCR text and return only valid JSON."
+        
+        user_message = f"""Extract invoice fields from this OCR text as JSON:
+
+OCR Text:
+{truncated_text}
+
+Return JSON in this exact format:
+{{
+  "vendor_name": "company name with legal suffix (S.R.L., B.V., Ltd, etc)",
+  "description": "main service/product description", 
+  "total_amount": 25.00,
+  "net_amount": 20.66,
+  "vat_amount": 4.34,
+  "vat_rate": 0.21,
+  "date": "2025-01-15",
+  "reverse_charge": false,
+  "currency": "EUR"
+}}
+
+Rules:
+- Extract ALL three amounts: total_amount (incl VAT), net_amount (excl VAT), vat_amount
+- VAT rate: 21% = 0.21, reverse charge = 0
+- European format: "25,00" = 25.00, "600,00" = 600.00  
+- Reverse charge if text contains "reverse charge", "reverse taxation", or "btw verlegd"
+- Date format: convert to YYYY-MM-DD
+
+Return ONLY the JSON object, no other text."""
+
+        # Try multiple endpoints for WSL2/Windows compatibility
+        for endpoint in self.llm_config['endpoints']:
+            try:
+                print(f"Attempting LLM connection to: {endpoint}", file=sys.stderr)
+                
+                # Call Phi-3.5-mini via LM Studio chat completions API with proper format
+                response = requests.post(
+                    f"{endpoint}/chat/completions",
+                    json={
+                        "model": self.llm_config['model'],
+                        "messages": [
+                            {"role": "system", "content": system_message},
+                            {"role": "user", "content": user_message}
+                        ],
+                        "max_tokens": 600,
+                        "temperature": 0.01,  # Very low for consistency
+                        "top_p": 0.95
+                    },
+                    timeout=self.llm_config['timeout']
+                )
+                
+                if response.status_code == 200:
+                    result_text = response.json()["choices"][0]["message"]["content"]
+                    print(f"Raw LLM response from {endpoint}: {repr(result_text)}", file=sys.stderr)
+                    
+                    # Clean and fix JSON response
+                    result_text = result_text.strip()
+                    
+                    # Extract JSON from verbose LLM response  
+                    json_candidates = []
+                    
+                    # Find all potential JSON objects in the response
+                    start_idx = 0
+                    while True:
+                        start = result_text.find('{', start_idx)
+                        if start == -1:
+                            break
+                            
+                        # Find matching closing brace
+                        brace_count = 0
+                        json_end = 0
+                        for i in range(start, len(result_text)):
+                            char = result_text[i]
+                            if char == '{':
+                                brace_count += 1
+                            elif char == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    json_end = i + 1
+                                    break
+                        
+                        if json_end > 0:
+                            json_candidate = result_text[start:json_end]
+                            json_candidates.append(json_candidate)
+                            start_idx = json_end
+                        else:
+                            break
+                    
+                    # Try to parse each JSON candidate
+                    for i, json_candidate in enumerate(json_candidates):
+                        try:
+                            # Clean the JSON candidate
+                            lines = json_candidate.split('\n')
+                            clean_lines = []
+                            for line in lines:
+                                # Remove comments
+                                if '//' in line:
+                                    line = line[:line.find('//')]
+                                # Remove markdown code block markers
+                                line = line.replace('```json', '').replace('```', '')
+                                clean_lines.append(line)
+                            
+                            json_clean = '\n'.join(clean_lines).strip()
+                            
+                            # Try to parse
+                            parsed = json.loads(json_clean)
+                            
+                            # Validate it has required fields for invoice data
+                            if (isinstance(parsed, dict) and 
+                                'vendor_name' in parsed and 
+                                ('total_amount' in parsed or 'amount' in parsed)):
+                                
+                                print(f"Successfully parsed JSON candidate {i+1}/{len(json_candidates)} from {endpoint}", file=sys.stderr)
+                                print(f"LLM extraction successful via {endpoint}: {parsed.get('vendor_name', 'Unknown vendor')}", file=sys.stderr)
+                                return parsed
+                            else:
+                                print(f"JSON candidate {i+1} missing required fields", file=sys.stderr)
+                                
+                        except json.JSONDecodeError as e:
+                            print(f"Failed to parse JSON candidate {i+1}: {e}", file=sys.stderr)
+                            continue
+                    
+                    print(f"No valid JSON found in response from {endpoint} (tried {len(json_candidates)} candidates)", file=sys.stderr)
+                    continue
+                else:
+                    print(f"LLM API error from {endpoint}: {response.status_code} - {response.text}", file=sys.stderr)
+                    continue  # Try next endpoint
+                    
+            except requests.exceptions.RequestException as e:
+                print(f"LLM connection failed to {endpoint}: {e}", file=sys.stderr)
+                continue  # Try next endpoint
+            except json.JSONDecodeError as e:
+                print(f"LLM returned invalid JSON from {endpoint}: {e}", file=sys.stderr)
+                continue  # Try next endpoint
+            except Exception as e:
+                print(f"LLM extraction failed from {endpoint}: {e}", file=sys.stderr)
+                continue  # Try next endpoint
+        
+        # If all endpoints failed
+        print("All LLM endpoints failed, falling back to rule-based parsing", file=sys.stderr)
+        return None
+
+    def fallback_rule_parsing(self, text_lines: List[str]) -> dict:
+        """Fallback to rule-based parsing if LLM fails"""
+        print("Using rule-based fallback parsing", file=sys.stderr)
+        
+        vendor = self.parse_vendor(text_lines)
+        amounts = self.parse_amounts(text_lines)
+        receipt_date = self.parse_date(text_lines)
+        description = self.parse_description(text_lines)
+        
+        # Check for reverse charge
+        raw_text = ' '.join(text_lines)
+        reverse_charge_detected = self.detect_reverse_charge_patterns(raw_text)
+        
+        # Determine VAT rate and amounts
+        if reverse_charge_detected:
+            # For reverse charge: net amount = total amount, VAT = 0
+            vat_rate = 0.0
+            vat_amount = 0.0
+            net_amount = amounts['total_amount'] or amounts['net_amount']  # Use total as net for reverse charge
+        else:
+            # Standard VAT calculation
+            vat_rate = 0.21  # Default
+            if amounts['vat_amount'] and amounts['net_amount']:
+                vat_rate = self.determine_vat_rate(amounts['vat_amount'], amounts['net_amount'])
+            vat_amount = amounts['vat_amount']
+            net_amount = amounts['net_amount']
+            
+        return {
+            'vendor_name': vendor,
+            'expense_date': receipt_date,
+            'description': description,
+            'amount': net_amount,
+            'vat_amount': vat_amount,
+            'vat_rate': vat_rate,
+            'total_amount': amounts['total_amount'],
+            'currency': 'EUR',
+            'requires_manual_review': True,  # Mark as needing review since LLM failed
+            'reverse_charge_detected_in_text': reverse_charge_detected,
+            'suggested_vat_type': 'reverse_charge' if reverse_charge_detected else 'standard'
+        }
+
+    def categorize_expense(self, vendor_name: str, description: str = "") -> str:
+        """Categorize expense based on vendor name and description using existing patterns"""
+        vendor_lower = vendor_name.lower()
+        description_lower = description.lower() if description else ""
+        combined_text = f"{vendor_lower} {description_lower}"
+        
+        # Use existing vendor categorization patterns
+        for category, patterns in {
+            'meals': ['restaurant', 'cafe', 'bistro', 'eetcafe', 'mcdonalds', 'burger king', 'subway'],
+            'travel': ['ns ', 'gvb', 'uber', 'taxi', 'ov-chipkaart', 'train', 'bus'],
+            'office_supplies': ['staples', 'office depot', 'supplies', 'kantoor'],
+            'telecommunications': ['kpn', 'vodafone', 't-mobile', 'ziggo', 'telecom'],
+            'professional_services': ['consultant', 'advies', 'legal', 'accountant', 'development', 'design', 'it services', 'software', 'commission', 'comission', 'game development', 'programming', 'coding'],
+            'software': ['microsoft', 'adobe', 'software', 'saas', 'license'],
+            'marketing': ['google ads', 'facebook', 'marketing', 'advertising', 'social media', 'sales commission', 'lead generation'],
+            'equipment': ['apple', 'dell', 'hp', 'laptop', 'computer', 'equipment'],
+            'insurance': ['insurance', 'verzekering', 'asr', 'aegon']
+        }.items():
+            for pattern in patterns:
+                if pattern in combined_text:
+                    return category
+        
+        return 'other'
+
+    def apply_business_logic(self, llm_fields: dict, raw_text: str) -> dict:
+        """Apply additional business logic to LLM-extracted fields"""
+        
+        # Basic expense categorization
+        vendor_name = llm_fields.get('vendor_name', '')
+        description = llm_fields.get('description', '')
+        expense_type = self.categorize_expense(vendor_name, description) if vendor_name else 'other'
+        
+        # Detect reverse charge from both LLM and text patterns
+        reverse_charge_detected = llm_fields.get('reverse_charge', False)
+        if not reverse_charge_detected:
+            # Additional text-based detection as fallback
+            reverse_charge_detected = self.detect_reverse_charge_patterns(raw_text)
+        
+        return {
+            'expense_type': expense_type,
+            'reverse_charge_detected_in_text': reverse_charge_detected,
+            'suggested_vat_type': 'reverse_charge' if reverse_charge_detected else 'standard',
+            'suggested_payment_method': 'bank_transfer'
+        }
+        
+    def detect_reverse_charge_patterns(self, text: str) -> bool:
+        """Detect reverse charge patterns in text as fallback"""
+        if not text:
+            return False
+            
+        text_lower = text.lower()
+        patterns = [
+            'reverse charge', 'reverse taxation', 'reverse vat',
+            'btw verlegd', 'verlegde btw', 'btw verlegging'
+        ]
+        
+        return any(pattern in text_lower for pattern in patterns)
+
     def process_receipt(self, image_path: str) -> Dict:
-        """Process receipt image and extract structured data"""
+        """Process receipt with LLM-enhanced field extraction"""
         try:
-            # Extract text using OCR
+            # Stage 1: OCR text extraction (keep current PaddleOCR)
             ocr_results = self.extract_text(image_path)
             if not ocr_results:
                 return {
@@ -587,37 +971,49 @@ class DutchReceiptParser:
             # Get text lines and overall confidence
             text_lines = [result[0] for result in ocr_results]
             avg_confidence = sum(result[1] for result in ocr_results) / len(ocr_results)
+            raw_text = '\n'.join(text_lines)
             
-            # Parse structured information
-            vendor = self.parse_vendor(text_lines)
-            amounts = self.parse_amounts(text_lines)
-            receipt_date = self.parse_date(text_lines)
-            description = self.parse_description(text_lines)
+            # Stage 2: LLM field extraction
+            llm_fields = self.extract_fields_with_llm(raw_text)
             
-            # Determine VAT rate
-            vat_rate = 0.21  # Default
-            if amounts['vat_amount'] and amounts['net_amount']:
-                vat_rate = self.determine_vat_rate(amounts['vat_amount'], amounts['net_amount'])
             
+            if llm_fields:
+                # Use LLM extraction results
+                extracted_data = {
+                    'vendor_name': llm_fields.get('vendor_name'),
+                    'expense_date': llm_fields.get('date'),
+                    'description': llm_fields.get('description'),
+                    'amount': llm_fields.get('net_amount'),
+                    'vat_amount': llm_fields.get('vat_amount'),
+                    'vat_rate': llm_fields.get('vat_rate', 0.21),
+                    'total_amount': llm_fields.get('total_amount'),
+                    'currency': llm_fields.get('currency', 'EUR'),
+                    'requires_manual_review': avg_confidence < 0.8
+                }
+                
+                # Apply business logic
+                business_logic = self.apply_business_logic(llm_fields, raw_text)
+                extracted_data.update(business_logic)
+                
+                extraction_method = 'llm'
+                processing_engine = 'PaddleOCR + Phi-3.5-mini'
+                
+            else:
+                # Fallback to rule-based parsing
+                extracted_data = self.fallback_rule_parsing(text_lines)
+                extraction_method = 'rules'
+                processing_engine = 'PaddleOCR + Rules'
+                
             # Build result
             result = {
                 'success': True,
                 'confidence': round(avg_confidence, 2),
-                'raw_text': '\n'.join(text_lines),
-                'extracted_data': {
-                    'vendor_name': vendor,
-                    'expense_date': receipt_date,
-                    'description': description,
-                    'amount': amounts['net_amount'],
-                    'vat_amount': amounts['vat_amount'],
-                    'vat_rate': vat_rate,
-                    'total_amount': amounts['total_amount'],
-                    'currency': 'EUR',
-                    'requires_manual_review': avg_confidence < 0.8 or not vendor or not amounts['total_amount']
-                },
+                'raw_text': raw_text,
+                'extracted_data': extracted_data,
+                'extraction_method': extraction_method,
                 'ocr_metadata': {
                     'line_count': len(text_lines),
-                    'processing_engine': 'PaddleOCR',
+                    'processing_engine': processing_engine,
                     'language': 'nl/en',
                     'confidence_scores': [result[1] for result in ocr_results]
                 }

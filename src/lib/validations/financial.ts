@@ -82,10 +82,10 @@ export const CurrencyAmountSchema = z
   .min(0, "Amount must be positive")
   .multipleOf(0.01, "Amount must have at most 2 decimal places");
 
-// VAT rate validation (0-100%)
+// VAT rate validation (0-100%, 0 allowed for reverse charge, -1 for reverse charge)
 export const VATRateSchema = z
   .number()
-  .min(0, "VAT rate must be positive")
+  .min(-1, "VAT rate must be valid (0% or higher, or -1 for reverse charge)")
   .max(1, "VAT rate must be less than or equal to 100%");
 
 // ====================
@@ -178,7 +178,10 @@ export const UpdateInvoiceStatusSchema = z.object({
 
 export const CreateExpenseSchema = z.object({
   supplier_id: z.string().uuid("Invalid supplier ID").optional(),
-  expense_date: z.date().default(() => new Date()),
+  expense_date: z.union([
+    z.date(),
+    z.string().transform((str) => new Date(str))
+  ]).default(() => new Date()),
   description: z.string().min(1, "Description is required").max(500, "Description too long"),
   category: ExpenseCategorySchema,
   amount: CurrencyAmountSchema,
@@ -198,7 +201,10 @@ export const CreateExpenseSchema = z.object({
 export const UpdateExpenseSchema = z.object({
   id: z.string().uuid("Invalid expense ID"),
   supplier_id: z.string().uuid("Invalid supplier ID").optional(),
-  expense_date: z.date().optional(),
+  expense_date: z.union([
+    z.date(),
+    z.string().transform((str) => new Date(str))
+  ]).optional(),
   description: z.string().min(1, "Description is required").max(500, "Description too long").optional(),
   category: ExpenseCategorySchema.optional(),
   amount: CurrencyAmountSchema.optional(),
@@ -345,7 +351,7 @@ export const ExpenseFormSchema = z.object({
   description: z.string().min(1, "Description is required"),
   category: ExpenseCategorySchema,
   amount: z.coerce.number().min(0, "Amount must be positive"),
-  vat_rate: z.coerce.number().min(0).max(1).default(0.21),
+  vat_rate: z.coerce.number().min(-1, "VAT rate must be valid (0% or higher, or -1 for reverse charge)").max(1).default(0.21),
   is_deductible: z.boolean().default(true),
   receipt_file: z.any().optional()
 });
