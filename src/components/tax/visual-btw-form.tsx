@@ -305,11 +305,11 @@ export function VisualBTWForm({ btwForm }: VisualBTWFormProps) {
             </div>
           </div>
 
-          {/* Section 4: Prestaties vanuit het buitenland ❌ NOT IMPLEMENTED */}
-          <div className="border-2 border-orange-200 rounded-lg p-4 bg-orange-25">
-            <h3 className="font-semibold mb-3 text-sm bg-orange-100 p-2 rounded">
+          {/* Section 4: Prestaties vanuit het buitenland ✅ IMPLEMENTED */}
+          <div className="border-2 border-green-200 rounded-lg p-4 bg-green-25">
+            <h3 className="font-semibold mb-3 text-sm bg-green-100 p-2 rounded">
               4. Prestaties vanuit het buitenland aan u geleverd (Foreign acquisitions)
-              <div className="text-xs font-normal text-orange-700 mt-1">✅ STRUCTUUR CORRECT - Database uitbreiding nodig</div>
+              <div className="text-xs font-normal text-green-700 mt-1">✅ VOLLEDIG GEÏMPLEMENTEERD - Inclusief EU diensten reverse charge</div>
             </h3>
             
             {/* Rubriek 4a - Non-EU acquisitions ✅ STRUCTURE CORRECT */}
@@ -348,15 +348,15 @@ export function VisualBTWForm({ btwForm }: VisualBTWFormProps) {
               </div>
             </div>
 
-            {/* Rubriek 4b - EU acquisitions ✅ STRUCTURE CORRECT */}
-            <div className="border border-gray-300 rounded p-3 mb-3 bg-gray-25">
+            {/* Rubriek 4b - EU acquisitions ✅ IMPLEMENTED */}
+            <div className="border border-green-300 rounded p-3 mb-3 bg-green-25">
               <div className="grid grid-cols-12 gap-2 mb-2">
-                <div className="col-span-1 text-sm font-mono bg-gray-200 p-2 rounded text-center">
+                <div className="col-span-1 text-sm font-mono bg-green-100 p-2 rounded text-center font-bold">
                   4b
                 </div>
                 <div className="col-span-11 text-sm font-semibold p-2 text-gray-600">
                   Leveringen/diensten uit landen binnen de EU
-                  <div className="text-xs text-red-600 font-semibold">❌ BEPERKING</div>
+                  <div className="text-xs text-green-600 font-semibold">✅ ONDERSTEUND</div>
                   <div className="text-xs text-gray-500">Intracommunautaire verwerving + EU diensten</div>
                 </div>
               </div>
@@ -365,8 +365,8 @@ export function VisualBTWForm({ btwForm }: VisualBTWFormProps) {
                 <div className="col-span-6 text-sm p-1 text-gray-600">
                   Omzet (waarde goederen/diensten):
                 </div>
-                <div className="col-span-5 text-right p-1 bg-gray-100 rounded font-mono text-sm text-muted-foreground">
-                  € 0,00
+                <div className="col-span-5 text-right p-1 bg-green-50 rounded font-mono text-sm">
+                  {formatEuropeanCurrency(btwForm.section_4.rubriek_4b.omzet)}
                 </div>
               </div>
               <div className="grid grid-cols-12 gap-2">
@@ -374,8 +374,8 @@ export function VisualBTWForm({ btwForm }: VisualBTWFormProps) {
                 <div className="col-span-6 text-sm p-1 text-gray-600">
                   BTW (verschuldigd door u):
                 </div>
-                <div className="col-span-5 text-right p-1 bg-gray-100 rounded font-mono text-sm text-muted-foreground">
-                  € 0,00
+                <div className="col-span-5 text-right p-1 bg-green-50 rounded font-mono text-sm">
+                  {formatEuropeanCurrency(btwForm.section_4.rubriek_4b.btw)}
                 </div>
               </div>
               <div className="text-xs text-gray-600 p-2 mt-2 bg-gray-50 rounded">

@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { 
   Receipt, 
@@ -35,9 +35,11 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
+  XCircle,
   Building2,
   Calendar,
-  Flag
+  Flag,
+  AlertTriangle
 } from 'lucide-react'
 import { CreateExpenseSchema } from '@/lib/validations/financial'
 import type { ExpenseWithSupplier, Client } from '@/lib/types/financial'
@@ -53,24 +55,25 @@ interface ExpenseFormProps {
 
 // Removed SupplierOption interface - using vendor_name instead
 
-// Dutch expense categories with translations
+// Official Belastingdienst expense categories
 const EXPENSE_CATEGORIES = [
-  { value: 'office_supplies', label: 'Kantoorbenodigdheden' },
-  { value: 'software_subscriptions', label: 'Software abonnementen' },
-  { value: 'marketing_advertising', label: 'Marketing & Reclame' },
-  { value: 'professional_services', label: 'Professionele diensten' },
-  { value: 'travel_accommodation', label: 'Reis & Verblijf' },
-  { value: 'meals_entertainment', label: 'Maaltijden & Entertainment' },
-  { value: 'equipment_hardware', label: 'Apparatuur & Hardware' },
-  { value: 'telecommunications', label: 'Telecommunicatie' },
-  { value: 'training_education', label: 'Training & Onderwijs' },
-  { value: 'insurance', label: 'Verzekeringen' },
-  { value: 'banking_fees', label: 'Bankkosten' },
-  { value: 'utilities', label: 'Nutsvoorzieningen' },
-  { value: 'rent_lease', label: 'Huur & Lease' },
-  { value: 'repairs_maintenance', label: 'Reparaties & Onderhoud' },
-  { value: 'other', label: 'Overig' }
+  { value: 'kantoorbenodigdheden', label: 'Kantoorbenodigdheden' },
+  { value: 'reiskosten', label: 'Reiskosten' },
+  { value: 'maaltijden_zakelijk', label: 'Maaltijden & Zakelijk Entertainment' },
+  { value: 'marketing_reclame', label: 'Marketing & Reclame' },
+  { value: 'software_ict', label: 'Software & ICT' },
+  { value: 'afschrijvingen', label: 'Afschrijvingen Bedrijfsmiddelen' },
+  { value: 'verzekeringen', label: 'Verzekeringen' },
+  { value: 'professionele_diensten', label: 'Professionele Diensten' },
+  { value: 'werkruimte_kantoor', label: 'Werkruimte & Kantoorkosten' },
+  { value: 'voertuigkosten', label: 'Voertuigkosten' },
+  { value: 'telefoon_communicatie', label: 'Telefoon & Communicatie' },
+  { value: 'vakliteratuur', label: 'Vakliteratuur' },
+  { value: 'werkkleding', label: 'Werkkleding' },
+  { value: 'relatiegeschenken_representatie', label: 'Relatiegeschenken & Representatie' },
+  { value: 'overige_zakelijk', label: 'Overige Zakelijke Kosten' }
 ]
+
 
 // Common VAT rates in Netherlands
 const VAT_RATES = [
@@ -93,8 +96,9 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
       vendor_name: expense?.vendor_name || '',
       expense_date: expense?.expense_date || new Date().toISOString().split('T')[0],
       description: expense?.description || '',
-      category: expense?.category || 'other',
+      category: expense?.category || 'overige_zakelijk',
       amount: expense?.amount || 0,
+      vat_amount: expense?.vat_amount || 0,
       vat_rate: expense?.vat_rate || 0.21,
       is_deductible: expense?.is_deductible ?? true,
     },
@@ -190,24 +194,25 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
         }
         if (extractedData.expense_type) {
           
-          // Map the expense type to our categories
+          // Map OCR expense types to official Belastingdienst categories
           const categoryMap: Record<string, string> = {
-            'meals': 'meals_entertainment',
-            'travel': 'travel_accommodation',
-            'equipment': 'equipment_hardware',
-            'software': 'software_subscriptions',
-            'office_supplies': 'office_supplies',
-            'telecommunicatie': 'telecommunications',
-            'telecommunications': 'telecommunications',
-            'utilities': 'utilities',
-            'financial': 'banking_fees',
-            'medical': 'other', // medical not in enum, map to other
-            'marketing': 'professional_services', // Sales commissions are professional services
-            'insurance': 'insurance',
-            'other': 'other'
+            'meals': 'maaltijden_zakelijk',
+            'travel': 'reiskosten', 
+            'equipment': 'afschrijvingen',
+            'software': 'software_ict',
+            'office_supplies': 'kantoorbenodigdheden',
+            'telecommunications': 'telefoon_communicatie',
+            'telefoon_communicatie': 'telefoon_communicatie', // Direct mapping for official category
+            'utilities': 'werkruimte_kantoor',
+            'financial': 'professionele_diensten',
+            'medical': 'overige_zakelijk',
+            'marketing': 'marketing_reclame',
+            'insurance': 'verzekeringen',
+            'other': 'overige_zakelijk',
+            'overige_zakelijk': 'overige_zakelijk' // Direct mapping for official category
           }
           
-          const mappedCategory = categoryMap[extractedData.expense_type] || 'other'
+          const mappedCategory = categoryMap[extractedData.expense_type] || 'overige_zakelijk'
           
           form.setValue('category', mappedCategory, { 
             shouldValidate: true, 
@@ -243,21 +248,28 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
     console.log('Calculated VAT amount:', vatAmount)
 
     try {
+      // Convert date to YYYY-MM-DD string format for API
+      const formattedDate = data.expense_date instanceof Date 
+        ? data.expense_date.toISOString().split('T')[0]
+        : data.expense_date.toString().split('T')[0]
+
+      // Extract supplier country from OCR result if available
+      const supplierCountry = ocrResult?.extracted_data?.validated_supplier?.country_code || data.supplier_country
+
+      // Send only fields that match CreateExpenseSchema
       const expenseData = {
-        ...data,
+        vendor_name: data.vendor_name,
+        expense_date: formattedDate,
+        description: data.description,
+        category: data.category,
+        amount: data.amount,
         vat_amount: vatAmount,
-        total_amount: totalAmount,
-        // Include OCR metadata if available
-        ...(ocrResult && {
-          ocr_confidence_score: ocrResult.confidence,
-          ocr_extracted_fields: ocrResult.extracted_data,
-          ocr_raw_text: ocrResult.raw_text,
-          processing_engine: ocrResult.ocr_metadata?.processing_engine || 'PaddleOCR',
-          requires_manual_review: false, // User has reviewed and submitted
-          is_likely_foreign_supplier: ocrResult.extracted_data?.is_likely_foreign_supplier || false
-        }),
-        // In a real implementation, you would upload the file and include the URL
-        receipt_url: uploadedFile ? 'https://example.com/receipt.jpg' : undefined
+        vat_rate: data.vat_rate,
+        is_deductible: data.is_deductible,
+        // Optional fields from schema
+        supplier_id: data.supplier_id,
+        receipt_url: data.receipt_url,
+        supplier_country: supplierCountry
       }
 
       const url = expense ? `/api/expenses/${expense.id}` : '/api/expenses'
@@ -305,7 +317,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5" />
-            Bon uploaden (Optioneel)
+            Bon uploaden
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -349,30 +361,6 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
               </label>
             </div>
             
-            {ocrResult && (
-              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  {ocrResult.confidence > 0.8 ? (
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-yellow-600" />
-                  )}
-                  <span className="text-sm font-medium">
-                    OCR Resultaat ({Math.round(ocrResult.confidence * 100)}% betrouwbaarheid)
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {ocrResult.extracted_data?.requires_manual_review
-                    ? 'Gegevens zijn automatisch ingevuld, controleer voor verzenden'
-                    : 'Gegevens zijn met hoge betrouwbaarheid ingevuld'}
-                </p>
-                {ocrResult.extracted_data?.is_likely_foreign_supplier && (
-                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                    ⚠️ Mogelijke buitenlandse leverancier - BTW Verlegd kan van toepassing zijn
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
@@ -432,45 +420,6 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
                 />
               </div>
 
-              {/* Supplier Validation Panel - OCR Results */}
-              {ocrResult && ocrResult.extracted_data && (
-                <Card className="border-l-4 border-l-blue-500">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center space-x-2">
-                      <Building2 className="h-4 w-4 text-blue-600" />
-                      <CardTitle className="text-sm">Leverancier Validatie</CardTitle>
-                    </div>
-                    <CardDescription className="text-xs">
-                      Automatische controle voor BTW verlegd en buitenlandse leveranciers
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="text-sm font-medium text-blue-900 mb-1">
-                        Aanbevolen BTW Type:
-                      </div>
-                      <Badge variant={ocrResult.extracted_data.suggested_vat_type === 'reverse_charge' ? 'destructive' : 'default'}>
-                        {ocrResult.extracted_data.suggested_vat_type === 'reverse_charge' ? 'BTW Verlegd' : 'Standaard'}
-                      </Badge>
-                    </div>
-                    {ocrResult.extracted_data.requires_reverse_charge && (
-                      <Alert className="mt-3">
-                        <Flag className="h-4 w-4" />
-                        <AlertDescription>
-                          <div className="space-y-1">
-                            <div className="font-medium text-sm">BTW Verlegd Gedetecteerd</div>
-                            <div className="text-xs">
-                              {ocrResult.extracted_data.reverse_charge_detected_in_text 
-                                ? 'Reverse charge tekst gevonden in factuur' 
-                                : 'Buitenlandse leverancier gedetecteerd'}
-                            </div>
-                          </div>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
               
               {/* Fallback Supplier Validation Panel for manual entries */}
               {!ocrResult && form.watch('vendor_name') && (
@@ -575,6 +524,26 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
                   )}
                 />
               </div>
+
+              {/* VIES VAT Status Alert */}
+              {ocrResult?.extracted_data?.vat_validation_status && ocrResult?.extracted_data?.vat_validation_message && (
+                <Alert className={
+                  ocrResult.extracted_data.vat_validation_status === 'valid_eu_vat' ? 'border-orange-200 bg-orange-50' :
+                  ocrResult.extracted_data.vat_validation_status === 'valid_nl_vat' ? 'border-green-200 bg-green-50' :
+                  'border-yellow-200 bg-yellow-50'
+                }>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle className="text-sm font-medium">
+                    {ocrResult.extracted_data.vat_validation_status === 'valid_eu_vat' && 'BTW Verlegd - EU Leverancier'}
+                    {ocrResult.extracted_data.vat_validation_status === 'valid_nl_vat' && 'Nederlandse Leverancier'}
+                    {ocrResult.extracted_data.vat_validation_status === 'invalid_vat' && 'Ongeldig BTW Nummer'}
+                    {ocrResult.extracted_data.vat_validation_status === 'unknown_vat' && 'Geen BTW Nummer Gevonden'}
+                  </AlertTitle>
+                  <AlertDescription className="text-sm mt-1">
+                    {ocrResult.extracted_data.vat_validation_message}
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {/* Amount Summary */}
               {watchedAmount > 0 && (

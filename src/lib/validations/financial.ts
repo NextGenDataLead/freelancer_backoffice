@@ -29,16 +29,21 @@ export const VATTypeSchema = z.enum([
 ] as const);
 
 export const ExpenseCategorySchema = z.enum([
-  'office_supplies',
-  'travel',
-  'meals',
-  'marketing',
-  'software',
-  'equipment',
-  'insurance',
-  'professional_services',
-  'telecommunications',
-  'other'
+  'kantoorbenodigdheden',
+  'reiskosten',
+  'maaltijden_zakelijk',
+  'marketing_reclame',
+  'software_ict',
+  'afschrijvingen',
+  'verzekeringen',
+  'professionele_diensten',
+  'werkruimte_kantoor',
+  'voertuigkosten',
+  'telefoon_communicatie',
+  'vakliteratuur',
+  'werkkleding',
+  'relatiegeschenken_representatie',
+  'overige_zakelijk'
 ] as const);
 
 export const BusinessTypeSchema = z.enum([
@@ -178,6 +183,8 @@ export const UpdateInvoiceStatusSchema = z.object({
 
 export const CreateExpenseSchema = z.object({
   supplier_id: z.string().uuid("Invalid supplier ID").optional(),
+  vendor_name: z.string().min(1, "Vendor name is required").max(255, "Vendor name too long"),
+  supplier_country: z.string().length(2, "Invalid country code").optional(), // ISO 2-letter country code
   expense_date: z.union([
     z.date(),
     z.string().transform((str) => new Date(str))
@@ -186,21 +193,15 @@ export const CreateExpenseSchema = z.object({
   category: ExpenseCategorySchema,
   amount: CurrencyAmountSchema,
   vat_amount: CurrencyAmountSchema.default(0),
-  total_amount: CurrencyAmountSchema,
   vat_rate: VATRateSchema.default(0.21),
   is_deductible: z.boolean().default(true),
   receipt_url: z.string().url("Invalid receipt URL").optional()
-}).refine(
-  data => data.total_amount >= data.amount,
-  { message: "Total amount must be greater than or equal to base amount", path: ["total_amount"] }
-).refine(
-  data => Math.abs(data.total_amount - (data.amount + data.vat_amount)) < 0.01,
-  { message: "Total amount must equal amount plus VAT", path: ["total_amount"] }
-);
+});
 
 export const UpdateExpenseSchema = z.object({
   id: z.string().uuid("Invalid expense ID"),
   supplier_id: z.string().uuid("Invalid supplier ID").optional(),
+  vendor_name: z.string().min(1, "Vendor name is required").max(255, "Vendor name too long").optional(),
   expense_date: z.union([
     z.date(),
     z.string().transform((str) => new Date(str))
@@ -209,7 +210,6 @@ export const UpdateExpenseSchema = z.object({
   category: ExpenseCategorySchema.optional(),
   amount: CurrencyAmountSchema.optional(),
   vat_amount: CurrencyAmountSchema.optional(),
-  total_amount: CurrencyAmountSchema.optional(),
   vat_rate: VATRateSchema.optional(),
   is_deductible: z.boolean().optional(),
   receipt_url: z.string().url("Invalid receipt URL").optional()

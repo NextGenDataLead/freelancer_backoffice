@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Edit, Eye, Send, Check, AlertCircle, Clock, FileText, Download } from 'lucide-react'
+import { Plus, Edit, Eye, Send, Check, AlertCircle, Clock, FileText, Download, Loader2 } from 'lucide-react'
 import type { InvoiceWithClient } from '@/lib/types/financial'
 
 interface InvoiceListProps {
@@ -37,6 +37,7 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [sendingInvoices, setSendingInvoices] = useState<Set<string>>(new Set())
 
   const fetchInvoices = async (page: number = 1) => {
     try {
@@ -72,10 +73,41 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
     fetchInvoices()
   }, [statusFilter])
 
+  const handleSendInvoice = async (invoice: InvoiceWithClient) => {
+    const invoiceId = invoice.id
+    setSendingInvoices(prev => new Set(prev).add(invoiceId))
+    
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'sent' })
+      })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to send invoice')
+      }
+      
+      setInvoices(prev => prev.map(inv => 
+        inv.id === invoiceId ? { ...inv, status: 'sent' } : inv
+      ))
+    } catch (error) {
+      console.error('Error sending invoice:', error)
+      alert(error instanceof Error ? error.message : 'Failed to send invoice')
+    } finally {
+      setSendingInvoices(prev => {
+        const updated = new Set(prev)
+        updated.delete(invoiceId)
+        return updated
+      })
+    }
+  }
+
   const handleStatusUpdate = async (invoice: InvoiceWithClient, newStatus: string) => {
     try {
       const response = await fetch(`/api/invoices/${invoice.id}/status`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       })
@@ -361,11 +393,16 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleStatusUpdate(invoice, 'sent')}
+                            onClick={() => handleSendInvoice(invoice)}
                             className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
                             title="Factuur verzenden"
+                            disabled={sendingInvoices.has(invoice.id)}
                           >
-                            <Send className="h-3 w-3" />
+                            {sendingInvoices.has(invoice.id) ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Send className="h-3 w-3" />
+                            )}
                           </Button>
                         )}
                         

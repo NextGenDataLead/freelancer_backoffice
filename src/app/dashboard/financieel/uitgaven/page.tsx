@@ -34,21 +34,21 @@ export default function ExpensesPage() {
 
   const getCategoryDisplayName = (category: string) => {
     const categories: Record<string, string> = {
-      'meals': 'Maaltijden & Entertainment',
-      'software': 'Software & Abonnementen', 
-      'office_supplies': 'Kantoorbenodigdheden',
-      'travel': 'Reis & Verblijf',
-      'marketing': 'Marketing & Reclame',
-      'professional': 'Professionele diensten',
-      'equipment': 'Apparatuur & Hardware',
-      'telecommunications': 'Telecommunicatie',
-      'training': 'Training & Onderwijs',
-      'insurance': 'Verzekeringen',
-      'banking': 'Bankkosten',
-      'utilities': 'Nutsvoorzieningen',
-      'rent': 'Huur & Lease',
-      'repairs': 'Reparaties & Onderhoud',
-      'other': 'Overig'
+      'kantoorbenodigdheden': 'Kantoorbenodigdheden',
+      'reiskosten': 'Reiskosten',
+      'maaltijden_zakelijk': 'Maaltijden & Zakelijk Entertainment',
+      'marketing_reclame': 'Marketing & Reclame',
+      'software_ict': 'Software & ICT',
+      'afschrijvingen': 'Afschrijvingen Bedrijfsmiddelen',
+      'verzekeringen': 'Verzekeringen',
+      'professionele_diensten': 'Professionele Diensten',
+      'werkruimte_kantoor': 'Werkruimte & Kantoorkosten',
+      'voertuigkosten': 'Voertuigkosten',
+      'telefoon_communicatie': 'Telefoon & Communicatie',
+      'vakliteratuur': 'Vakliteratuur',
+      'werkkleding': 'Werkkleding',
+      'relatiegeschenken_representatie': 'Relatiegeschenken & Representatie',
+      'overige_zakelijk': 'Overige Zakelijke Kosten'
     }
     return categories[category] || category
   }

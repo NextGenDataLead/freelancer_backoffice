@@ -20,8 +20,10 @@ import {
   AlertCircle, 
   Building2,
   Calendar,
-  Euro
+  Euro,
+  Loader2
 } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { ExpenseWithSupplier } from '@/lib/types/financial'
 
 interface ExpenseListProps {
@@ -46,6 +48,7 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [approvingExpenses, setApprovingExpenses] = useState<Set<string>>(new Set())
 
   const fetchExpenses = async (page: number = 1) => {
     try {
@@ -64,6 +67,46 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleApprovalToggle = async (expense: ExpenseWithSupplier) => {
+    const expenseId = expense.id
+    const newApprovedStatus = expense.status !== 'approved'
+
+    setApprovingExpenses(prev => new Set(prev).add(expenseId))
+
+    try {
+      const response = await fetch(`/api/expenses/${expenseId}/approve`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved: newApprovedStatus })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to update expense approval')
+      }
+
+      // Update the expense in the local state
+      setExpenses(prev => prev.map(exp => 
+        exp.id === expenseId 
+          ? { ...exp, status: newApprovedStatus ? 'approved' : 'draft' }
+          : exp
+      ))
+
+      // Show success message
+      console.log(`Expense ${newApprovedStatus ? 'approved' : 'unapproved'} successfully`)
+      
+    } catch (error) {
+      console.error('Error updating expense approval:', error)
+      alert(error instanceof Error ? error.message : 'Failed to update approval')
+    } finally {
+      setApprovingExpenses(prev => {
+        const updated = new Set(prev)
+        updated.delete(expenseId)
+        return updated
+      })
     }
   }
 
@@ -88,21 +131,21 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
 
   const getCategoryLabel = (category: string) => {
     const categories: Record<string, string> = {
-      'office_supplies': 'Kantoorbenodigdheden',
-      'software_subscriptions': 'Software abonnementen',
-      'marketing_advertising': 'Marketing & Reclame',
-      'travel_accommodation': 'Reis & Verblijf',
-      'meals_entertainment': 'Maaltijden & Entertainment',
-      'professional_services': 'Professionele diensten',
-      'equipment_hardware': 'Apparatuur & Hardware',
-      'telecommunications': 'Telecommunicatie',
-      'training_education': 'Training & Onderwijs',
-      'insurance': 'Verzekeringen',
-      'banking_fees': 'Bankkosten',
-      'utilities': 'Nutsvoorzieningen',
-      'rent_lease': 'Huur & Lease',
-      'repairs_maintenance': 'Reparaties & Onderhoud',
-      'other': 'Overig'
+      'kantoorbenodigdheden': 'Kantoorbenodigdheden',
+      'reiskosten': 'Reiskosten',
+      'maaltijden_zakelijk': 'Maaltijden & Zakelijk Entertainment',
+      'marketing_reclame': 'Marketing & Reclame',
+      'software_ict': 'Software & ICT',
+      'afschrijvingen': 'Afschrijvingen Bedrijfsmiddelen',
+      'verzekeringen': 'Verzekeringen',
+      'professionele_diensten': 'Professionele Diensten',
+      'werkruimte_kantoor': 'Werkruimte & Kantoorkosten',
+      'voertuigkosten': 'Voertuigkosten',
+      'telefoon_communicatie': 'Telefoon & Communicatie',
+      'vakliteratuur': 'Vakliteratuur',
+      'werkkleding': 'Werkkleding',
+      'relatiegeschenken_representatie': 'Relatiegeschenken & Representatie',
+      'overige_zakelijk': 'Overige Zakelijke Kosten'
     }
     return categories[category] || category
   }
@@ -207,6 +250,7 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-16">Goedkeuring</TableHead>
                   <TableHead>Datum</TableHead>
                   <TableHead>Leverancier</TableHead>
                   <TableHead>Beschrijving</TableHead>
@@ -221,6 +265,20 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
               <TableBody>
                 {expenses.map((expense) => (
                   <TableRow key={expense.id}>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center">
+                        {approvingExpenses.has(expense.id) ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        ) : (
+                          <Checkbox
+                            checked={expense.status === 'approved'}
+                            onCheckedChange={() => handleApprovalToggle(expense)}
+                            className="h-4 w-4"
+                          />
+                        )}
+                      </div>
+                    </TableCell>
+                    
                     <TableCell className="text-sm">
                       <div className="flex items-center gap-2">
                         <Calendar className="h-3 w-3 text-muted-foreground" />

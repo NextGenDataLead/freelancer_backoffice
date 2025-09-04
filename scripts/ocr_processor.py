@@ -904,43 +904,163 @@ Return ONLY the JSON object, no other text."""
         description_lower = description.lower() if description else ""
         combined_text = f"{vendor_lower} {description_lower}"
         
-        # Use existing vendor categorization patterns
+        # Use official Belastingdienst categorization patterns
         for category, patterns in {
-            'meals': ['restaurant', 'cafe', 'bistro', 'eetcafe', 'mcdonalds', 'burger king', 'subway'],
-            'travel': ['ns ', 'gvb', 'uber', 'taxi', 'ov-chipkaart', 'train', 'bus'],
-            'office_supplies': ['staples', 'office depot', 'supplies', 'kantoor'],
-            'telecommunications': ['kpn', 'vodafone', 't-mobile', 'ziggo', 'telecom'],
-            'professional_services': ['consultant', 'advies', 'legal', 'accountant', 'development', 'design', 'it services', 'software', 'commission', 'comission', 'game development', 'programming', 'coding'],
-            'software': ['microsoft', 'adobe', 'software', 'saas', 'license'],
-            'marketing': ['google ads', 'facebook', 'marketing', 'advertising', 'social media', 'sales commission', 'lead generation'],
-            'equipment': ['apple', 'dell', 'hp', 'laptop', 'computer', 'equipment'],
-            'insurance': ['insurance', 'verzekering', 'asr', 'aegon']
+            'maaltijden_zakelijk': ['restaurant', 'cafe', 'bistro', 'eetcafe', 'mcdonalds', 'burger king', 'subway'],
+            'reiskosten': ['ns ', 'gvb', 'uber', 'taxi', 'ov-chipkaart', 'train', 'bus'],
+            'kantoorbenodigdheden': ['staples', 'office depot', 'supplies', 'kantoor'],
+            'telefoon_communicatie': ['kpn', 'vodafone', 't-mobile', 'ziggo', 'telecom'],
+            'professionele_diensten': ['consultant', 'advies', 'legal', 'accountant', 'development', 'design', 'it services', 'software', 'commission', 'comission', 'game development', 'programming', 'coding'],
+            'software_ict': ['microsoft', 'adobe', 'software', 'saas', 'license'],
+            'marketing_reclame': ['google ads', 'facebook', 'marketing', 'advertising', 'social media', 'sales commission', 'lead generation'],
+            'afschrijvingen': ['apple', 'dell', 'hp', 'laptop', 'computer', 'equipment'],
+            'verzekeringen': ['insurance', 'verzekering', 'asr', 'aegon']
         }.items():
             for pattern in patterns:
                 if pattern in combined_text:
                     return category
         
-        return 'other'
+        return 'overige_zakelijk'
 
-    def apply_business_logic(self, llm_fields: dict, raw_text: str) -> dict:
-        """Apply additional business logic to LLM-extracted fields"""
+    def apply_business_logic(self, llm_fields: dict, raw_text: str, vies_results: List[Dict] = None) -> dict:
+        """Apply VIES-first business logic for reverse charge determination"""
         
         # Basic expense categorization
         vendor_name = llm_fields.get('vendor_name', '')
         description = llm_fields.get('description', '')
-        expense_type = self.categorize_expense(vendor_name, description) if vendor_name else 'other'
+        expense_type = self.categorize_expense(vendor_name, description) if vendor_name else 'overige_zakelijk'
         
-        # Detect reverse charge from both LLM and text patterns
-        reverse_charge_detected = llm_fields.get('reverse_charge', False)
-        if not reverse_charge_detected:
-            # Additional text-based detection as fallback
-            reverse_charge_detected = self.detect_reverse_charge_patterns(raw_text)
+        # VIES-First Decision Tree for Reverse Charge
+        vat_decision = self._determine_vat_treatment(vies_results)
         
-        return {
+        result = {
             'expense_type': expense_type,
-            'reverse_charge_detected_in_text': reverse_charge_detected,
-            'suggested_vat_type': 'reverse_charge' if reverse_charge_detected else 'standard',
-            'suggested_payment_method': 'bank_transfer'
+            'suggested_vat_type': vat_decision['vat_type'],
+            'suggested_vat_rate': vat_decision['vat_rate'],
+            'suggested_payment_method': 'bank_transfer',
+            'vat_validation_status': vat_decision['status'],
+            'vat_validation_message': vat_decision['message'],
+            'requires_manual_review': vat_decision['requires_review']
+        }
+        
+        # Add validated supplier information if available
+        if vat_decision['validated_supplier']:
+            result['validated_supplier'] = vat_decision['validated_supplier']
+        
+        # Keep legacy fields for backward compatibility
+        result['reverse_charge_detected_in_text'] = self.detect_reverse_charge_patterns(raw_text)
+        result['reverse_charge_detected_from_vat'] = vat_decision['vat_type'] == 'reverse_charge'
+        
+        return result
+    
+    def _determine_vat_treatment(self, vies_results: List[Dict] = None) -> dict:
+        """VIES-first decision tree for VAT treatment determination"""
+        
+        if not vies_results:
+            return {
+                'vat_type': 'standard',
+                'vat_rate': 0.21,
+                'status': 'no_vat_found',
+                'message': 'Geen BTW nummer gevonden in factuur',
+                'requires_review': True,
+                'validated_supplier': None
+            }
+        
+        # Check for valid VAT numbers
+        valid_vat_numbers = [vat for vat in vies_results if vat.get('valid') == True]
+        invalid_vat_numbers = [vat for vat in vies_results if vat.get('valid') == False]
+        unknown_vat_numbers = [vat for vat in vies_results if vat.get('valid') is None]
+        
+        # Priority 1: Valid non-NL EU VAT number = Reverse charge required
+        for vat_result in valid_vat_numbers:
+            country_code = vat_result.get('country_code', '').upper()
+            if country_code and country_code != 'NL':
+                return {
+                    'vat_type': 'reverse_charge',
+                    'vat_rate': -1,  # -1 indicates reverse charge
+                    'status': 'valid_eu_vat',
+                    'message': f'Geldig {country_code} BTW nummer - BTW verlegd van toepassing',
+                    'requires_review': False,
+                    'validated_supplier': {
+                        'vat_number': vat_result.get('vat_number'),
+                        'country_code': country_code,
+                        'company_name': vat_result.get('company_name'),
+                        'company_address': vat_result.get('company_address'),
+                        'vies_validation_date': vat_result.get('validation_date')
+                    }
+                }
+        
+        # Priority 2: Valid NL VAT number = Standard Dutch VAT
+        for vat_result in valid_vat_numbers:
+            country_code = vat_result.get('country_code', '').upper()
+            if country_code == 'NL':
+                return {
+                    'vat_type': 'standard',
+                    'vat_rate': 0.21,
+                    'status': 'valid_nl_vat',
+                    'message': f'Geldig Nederlands BTW nummer - Standaard 21% BTW',
+                    'requires_review': False,
+                    'validated_supplier': {
+                        'vat_number': vat_result.get('vat_number'),
+                        'country_code': country_code,
+                        'company_name': vat_result.get('company_name'),
+                        'company_address': vat_result.get('company_address'),
+                        'vies_validation_date': vat_result.get('validation_date')
+                    }
+                }
+        
+        # Priority 3: Invalid VAT numbers found = Warning + 21% BTW
+        if invalid_vat_numbers:
+            invalid_numbers = ', '.join([vat.get('vat_number', '') for vat in invalid_vat_numbers])
+            return {
+                'vat_type': 'standard',
+                'vat_rate': 0.21,
+                'status': 'invalid_vat',
+                'message': f'Ongeldig BTW nummer gevonden: {invalid_numbers} - Controleer leverancier gegevens',
+                'requires_review': True,
+                'validated_supplier': None
+            }
+        
+        # Priority 4: Unknown VAT numbers (rate limited/errors) - check if EU country for reverse charge
+        if unknown_vat_numbers:
+            unknown_numbers = ', '.join([vat.get('vat_number', '') for vat in unknown_vat_numbers])
+            
+            # Check if any unknown VAT numbers are from non-NL EU countries
+            for vat_result in unknown_vat_numbers:
+                country_code = vat_result.get('country_code', '').upper()
+                if country_code and country_code != 'NL' and self._is_eu_country(country_code):
+                    return {
+                        'vat_type': 'reverse_charge',
+                        'vat_rate': -1,
+                        'status': 'vat_validation_failed_but_eu',
+                        'message': f'BTW nummer validatie mislukt voor {country_code} - maar EU land gedetecteerd, BTW verlegd toegepast',
+                        'requires_review': True,
+                        'validated_supplier': {
+                            'vat_number': vat_result.get('vat_number'),
+                            'country_code': country_code,
+                            'company_name': None,
+                            'company_address': None,
+                            'vies_validation_date': None
+                        }
+                    }
+            
+            return {
+                'vat_type': 'standard',
+                'vat_rate': 0.21,
+                'status': 'vat_validation_failed',
+                'message': f'BTW nummer validatie mislukt: {unknown_numbers} - Handmatige controle vereist',
+                'requires_review': True,
+                'validated_supplier': None
+            }
+        
+        # Fallback: No VAT numbers processed
+        return {
+            'vat_type': 'standard',
+            'vat_rate': 0.21,
+            'status': 'no_vat_found',
+            'message': 'Geen BTW nummer gevonden in factuur',
+            'requires_review': True,
+            'validated_supplier': None
         }
         
     def detect_reverse_charge_patterns(self, text: str) -> bool:
@@ -955,6 +1075,242 @@ Return ONLY the JSON object, no other text."""
         ]
         
         return any(pattern in text_lower for pattern in patterns)
+
+    def extract_vat_numbers(self, text: str) -> List[Dict[str, str]]:
+        """Extract VAT numbers from OCR text with country detection"""
+        if not text:
+            return []
+        
+        vat_numbers = []
+        
+        # EU VAT number patterns - comprehensive coverage
+        vat_patterns = {
+            'NL': r'\b(?:NL\s?)?(\d{9}B\d{2})\b',  # Netherlands: NL123456789B01
+            'DE': r'\b(?:DE\s?)?(\d{9})\b',        # Germany: DE123456789  
+            'FR': r'\b(?:FR\s?)?\d{2}\s?(\d{9})\b', # France: FR12 123456789
+            'BE': r'\b(?:BE\s?)?(\d{10})\b',       # Belgium: BE0123456789
+            'RO': r'\b(?:RO\s?)?(\d{2,10})\b',     # Romania: RO12345678
+            'IT': r'\b(?:IT\s?)?(\d{11})\b',       # Italy: IT12345678901
+            'ES': r'\b(?:ES\s?)?\d{1}\d{7}[\dA-Z]\b', # Spain: ES12345678Z
+            'PL': r'\b(?:PL\s?)?(\d{10})\b',       # Poland: PL1234567890
+            'CZ': r'\b(?:CZ\s?)?(\d{8,10})\b',     # Czech Republic: CZ12345678
+            'AT': r'\b(?:AT\s?)?(U\d{8})\b',       # Austria: ATU12345678
+        }
+        
+        # Additional patterns for common formats
+        generic_patterns = [
+            r'\b([A-Z]{2}\d{8,12}[A-Z]?\d{0,3})\b',  # Generic EU format
+            r'\btax\s+(?:code|id|number)[:,\s]*([A-Z]{2}?\s?\d{8,12}[A-Z]?\d{0,3})\b',
+            r'\bvat\s+(?:number|id)[:,\s]*([A-Z]{2}?\s?\d{8,12}[A-Z]?\d{0,3})\b',
+            r'\bbtw\s+(?:nummer|number)[:,\s]*([A-Z]{2}?\s?\d{8,12}[A-Z]?\d{0,3})\b',
+            r'\bcif[:,\s]*([A-Z]{2}?\s?\d{8,12}[A-Z]?\d{0,3})\b',
+        ]
+        
+        text_lines = text.split('\n')
+        
+        # Search each line for VAT numbers
+        for line_num, line in enumerate(text_lines):
+            line = line.strip().upper()
+            if not line:
+                continue
+                
+            # Try country-specific patterns first
+            for country_code, pattern in vat_patterns.items():
+                matches = re.findall(pattern, line, re.IGNORECASE)
+                for match in matches:
+                    clean_vat = re.sub(r'[^\dA-Z]', '', match.upper())
+                    if len(clean_vat) >= 8:  # Minimum length check
+                        vat_numbers.append({
+                            'vat_number': f"{country_code}{clean_vat}",
+                            'country_code': country_code,
+                            'raw_match': match,
+                            'line_context': line,
+                            'line_number': line_num + 1,
+                            'extraction_method': 'country_pattern'
+                        })
+            
+            # Try generic patterns as fallback
+            for pattern in generic_patterns:
+                matches = re.findall(pattern, line, re.IGNORECASE)
+                for match in matches:
+                    clean_match = re.sub(r'[^\dA-Z]', '', match.upper())
+                    if len(clean_match) >= 8:
+                        # Try to detect country from prefix
+                        country_code = None
+                        if clean_match[:2].isalpha():
+                            country_code = clean_match[:2]
+                            vat_number = clean_match
+                        else:
+                            # No country prefix, try to infer from context
+                            vat_number = clean_match
+                            country_code = self._infer_country_from_context(line, text_lines[max(0, line_num-2):line_num+3])
+                        
+                        if country_code:
+                            vat_numbers.append({
+                                'vat_number': vat_number,
+                                'country_code': country_code,
+                                'raw_match': match,
+                                'line_context': line,
+                                'line_number': line_num + 1,
+                                'extraction_method': 'generic_pattern'
+                            })
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_vat_numbers = []
+        for vat in vat_numbers:
+            vat_key = vat['vat_number']
+            if vat_key not in seen:
+                seen.add(vat_key)
+                unique_vat_numbers.append(vat)
+        
+        return unique_vat_numbers
+
+    def _infer_country_from_context(self, line: str, context_lines: List[str]) -> Optional[str]:
+        """Infer country code from surrounding context"""
+        all_text = ' '.join(context_lines).upper()
+        
+        # Country indicators
+        country_indicators = {
+            'NL': ['NETHERLANDS', 'NEDERLAND', 'HOLLAND', 'DUTCH'],
+            'DE': ['GERMANY', 'DEUTSCHLAND', 'GERMAN'],
+            'FR': ['FRANCE', 'FRENCH', 'FRANCAIS'],
+            'BE': ['BELGIUM', 'BELGIE', 'BELGIQUE'],
+            'RO': ['ROMANIA', 'ROMANIAN', 'BUCURESTI', 'BUCHAREST'],
+            'IT': ['ITALY', 'ITALIA', 'ITALIAN'],
+            'ES': ['SPAIN', 'ESPANA', 'SPANISH'],
+            'PL': ['POLAND', 'POLSKA', 'POLISH'],
+            'CZ': ['CZECH', 'CESKA', 'PRAGUE', 'PRAHA'],
+            'AT': ['AUSTRIA', 'ÖSTERREICH', 'AUSTRIAN', 'VIENNA'],
+        }
+        
+        for country_code, indicators in country_indicators.items():
+            if any(indicator in all_text for indicator in indicators):
+                return country_code
+        
+        return None
+
+    def _is_eu_country(self, country_code: str) -> bool:
+        """Check if country code is an EU member state"""
+        eu_countries = {
+            'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 
+            'FR', 'GR', 'HR', 'HU', 'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 
+            'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK'
+        }
+        return country_code.upper() in eu_countries
+
+    def _filter_relevant_vat_numbers(self, vat_numbers: List[Dict]) -> List[Dict]:
+        """Filter VAT numbers to find the most relevant ones for validation"""
+        if not vat_numbers:
+            return []
+        
+        # Priority scoring system
+        scored_vats = []
+        
+        for vat in vat_numbers:
+            score = 0
+            context = vat['line_context'].upper()
+            vat_num = vat['vat_number']
+            
+            # High priority: Explicit VAT/TAX labels
+            if any(label in context for label in ['TAX CODE', 'VAT NUMBER', 'BTW NUMMER', 'SPECIAL TAX CODE']):
+                score += 50
+            
+            # Medium priority: Line contains clear VAT indicators  
+            if any(indicator in context for indicator in ['TAX', 'VAT', 'BTW', 'CIF']):
+                score += 30
+            
+            # Country-specific scoring
+            country = vat['country_code']
+            if country == 'NL':
+                score += 20  # Dutch VAT numbers are always relevant
+            elif country == 'RO' and 'ROMANIA' in vat.get('extraction_context', ''):
+                score += 25  # Romanian context makes RO VAT more likely
+                
+            # Length-based scoring (proper VAT numbers have specific lengths)
+            vat_digits = re.sub(r'[^\d]', '', vat_num)
+            if country == 'NL' and len(vat_digits) == 9:
+                score += 15
+            elif country == 'RO' and len(vat_digits) in [8, 9, 10]:
+                score += 15
+            
+            # Penalty for duplicate patterns (same number, different country)
+            base_number = re.sub(r'^[A-Z]{2}', '', vat_num)
+            duplicate_penalty = sum(1 for other in vat_numbers 
+                                  if other != vat and base_number in other['vat_number'])
+            score -= duplicate_penalty * 10
+            
+            scored_vats.append((score, vat))
+        
+        # Sort by score (highest first) and return top candidates
+        scored_vats.sort(reverse=True, key=lambda x: x[0])
+        
+        # Remove very low scoring entries (likely false positives)
+        filtered = [vat for score, vat in scored_vats if score >= 20]
+        
+        # Deduplicate by VAT number (keep highest scoring)
+        seen_numbers = set()
+        unique_vats = []
+        for score, vat in scored_vats:
+            vat_num = vat['vat_number']
+            if vat_num not in seen_numbers and score >= 20:
+                seen_numbers.add(vat_num)
+                unique_vats.append(vat)
+        
+        return unique_vats
+
+    def validate_vat_with_vies(self, vat_number: str, country_code: str) -> Optional[Dict]:
+        """Validate VAT number using VIES API with rate limiting consideration"""
+        try:
+            # Remove country code from VAT number for VIES API
+            vat_number_only = re.sub(f'^{country_code}', '', vat_number, flags=re.IGNORECASE)
+            
+            print(f"VIES validation: {country_code}{vat_number_only}", file=sys.stderr)
+            
+            # Use the official VIES REST API
+            vies_url = f"https://ec.europa.eu/taxation_customs/vies/rest-api/ms/{country_code}/vat/{vat_number_only}"
+            
+            response = requests.get(vies_url, 
+                headers={
+                    'Accept': 'application/json',
+                    'User-Agent': 'Dutch-ZZP-Financial-Suite/1.0'
+                },
+                timeout=8  # Shorter timeout for background validation
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                user_error = data.get('userError', '')
+                
+                print(f"VIES response for {country_code}{vat_number_only}: valid={data.get('isValid', False)}, error={user_error}", file=sys.stderr)
+                
+                # Handle rate limiting gracefully
+                if user_error == 'MS_MAX_CONCURRENT_REQ':
+                    return {
+                        'vat_number': vat_number,
+                        'country_code': country_code,
+                        'valid': None,  # Unknown due to rate limiting
+                        'error': 'VIES API rate limit reached',
+                        'validation_date': data.get('requestDate')
+                    }
+                
+                return {
+                    'vat_number': vat_number,
+                    'country_code': country_code,
+                    'valid': data.get('isValid', False) == True,
+                    'company_name': data.get('name'),
+                    'company_address': data.get('address'),
+                    'validation_date': data.get('requestDate'),
+                    'user_error': user_error,
+                    'request_id': data.get('requestIdentifier')
+                }
+            else:
+                print(f"VIES API error: {response.status_code} for {country_code}{vat_number_only}", file=sys.stderr)
+                return None
+                
+        except Exception as e:
+            print(f"VIES validation error for {country_code}{vat_number}: {e}", file=sys.stderr)
+            return None
 
     def process_receipt(self, image_path: str) -> Dict:
         """Process receipt with LLM-enhanced field extraction"""
@@ -976,6 +1332,23 @@ Return ONLY the JSON object, no other text."""
             # Stage 2: LLM field extraction
             llm_fields = self.extract_fields_with_llm(raw_text)
             
+            # Stage 3: VAT number extraction and VIES validation
+            extracted_vat_numbers = self.extract_vat_numbers(raw_text)
+            vies_validation_results = []
+            
+            # Filter and validate only the most relevant VAT numbers
+            filtered_vat_numbers = self._filter_relevant_vat_numbers(extracted_vat_numbers)
+            
+            # Validate filtered VAT numbers (max 2 to respect VIES rate limits)
+            for vat_info in filtered_vat_numbers[:2]:
+                vies_result = self.validate_vat_with_vies(vat_info['vat_number'], vat_info['country_code'])
+                if vies_result:
+                    vies_result.update({
+                        'extraction_context': vat_info['line_context'],
+                        'line_number': vat_info['line_number'],
+                        'extraction_method': vat_info['extraction_method']
+                    })
+                    vies_validation_results.append(vies_result)
             
             if llm_fields:
                 # Use LLM extraction results
@@ -991,16 +1364,21 @@ Return ONLY the JSON object, no other text."""
                     'requires_manual_review': avg_confidence < 0.8
                 }
                 
-                # Apply business logic
-                business_logic = self.apply_business_logic(llm_fields, raw_text)
+                # Apply business logic with VIES validation results
+                business_logic = self.apply_business_logic(llm_fields, raw_text, vies_validation_results)
                 extracted_data.update(business_logic)
                 
                 extraction_method = 'llm'
                 processing_engine = 'PaddleOCR + Phi-3.5-mini'
                 
             else:
-                # Fallback to rule-based parsing
+                # Fallback to rule-based parsing with VIES validation
                 extracted_data = self.fallback_rule_parsing(text_lines)
+                
+                # Apply business logic even for fallback parsing to get VIES validation
+                business_logic = self.apply_business_logic(extracted_data, raw_text, vies_validation_results)
+                extracted_data.update(business_logic)
+                
                 extraction_method = 'rules'
                 processing_engine = 'PaddleOCR + Rules'
                 
@@ -1018,6 +1396,15 @@ Return ONLY the JSON object, no other text."""
                     'confidence_scores': [result[1] for result in ocr_results]
                 }
             }
+            
+            # Add VAT validation results if any were found
+            if extracted_vat_numbers:
+                result['vat_numbers'] = {
+                    'extracted': extracted_vat_numbers,
+                    'vies_validation': vies_validation_results,
+                    'validation_count': len(vies_validation_results),
+                    'total_extracted': len(extracted_vat_numbers)
+                }
             
             return result
             

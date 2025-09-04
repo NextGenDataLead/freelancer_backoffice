@@ -152,34 +152,70 @@ export async function POST(request: Request) {
 
     // Note: Expenses are primarily for the tenant itself, not linked to clients
 
+    // EU countries for acquisition type classification
+    const EU_COUNTRIES = ['AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE']
+
+    // Determine acquisition type based on supplier country and category
+    let acquisitionType = 'domestic' // Default for NL or unknown
+    if (validatedData.supplier_country && validatedData.supplier_country !== 'NL') {
+      if (EU_COUNTRIES.includes(validatedData.supplier_country)) {
+        // EU country - determine if goods or services based on category
+        const serviceCategories = ['professionele_diensten', 'software_ict', 'marketing_reclame', 'telefoon_communicatie']
+        acquisitionType = serviceCategories.includes(validatedData.category) ? 'eu_services' : 'eu_goods'
+      } else {
+        // Non-EU country
+        const serviceCategories = ['professionele_diensten', 'software_ict', 'marketing_reclame', 'telefoon_communicatie']
+        acquisitionType = serviceCategories.includes(validatedData.category) ? 'import_services' : 'import_goods'
+      }
+    }
+
     // Calculate VAT amount if not provided
     let vatAmount = validatedData.vat_amount
     if (vatAmount === undefined || vatAmount === 0) {
       vatAmount = Math.round(validatedData.amount * validatedData.vat_rate * 100) / 100
     }
 
-    // Validate total amount consistency
-    const expectedTotal = validatedData.amount + vatAmount
-    if (Math.abs(expectedTotal - validatedData.total_amount) > 0.01) {
-      const validationError = ApiErrors.ValidationError('Total amount must equal amount plus VAT amount')
-      return NextResponse.json(validationError, { status: validationError.status })
+    // Total amount will be calculated by the database/frontend as amount + vat_amount
+
+    // Map form data to database schema
+    const expenseDbData = {
+      title: validatedData.description, // DB uses 'title' field
+      description: validatedData.description,
+      vendor_name: validatedData.vendor_name,
+      expense_date: validatedData.expense_date,
+      amount: validatedData.amount,
+      currency: 'EUR', // Required field - default to EUR for Dutch ZZP
+      vat_amount: vatAmount,
+      vat_rate: validatedData.vat_rate,
+      vat_type: validatedData.vat_rate === -1 ? 'reverse_charge' : 'standard',
+      is_reverse_charge: validatedData.vat_rate === -1,
+      is_vat_deductible: validatedData.is_deductible,
+      expense_type: validatedData.category,
+      payment_method: 'bank_transfer', // Required field - default payment method
+      status: 'draft',
+      tenant_id: profile.tenant_id,
+      submitted_by: profile.id,
+      supplier_country: validatedData.supplier_country || 'NL',
+      acquisition_type: acquisitionType,
+      // Optional fields - only include if they have values
+      ...(validatedData.supplier_id && { supplier_id: validatedData.supplier_id }),
+      ...(validatedData.receipt_url && { receipt_url: validatedData.receipt_url })
     }
 
     // Create expense
     const { data: newExpense, error: createError } = await supabaseAdmin
       .from('expenses')
-      .insert({
-        ...validatedData,
-        vat_amount: vatAmount,
-        tenant_id: profile.tenant_id,
-        submitted_by: profile.id
-      })
+      .insert(expenseDbData)
       .select('*')
       .single()
 
     if (createError) {
       console.error('Error creating expense:', createError)
-      return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+      console.error('Expense data that failed:', expenseDbData)
+      return NextResponse.json(
+        { success: false, error: 'Database error: ' + createError.message, details: createError },
+        { status: 500 }
+      )
     }
 
     // Create audit log

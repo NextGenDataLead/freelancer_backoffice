@@ -10,6 +10,20 @@ import {
 } from '@/lib/supabase/financial-client'
 import { validateSupplierForExpense } from '@/lib/utils/supplier-validation'
 
+interface VATValidationResult {
+  vat_number: string
+  country_code: string
+  valid: boolean | null
+  company_name?: string
+  company_address?: string
+  validation_date?: string
+  user_error?: string
+  error?: string
+  extraction_context?: string
+  line_number?: number
+  extraction_method?: string
+}
+
 interface OCRResult {
   success: boolean
   error?: string
@@ -24,7 +38,36 @@ interface OCRResult {
     total_amount?: number
     currency?: string
     requires_manual_review?: boolean
+    expense_type?: string
+    reverse_charge_detected_in_text?: boolean
+    reverse_charge_detected_from_vat?: boolean
+    suggested_vat_type?: string
+    suggested_vat_rate?: number
+    suggested_payment_method?: string
+    vat_validation_status?: string
+    vat_validation_message?: string
+    validated_supplier?: {
+      vat_number: string
+      country_code: string
+      company_name?: string
+      company_address?: string
+      vies_validation_date?: string
+    }
   }
+  vat_numbers?: {
+    extracted: Array<{
+      vat_number: string
+      country_code: string
+      raw_match: string
+      line_context: string
+      line_number: number
+      extraction_method: string
+    }>
+    vies_validation: VATValidationResult[]
+    validation_count: number
+    total_extracted: number
+  }
+  extraction_method?: string
   ocr_metadata?: {
     line_count: number
     processing_engine: string
@@ -243,10 +286,22 @@ async function enhanceExtractedData(data: any) {
   const finalRequiresReverseCharge = reverseChargeDetected || supplierValidation.requiresReverseCharge
   const finalSuggestedVATType = reverseChargeDetected ? 'reverse_charge' : supplierValidation.suggestedVATType
 
+  // Format date for HTML date input (YYYY-MM-DD)
+  let formattedDate = new Date().toISOString().split('T')[0] // Default to today
+  if (data.expense_date) {
+    try {
+      const dateObj = new Date(data.expense_date)
+      formattedDate = dateObj.toISOString().split('T')[0]
+    } catch (error) {
+      console.warn('Invalid date format from OCR:', data.expense_date)
+    }
+  }
+
   return {
     ...data,
     ...validatedAmounts,
     expense_type: expenseType,
+    expense_date: formattedDate, // HTML date input format (YYYY-MM-DD)
     description: cleanDescription(data.description) || '', // Clean up OCR description
     is_likely_foreign_supplier: supplierValidation.isEUSupplier || finalRequiresReverseCharge,
     requires_vat_number: finalRequiresReverseCharge,
@@ -324,66 +379,66 @@ function detectReverseChargeFromText(text: string): boolean {
 }
 
 /**
- * Categorize expense based on vendor
+ * Categorize expense based on vendor using official Belastingdienst categories
  */
 function categorizeExpense(vendorName: string): string {
-  if (!vendorName) return 'other'
+  if (!vendorName) return 'overige_zakelijk'
   
   const vendor = vendorName.toLowerCase()
   
   // Telecommunications/Internet (companies and services)
   const telecomCompanies = ['kpn', 'vodafone', 't-mobile', 'ziggo', 'xs4all', 'tele2', 'lebara', 'lycamobile']
   if (telecomCompanies.some(telecom => vendor.includes(telecom))) {
-    return 'telecommunicatie'
+    return 'telefoon_communicatie'
   }
   
   // Telecom service keywords
   const telecomServices = ['mobiel', 'mobile', 'internet', 'telefoon', 'phone', 'gsm', 'data', 'wifi', 'broadband', 'abonnement']
   if (telecomServices.some(service => vendor.includes(service))) {
-    return 'telecommunicatie'
+    return 'telefoon_communicatie'
   }
   
-  // Utilities
+  // Utilities - map to workspace costs
   if (['eneco', 'essent', 'nuon', 'vattenfall', 'greenchoice', 'oxxio'].some(utility => vendor.includes(utility))) {
-    return 'utilities'
+    return 'werkruimte_kantoor'
   }
   
-  // Grocery stores
+  // Grocery stores - business meals
   if (['albert heijn', 'jumbo', 'lidl', 'aldi', 'ah.nl', 'plus', 'spar', 'dirk', 'coop'].some(store => vendor.includes(store))) {
-    return 'meals'
+    return 'maaltijden_zakelijk'
   }
   
-  // Gas stations
+  // Gas stations - travel costs
   if (['shell', 'bp', 'total', 'esso', 'texaco', 'gulf'].some(station => vendor.includes(station))) {
-    return 'travel'
+    return 'reiskosten'
   }
   
   // Electronics/Office supplies
   if (['mediamarkt', 'coolblue', 'bol.com', 'amazon', 'staples', 'office centre'].some(store => vendor.includes(store))) {
-    return 'equipment'
+    return 'kantoorbenodigdheden'
   }
   
-  // Pharmacy/health
+  // Pharmacy/health - other business costs
   if (['kruidvat', 'etos', 'apotheek', 'boots'].some(store => vendor.includes(store))) {
-    return 'medical'
+    return 'overige_zakelijk'
   }
   
-  // Banking/financial services
+  // Banking/financial services - professional services
   if (['ing', 'rabobank', 'abn amro', 'sns', 'asn', 'triodos'].some(bank => vendor.includes(bank))) {
-    return 'financial'
+    return 'professionele_diensten'
   }
   
   // Software/subscriptions and development services
   if (['microsoft', 'adobe', 'dropbox', 'google', 'zoom', 'slack', 'development', 'gaming', 'unity', 'unreal'].some(software => vendor.includes(software))) {
-    return 'software'
+    return 'software_ict'
   }
 
   // Professional services (including development, consulting, agencies)
   if (['consultancy', 'consulting', 'agency', 'solutions', 'services', 'freelancer'].some(service => vendor.includes(service))) {
-    return 'professional_services'
+    return 'professionele_diensten'
   }
   
-  return 'other'
+  return 'overige_zakelijk'
 }
 
 /**

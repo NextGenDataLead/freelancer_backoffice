@@ -45,14 +45,13 @@ export async function POST(request: Request) {
       return NextResponse.json(response, { status: 400 })
     }
 
-    // In a real implementation, you would call the VIES API here
-    // For now, we'll simulate the validation based on format
-    const mockVIESResponse = await mockVIESValidation(cleanedVATNumber, country_code)
+    // Call the real VIES API
+    const viesResponse = await validateVATWithVIES(cleanedVATNumber, country_code)
 
     const response: FinancialApiResponse<VATValidationResponse> = {
-      data: mockVIESResponse,
-      success: mockVIESResponse.valid,
-      message: mockVIESResponse.valid ? 'VAT number is valid' : 'VAT number is invalid or not found in VIES database'
+      data: viesResponse,
+      success: viesResponse.valid,
+      message: viesResponse.valid ? 'VAT number is valid' : 'VAT number is invalid or not found in VIES database'
     }
 
     return NextResponse.json(response)
@@ -72,93 +71,83 @@ export async function POST(request: Request) {
 }
 
 /**
- * Mock VIES validation function
- * In production, this would make actual calls to the VIES API
- * https://ec.europa.eu/taxation_customs/vies/checkVatService.wsdl
+ * Real VIES API integration
+ * Validates EU VAT numbers using the official VIES REST API
+ * https://ec.europa.eu/taxation_customs/vies/
  */
-async function mockVIESValidation(vatNumber: string, countryCode: string): Promise<VATValidationResponse> {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500))
-
-  // Mock validation logic based on known patterns
-  const mockCompanies: Record<string, { name: string; address: string }> = {
-    'NL123456789B01': {
-      name: 'Test Company B.V.',
-      address: 'Teststraat 1, 1000 AA Amsterdam, Netherlands'
-    },
-    'DE123456789': {
-      name: 'Test GmbH',
-      address: 'Teststraße 1, 10115 Berlin, Germany'
-    },
-    'BE0123456789': {
-      name: 'Test N.V.',
-      address: 'Teststraat 1, 1000 Brussels, Belgium'
-    },
-    'BE0690567150': {
-      name: 'Valid Belgian Company BVBA',
-      address: 'Brussels Street 123, 1000 Brussels, Belgium'
-    }
-  }
-
-  const company = mockCompanies[vatNumber]
-  
-  // For demonstration: assume format-valid numbers are valid if they pass EU format validation
-  const isValid = company !== undefined || validateEUVATNumber(vatNumber, countryCode)
-
-  return {
-    vat_number: vatNumber,
-    country_code: countryCode,
-    valid: isValid,
-    company_name: company?.name,
-    company_address: company?.address
-  }
-}
-
-/**
- * Real VIES API integration example (commented out)
- * You would use this in production
- */
-/*
 async function validateVATWithVIES(vatNumber: string, countryCode: string): Promise<VATValidationResponse> {
   try {
     // Remove country code from VAT number for VIES API
     const vatNumberOnly = vatNumber.replace(new RegExp(`^${countryCode}`), '')
     
-    const viesUrl = 'https://ec.europa.eu/taxation_customs/vies/rest-api/ms/{{memberStateCode}}/vat/{{vatNumber}}'
-    const url = viesUrl
-      .replace('{{memberStateCode}}', countryCode)
-      .replace('{{vatNumber}}', vatNumberOnly)
-
-    const response = await fetch(url, {
+    console.log(`VIES validation: ${countryCode}${vatNumberOnly}`)
+    
+    // Use the official VIES REST API
+    const viesUrl = `https://ec.europa.eu/taxation_customs/vies/rest-api/ms/${countryCode}/vat/${vatNumberOnly}`
+    
+    const response = await fetch(viesUrl, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json'
+        'Accept': 'application/json',
+        'User-Agent': 'Dutch-ZZP-Financial-Suite/1.0'
       },
-      // Add timeout
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      // 15 second timeout for VIES API
+      signal: AbortSignal.timeout(15000)
     })
 
     if (!response.ok) {
-      throw new Error(`VIES API error: ${response.status}`)
+      // VIES API returns specific error codes
+      if (response.status === 400) {
+        console.warn(`VIES API: Invalid VAT number format - ${countryCode}${vatNumberOnly}`)
+        return {
+          vat_number: vatNumber,
+          country_code: countryCode,
+          valid: false,
+          error: 'Invalid VAT number format'
+        }
+      } else if (response.status === 500) {
+        console.warn(`VIES API: Service unavailable - ${countryCode}${vatNumberOnly}`)
+        // Fallback to format validation when VIES is down
+        return {
+          vat_number: vatNumber,
+          country_code: countryCode,
+          valid: validateEUVATNumber(vatNumber, countryCode),
+          error: 'VIES service temporarily unavailable - format validation only'
+        }
+      }
+      
+      throw new Error(`VIES API error: ${response.status} ${response.statusText}`)
     }
 
     const data = await response.json()
+    
+    console.log(`VIES response for ${countryCode}${vatNumberOnly}:`, {
+      valid: data.valid,
+      hasCompanyInfo: !!(data.name || data.address)
+    })
     
     return {
       vat_number: vatNumber,
       country_code: countryCode,
       valid: data.valid === true,
       company_name: data.name || undefined,
-      company_address: data.address || undefined
+      company_address: data.address || undefined,
+      validation_date: new Date().toISOString()
     }
+    
   } catch (error) {
-    console.error('VIES API error:', error)
-    // Return format validation only on API failure
+    console.error(`VIES API error for ${countryCode}${vatNumber}:`, error)
+    
+    // Return format validation on API failure with clear error message
+    const formatValid = validateEUVATNumber(vatNumber, countryCode)
+    
     return {
       vat_number: vatNumber,
       country_code: countryCode,
-      valid: validateEUVATNumber(vatNumber, countryCode)
+      valid: formatValid,
+      error: error instanceof Error ? error.message : 'VIES API connection failed',
+      fallback_used: true
     }
   }
 }
-*/
+

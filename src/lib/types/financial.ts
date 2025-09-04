@@ -10,15 +10,21 @@ export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'partial' | 'overdue' | 
 export type VATType = 'standard' | 'reverse_charge' | 'exempt' | 'reduced';
 
 export type ExpenseCategory = 
-  | 'office_supplies' 
-  | 'travel' 
-  | 'meals' 
-  | 'marketing' 
-  | 'software' 
-  | 'equipment' 
-  | 'insurance' 
-  | 'professional_services' 
-  | 'other';
+  | 'kantoorbenodigdheden'
+  | 'reiskosten' 
+  | 'maaltijden_zakelijk'
+  | 'marketing_reclame'
+  | 'software_ict'
+  | 'afschrijvingen'
+  | 'verzekeringen'
+  | 'professionele_diensten'
+  | 'werkruimte_kantoor'
+  | 'voertuigkosten'
+  | 'telefoon_communicatie'
+  | 'vakliteratuur'
+  | 'werkkleding'
+  | 'relatiegeschenken_representatie'
+  | 'overige_zakelijk';
 
 export type BusinessType = 'sole_trader' | 'partnership' | 'bv' | 'other';
 
@@ -558,6 +564,9 @@ export interface VATValidationResponse {
   valid: boolean;
   company_name?: string;
   company_address?: string;
+  validation_date?: string;
+  error?: string;
+  fallback_used?: boolean;
 }
 
 // ====================

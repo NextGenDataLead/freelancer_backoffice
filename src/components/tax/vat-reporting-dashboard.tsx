@@ -276,7 +276,7 @@ export function VATReportingDashboard() {
                   <span className="text-sm font-medium">Aangiftestatus</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {btwForm?.validation.valid ? (
+                  {btwForm?.validation?.valid ? (
                     <>
                       <CheckCircle className="h-4 w-4 text-green-600" />
                       <span className="text-sm font-medium text-green-600">Klaar</span>
@@ -296,29 +296,29 @@ export function VATReportingDashboard() {
           </div>
 
           {/* Compliance Issues & Warnings */}
-          {(btwForm?.validation.issues.length || 0) > 0 && (
+          {(btwForm?.validation?.issues?.length || 0) > 0 && (
             <Alert variant="destructive" className="mb-4">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
                 <strong>Problemen gevonden:</strong>
                 <ul className="mt-1 list-disc list-inside">
-                  {btwForm!.validation.issues.map((issue, index) => (
+                  {btwForm?.validation?.issues?.map((issue, index) => (
                     <li key={index} className="text-sm">{issue}</li>
-                  ))}
+                  )) || []}
                 </ul>
               </AlertDescription>
             </Alert>
           )}
 
-          {(btwForm?.validation.warnings.length || 0) > 0 && (
+          {(btwForm?.validation?.warnings?.length || 0) > 0 && (
             <Alert className="mb-4">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
                 <strong>Waarschuwingen:</strong>
                 <ul className="mt-1 list-disc list-inside">
-                  {btwForm!.validation.warnings.map((warning, index) => (
+                  {btwForm?.validation?.warnings?.map((warning, index) => (
                     <li key={index} className="text-sm">{warning}</li>
-                  ))}
+                  )) || []}
                 </ul>
               </AlertDescription>
             </Alert>
@@ -574,7 +574,7 @@ function ExportAndSubmit({
         <CardContent>
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              {btwForm?.validation.valid ? (
+              {btwForm?.validation?.valid ? (
                 <CheckCircle className="h-5 w-5 text-green-600" />
               ) : (
                 <AlertTriangle className="h-5 w-5 text-orange-600" />
