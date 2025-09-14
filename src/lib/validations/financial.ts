@@ -111,6 +111,7 @@ export const CreateClientSchema = z.object({
   is_supplier: z.boolean().default(false),
   default_payment_terms: z.number().int().min(1).max(365).default(30),
   notes: z.string().max(1000, "Notes too long").optional(),
+  hourly_rate: z.number().min(0, "Hourly rate must be positive").max(9999.99, "Hourly rate too high").optional(),
   // Invoicing frequency fields  
   invoicing_frequency: z.enum(['weekly', 'monthly', 'on_demand']).default('on_demand'),
   auto_invoice_enabled: z.boolean().default(false)
@@ -131,6 +132,7 @@ export const UpdateClientSchema = z.object({
   is_supplier: z.boolean().optional(),
   default_payment_terms: z.number().int().min(1).max(365).optional(),
   notes: z.string().optional(),
+  hourly_rate: z.number().min(0, "Hourly rate must be positive").max(9999.99, "Hourly rate too high").optional(),
   // Invoicing frequency fields
   invoicing_frequency: z.enum(['weekly', 'monthly', 'on_demand']).optional(),
   last_invoiced_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
@@ -226,6 +228,7 @@ export const VerifyExpenseSchema = z.object({
 
 export const CreateTimeEntrySchema = z.object({
   client_id: z.string().uuid("Invalid client ID"),
+  project_id: z.string().uuid("Invalid project ID"),
   project_name: z.string().max(255, "Project name too long").optional(),
   description: z.string().max(500, "Description too long").optional(),
   entry_date: z.string().min(1, "Entry date is required"),
@@ -423,7 +426,7 @@ export function validateEUVATNumber(vatNumber: string, countryCode: string): boo
   
   const patterns: Record<string, RegExp> = {
     'AT': /^ATU\d{8}$/,
-    'BE': /^BE0\d{9}$/,
+    'BE': /^BE\d{10}$/,
     'BG': /^BG\d{9,10}$/,
     'CY': /^CY\d{8}[A-Z]$/,
     'CZ': /^CZ\d{8,10}$/,

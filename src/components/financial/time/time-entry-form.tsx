@@ -33,7 +33,9 @@ import {
   Calculator,
   Building2,
   PlayCircle,
-  PauseCircle
+  PauseCircle,
+  FolderOpen,
+  Info
 } from 'lucide-react'
 import { CreateTimeEntrySchema } from '@/lib/validations/financial'
 import type { TimeEntryWithClient, Client } from '@/lib/types/financial'
@@ -51,11 +53,23 @@ interface ClientOption {
   company_name?: string
   is_business: boolean
   country_code: string
+  hourly_rate?: number
+}
+
+interface ProjectOption {
+  id: string
+  name: string
+  description?: string
+  client_id: string
+  hourly_rate?: number
+  active: boolean
 }
 
 export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [clients, setClients] = useState<ClientOption[]>([])
+  const [projects, setProjects] = useState<ProjectOption[]>([])
+  const [filteredProjects, setFilteredProjects] = useState<ProjectOption[]>([])
   const [isTracking, setIsTracking] = useState(false)
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
@@ -65,6 +79,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
     resolver: zodResolver(CreateTimeEntrySchema),
     defaultValues: {
       client_id: timeEntry?.client_id || '',
+      project_id: timeEntry?.project_id || '',
       entry_date: timeEntry?.entry_date || new Date().toISOString().split('T')[0],
       description: timeEntry?.description || '',
       hours: timeEntry?.hours || 0,
@@ -75,24 +90,29 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
     },
   })
 
-  // Load clients on component mount
+  // Load clients and projects on component mount
   useEffect(() => {
-    const fetchClients = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch('/api/clients?limit=100')
-        if (response.ok) {
-          const data = await response.json()
-          setClients(data.data || [])
-          console.log('Loaded clients in TimeEntryForm:', data.data)
-        } else {
-          console.error('Failed to fetch clients:', response.status, response.statusText)
+        // Fetch clients
+        const clientsResponse = await fetch('/api/clients?limit=100&active=true')
+        if (clientsResponse.ok) {
+          const clientsData = await clientsResponse.json()
+          setClients(clientsData.data || [])
+        }
+
+        // Fetch projects
+        const projectsResponse = await fetch('/api/projects?limit=100&active=true')
+        if (projectsResponse.ok) {
+          const projectsData = await projectsResponse.json()
+          setProjects(projectsData.data || [])
         }
       } catch (error) {
-        console.error('Failed to load clients:', error)
+        console.error('Failed to load data:', error)
       }
     }
 
-    fetchClients()
+    fetchData()
   }, [])
 
   // Timer functionality
@@ -114,18 +134,61 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
     }
   }, [isTracking, startTime, entryMode, form])
 
+  // Update filtered projects when client changes
+  const watchedClientId = form.watch('client_id')
+  const watchedProjectId = form.watch('project_id')
+  
+  useEffect(() => {
+    if (watchedClientId) {
+      const clientProjects = projects.filter(p => p.client_id === watchedClientId)
+      setFilteredProjects(clientProjects)
+      
+      // Clear project selection if current project doesn't belong to selected client
+      if (watchedProjectId) {
+        const selectedProject = projects.find(p => p.id === watchedProjectId)
+        if (!selectedProject || selectedProject.client_id !== watchedClientId) {
+          form.setValue('project_id', '')
+        }
+      }
+    } else {
+      setFilteredProjects([])
+      form.setValue('project_id', '')
+    }
+  }, [watchedClientId, watchedProjectId, projects, form])
+
+  // Calculate effective hourly rate (project-first, then client)
+  const getEffectiveHourlyRate = () => {
+    if (watchedProjectId) {
+      const project = projects.find(p => p.id === watchedProjectId)
+      if (project?.hourly_rate) return project.hourly_rate
+    }
+    
+    if (watchedClientId) {
+      const client = clients.find(c => c.id === watchedClientId)
+      if (client?.hourly_rate) return client.hourly_rate
+    }
+    
+    return null
+  }
+
   const startTimer = () => {
     // Validate required fields before starting timer
     const currentClientId = form.getValues('client_id')
-    const currentProjectName = form.getValues('project_name')
+    const currentProjectId = form.getValues('project_id')
     
     if (!currentClientId) {
       alert('Selecteer eerst een klant voordat je de timer start')
       return
     }
     
-    if (!currentProjectName || currentProjectName.trim() === '') {
-      alert('Voer eerst een project naam in voordat je de timer start')
+    if (!currentProjectId) {
+      alert('Selecteer eerst een project voordat je de timer start')
+      return
+    }
+    
+    const currentDescription = form.getValues('description')
+    if (!currentDescription || currentDescription.trim() === '') {
+      alert('Voer eerst een beschrijving in voordat je de timer start')
       return
     }
     
@@ -162,30 +225,35 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
   }
 
-  // Calculate total value
+  // Calculate total value using effective hourly rate
   const watchedHours = form.watch('hours')
-  const watchedHourlyRate = form.watch('hourly_rate')
-  const watchedClientId = form.watch('client_id')
-  const watchedProjectName = form.watch('project_name')
+  const effectiveHourlyRate = getEffectiveHourlyRate()
   
-  const totalValue = watchedHours && watchedHourlyRate 
-    ? Math.round(watchedHours * watchedHourlyRate * 100) / 100
+  const totalValue = watchedHours && effectiveHourlyRate 
+    ? Math.round(watchedHours * effectiveHourlyRate * 100) / 100
     : 0
 
   // Check if timer can be started
-  const canStartTimer = watchedClientId && watchedProjectName && watchedProjectName.trim() !== ''
+  const canStartTimer = watchedClientId && watchedProjectId && form.watch('description')?.trim()
 
   const onSubmit = async (data: z.infer<typeof CreateTimeEntrySchema>) => {
     setIsSubmitting(true)
 
     try {
+      // Set the effective hourly rate from the selected project/client
+      const effectiveRate = getEffectiveHourlyRate()
+      const submissionData = {
+        ...data,
+        hourly_rate: effectiveRate || undefined
+      }
+
       const url = timeEntry ? `/api/time-entries/${timeEntry.id}` : '/api/time-entries'
       const method = timeEntry ? 'PUT' : 'POST'
 
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(submissionData)
       })
 
       if (!response.ok) {
@@ -276,7 +344,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
                     ? 'Gepauzeerd - klik Hervatten om door te gaan'
                     : canStartTimer 
                       ? 'Klaar om te starten' 
-                      : 'Selecteer klant en project om te starten'
+                      : 'Selecteer klant, project en voeg beschrijving toe om te starten'
                 }
               </p>
             </div>
@@ -342,7 +410,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
                     <FormItem>
                       <FormLabel className="flex items-center gap-2">
                         <Building2 className="h-4 w-4" />
-                        Klant {entryMode === 'timer' && <span className="text-red-500">*</span>}
+                        Klant <span className="text-red-500">*</span>
                       </FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
@@ -390,25 +458,60 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
                 />
               </div>
 
-              {/* Project Name */}
+              {/* Project Selection */}
               <FormField
                 control={form.control}
-                name="project_name"
+                name="project_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Project naam {entryMode === 'timer' && <span className="text-red-500">*</span>}
+                    <FormLabel className="flex items-center gap-2">
+                      <FolderOpen className="h-4 w-4" />
+                      Project <span className="text-red-500">*</span>
                     </FormLabel>
-                    <FormControl>
-                      <Input placeholder="Website ontwikkeling..." {...field} />
-                    </FormControl>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      defaultValue={field.value}
+                      disabled={!watchedClientId || filteredProjects.length === 0}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder={
+                            !watchedClientId 
+                              ? "Selecteer eerst een klant" 
+                              : filteredProjects.length === 0
+                                ? "Geen projecten beschikbaar"
+                                : "Selecteer project"
+                          } />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {filteredProjects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            <div className="flex flex-col">
+                              <span>{project.name}</span>
+                              {project.description && (
+                                <span className="text-xs text-muted-foreground">
+                                  {project.description}
+                                </span>
+                              )}
+                              {project.hourly_rate && (
+                                <span className="text-xs text-green-600">
+                                  €{project.hourly_rate.toFixed(2)}/uur
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormDescription>
-                      {entryMode === 'timer' ? 'Verplicht voor timer functionaliteit' : 'Optionele project naam voor betere organisatie'}
+                      Kies een project voor deze tijdregistratie. Het uurtarief wordt automatisch bepaald door het project.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
 
               {/* Description */}
               <FormField
@@ -429,6 +532,40 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
                   </FormItem>
                 )}
               />
+
+              {/* Effective Hourly Rate Display */}
+              {(watchedClientId || watchedProjectId) && (
+                <div className="rounded-lg border p-4 bg-muted/50">
+                  <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                    <span>Effectief Uurtarief</span>
+                  </div>
+                  <div className="text-lg font-semibold text-green-600 dark:text-green-400">
+                    {(() => {
+                      const effectiveRate = getEffectiveHourlyRate()
+                      if (!effectiveRate) {
+                        return (
+                          <span className="text-orange-600 dark:text-orange-400">
+                            Geen tarief ingesteld
+                          </span>
+                        )
+                      }
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span>€{effectiveRate.toFixed(2)}</span>
+                          <span className="text-xs text-muted-foreground font-normal">
+                            ({form.watch('hourly_rate') ? 'handmatig' : 
+                              watchedProjectId && projects.find(p => p.id === watchedProjectId)?.hourly_rate ? 'project' : 'klant'})
+                          </span>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Dit tarief wordt gebruikt voor berekeningen tenzij je handmatig een tarief invoert
+                  </div>
+                </div>
+              )}
 
               {/* Hours and Rate */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -457,32 +594,26 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="hourly_rate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-1">
-                        <Euro className="h-3 w-3" />
-                        Uurtarief
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          {...field}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Laat leeg om standaard tarief te gebruiken
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1">
+                    <Euro className="h-3 w-3" />
+                    Uurtarief
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      value={(() => {
+                        const effectiveRate = getEffectiveHourlyRate()
+                        return effectiveRate ? `€${effectiveRate.toFixed(2)}` : 'Geen tarief ingesteld'
+                      })()} 
+                      disabled
+                      className="bg-muted"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Automatisch bepaald door het geselecteerde project
+                  </FormDescription>
+                </FormItem>
               </div>
 
               {/* Total Value Display */}

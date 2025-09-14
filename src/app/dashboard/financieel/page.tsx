@@ -1,242 +1,81 @@
-import { Suspense } from 'react'
-import Link from 'next/link'
-import { DashboardStats } from '@/components/financial/dashboard-stats'
-import { ClientList } from '@/components/financial/clients/client-list'
-import { InvoiceList } from '@/components/financial/invoices/invoice-list'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { TrendingUp, FileText, Users, Calculator, Euro, Clock } from 'lucide-react'
+'use client'
 
-export default function FinancialDashboardPage() {
+import { useAuth, useUser } from '@clerk/nextjs'
+import { useEffect, useState } from 'react'
+import { MetricsCards } from '@/components/dashboard/metrics-cards'
+import { FinancialTabs } from '@/components/financial/financial-tabs'
+
+interface UserProfile {
+  id: string
+  email: string
+  role: string
+  tenant_id: string
+  onboarding_complete: boolean
+  first_name?: string
+  last_name?: string
+}
+
+export default function FinancialDashboard() {
+  const { userId } = useAuth()
+  const { user } = useUser()
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (userId && user) {
+      fetchProfile()
+    }
+  }, [userId, user])
+
+  const fetchProfile = async () => {
+    try {
+      const response = await fetch('/api/user/profile', { method: 'GET' })
+      if (response.ok) {
+        const data = await response.json()
+        setProfile(data.profile)
+      }
+    } catch (error) {
+      console.error('Failed to fetch profile:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen mobile-safe-area">
+        <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
   return (
-    <div className="container mx-auto p-6 space-y-8">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Financieel Overzicht</h1>
-          <p className="text-muted-foreground mt-2">
-            Beheer je ZZP financiën, facturen en klanten vanuit één dashboard
-          </p>
-        </div>
-        
-        <div className="flex space-x-3">
-          <Button variant="outline" size="sm">
-            <Calculator className="h-4 w-4 mr-2" />
-            BTW Aangifte
-          </Button>
-          <Button variant="outline" size="sm">
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Rapporten
-          </Button>
-        </div>
-      </div>
+    <div className="min-h-screen bg-background mobile-safe-area">
+      <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6 lg:space-y-8 mobile-scroll-smooth">
+        {/* Enhanced Metrics Cards - Always Visible */}
+        <MetricsCards />
 
-      {/* Dashboard Statistics */}
-      <Suspense fallback={
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(8)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <div className="h-4 bg-muted animate-pulse rounded w-24"></div>
-                <div className="h-4 w-4 bg-muted animate-pulse rounded"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-8 bg-muted animate-pulse rounded w-20 mb-1"></div>
-                <div className="h-3 bg-muted animate-pulse rounded w-32"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      }>
-        <DashboardStats />
-      </Suspense>
+        {/* Financial Tabs - Main Content Area */}
+        <FinancialTabs />
 
-      {/* Quick Actions Row */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Link href="/dashboard/financieel/facturen" className="block">
-          <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
-            <CardContent className="flex items-center p-6">
-              <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400 mr-4" />
-              <div>
-                <h3 className="font-semibold">Nieuwe Factuur</h3>
-                <p className="text-sm text-muted-foreground">Maak een factuur</p>
+        {/* Mobile-optimized footer with enhanced styling */}
+        <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-border/50">
+          <div className="text-xs text-muted-foreground text-center space-y-2">
+            <div className="flex items-center justify-center gap-2 sm:gap-4 flex-wrap">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="hidden sm:inline">All systems operational</span>
+                <span className="sm:hidden">Online</span>
               </div>
-            </CardContent>
-          </Card>
-        </Link>
-        
-        <Link href="/dashboard/financieel/klanten" className="block">
-          <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
-            <CardContent className="flex items-center p-6">
-              <Users className="h-8 w-8 text-green-600 dark:text-green-400 mr-4" />
-              <div>
-                <h3 className="font-semibold">Nieuwe Klant</h3>
-                <p className="text-sm text-muted-foreground">Voeg klant toe</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-        
-        <Link href="/dashboard/financieel/uitgaven" className="block">
-          <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
-            <CardContent className="flex items-center p-6">
-              <Euro className="h-8 w-8 text-purple-600 dark:text-purple-400 mr-4" />
-              <div>
-                <h3 className="font-semibold">Uitgave Toevoegen</h3>
-                <p className="text-sm text-muted-foreground">Registreer uitgave</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-        
-        <Link href="/dashboard/financieel/tijd" className="block">
-          <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
-            <CardContent className="flex items-center p-6">
-              <Clock className="h-8 w-8 text-orange-600 dark:text-orange-400 mr-4" />
-              <div>
-                <h3 className="font-semibold">Uren Registreren</h3>
-                <p className="text-sm text-muted-foreground">Log gewerkte tijd</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid gap-8 lg:grid-cols-2">
-        {/* Recent Invoices */}
-        <div>
-          <Suspense fallback={
-            <Card>
-              <CardHeader>
-                <CardTitle>Facturen</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex items-center space-x-4">
-                      <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
-                      <div className="h-4 bg-muted animate-pulse rounded flex-1"></div>
-                      <div className="h-4 bg-muted animate-pulse rounded w-20"></div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          }>
-            <InvoiceList />
-          </Suspense>
-        </div>
-
-        {/* Recent Clients */}
-        <div>
-          <Suspense fallback={
-            <Card>
-              <CardHeader>
-                <CardTitle>Klanten</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex items-center space-x-4">
-                      <div className="h-4 bg-muted animate-pulse rounded w-8"></div>
-                      <div className="h-4 bg-muted animate-pulse rounded flex-1"></div>
-                      <div className="h-4 bg-muted animate-pulse rounded w-24"></div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          }>
-            <ClientList />
-          </Suspense>
-        </div>
-      </div>
-
-      {/* Recent Activity and Notifications */}
-      <div className="grid gap-8 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Recente Activiteit</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Factuur #2024-001 betaald</p>
-                  <p className="text-xs text-muted-foreground">Klant: Acme BV - €1,210.00 - 2 uur geleden</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Nieuwe klant toegevoegd</p>
-                  <p className="text-xs text-muted-foreground">TechStart BV - 5 uur geleden</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-orange-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">Uitgave geregistreerd</p>
-                  <p className="text-xs text-muted-foreground">Kantoorbenodigdheden - €45.50 - 1 dag geleden</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <div className="w-2 h-2 bg-purple-500 rounded-full mt-2"></div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">8 uren geregistreerd</p>
-                  <p className="text-xs text-muted-foreground">Project: Website ontwikkeling - 2 dagen geleden</p>
-                </div>
-              </div>
+              <div className="h-3 w-px bg-border hidden sm:block"></div>
+              <span className="text-xs">Tenant: {profile?.tenant_id?.substring(0, 8)}...</span>
             </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Belangrijke Deadlines</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-red-900 dark:text-red-300">
-                    BTW Aangifte Q4 2024
-                  </p>
-                  <p className="text-xs text-red-700 dark:text-red-400">
-                    Deadline: 31 januari 2025
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-yellow-900 dark:text-yellow-300">
-                    Factuur vervalt binnenkort
-                  </p>
-                  <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                    #2024-015 - Acme BV - 3 dagen
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-300">
-                    Backup maken
-                  </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-400">
-                    Wekelijkse backup - 2 dagen
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            <p className="font-medium text-xs sm:text-sm">
+              <span className="hidden sm:inline">Version 2.0 - Award-winning Financieel Dashboard</span>
+              <span className="sm:hidden">v2.0 - Financieel Dashboard</span>
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

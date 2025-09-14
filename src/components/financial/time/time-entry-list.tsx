@@ -26,7 +26,9 @@ import {
   Trash2, 
   Building2,
   Calendar,
-  Euro
+  Euro,
+  FolderOpen,
+  Info
 } from 'lucide-react'
 import type { TimeEntryWithClient, Client } from '@/lib/types/financial'
 import { getTimeEntryStatus } from '@/lib/utils/time-entry-status'
@@ -182,9 +184,9 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
     const totalHours = timeEntries.reduce((sum, entry) => sum + entry.hours, 0)
     const billableHours = billableEntries.reduce((sum, entry) => sum + entry.hours, 0)
     const totalValue = timeEntries.reduce((sum, entry) => 
-      sum + (entry.hours * (entry.hourly_rate || 0)), 0)
+      sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
     const unbilledValue = billableEntries.reduce((sum, entry) => 
-      sum + (entry.hours * (entry.hourly_rate || 0)), 0)
+      sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
 
     return { totalHours, billableHours, totalValue, unbilledValue }
   }
@@ -344,8 +346,37 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
                     </TableCell>
                     
                     <TableCell>
-                      <div className="font-medium">
-                        {entry.project_name || '-'}
+                      <div className="flex items-center gap-2">
+                        {entry.project ? (
+                          <>
+                            <FolderOpen className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            <div>
+                              <div className="font-medium">
+                                {entry.project.name}
+                              </div>
+                              {entry.project.description && (
+                                <div className="text-xs text-muted-foreground">
+                                  {entry.project.description}
+                                </div>
+                              )}
+                              {entry.project.hourly_rate && (
+                                <div className="text-xs text-green-600 dark:text-green-400">
+                                  €{entry.project.hourly_rate.toFixed(2)}/uur
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        ) : entry.project_name ? (
+                          <>
+                            <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                            <div className="font-medium">
+                              {entry.project_name}
+                              <div className="text-xs text-muted-foreground">Vrije tekst</div>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </div>
                     </TableCell>
                     
@@ -360,14 +391,28 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
                     </TableCell>
                     
                     <TableCell className="text-right">
-                      {entry.hourly_rate ? formatCurrency(entry.hourly_rate) : '-'}
+                      <div className="text-sm">
+                        {entry.effective_hourly_rate || entry.hourly_rate ? (
+                          <div>
+                            <div className="font-medium">
+                              {formatCurrency(entry.effective_hourly_rate || entry.hourly_rate)}
+                            </div>
+                            {entry.effective_hourly_rate && entry.effective_hourly_rate !== entry.hourly_rate && (
+                              <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Info className="h-3 w-3" />
+                                Effectief tarief
+                              </div>
+                            )}
+                          </div>
+                        ) : '-'}
+                      </div>
                     </TableCell>
                     
                     <TableCell className="text-right font-medium">
-                      {entry.hourly_rate ? (
+                      {entry.effective_hourly_rate || entry.hourly_rate ? (
                         <div className="flex items-center justify-end gap-1">
                           <Euro className="h-3 w-3" />
-                          {formatCurrency(entry.hours * entry.hourly_rate)}
+                          {formatCurrency(entry.hours * (entry.effective_hourly_rate || entry.hourly_rate))}
                         </div>
                       ) : '-'}
                     </TableCell>

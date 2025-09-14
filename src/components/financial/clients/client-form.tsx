@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Building2, User, Globe, Phone, Mail, MapPin, Calendar, Clock } from 'lucide-react'
+import { Loader2, Building2, User, Globe, Phone, Mail, MapPin, Calendar, Clock, Euro } from 'lucide-react'
 import { CreateClientSchema, UpdateClientSchema } from '@/lib/validations/financial'
 import type { Client } from '@/lib/types/financial'
 import { z } from 'zod'
@@ -92,6 +92,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       is_supplier: client?.is_supplier || false,
       default_payment_terms: client?.default_payment_terms || 30,
       notes: client?.notes || '',
+      hourly_rate: client?.hourly_rate || undefined,
       // Invoicing frequency fields
       invoicing_frequency: client?.invoicing_frequency || 'on_demand',
       auto_invoice_enabled: client?.auto_invoice_enabled || false,
@@ -123,7 +124,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
 
       const result = await response.json()
 
-      if (response.ok && result.data?.is_valid) {
+      if (response.ok && result.data?.valid) {
         setVatValidation({
           isValidating: false,
           isValid: true,
@@ -452,28 +453,62 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="default_payment_terms"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Standaard betalingstermijn (dagen)</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        min="1" 
-                        max="365"
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 30)}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Aantal dagen na factuurdatum voor betaling
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="default_payment_terms"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Standaard betalingstermijn (dagen)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          min="1" 
+                          max="365"
+                          {...field}
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 30)}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Aantal dagen na factuurdatum voor betaling
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="hourly_rate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2">
+                        <Euro className="h-4 w-4" />
+                        Uurtarief
+                      </FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          step="0.01"
+                          min="0"
+                          max="9999.99"
+                          placeholder="€0,00"
+                          {...field}
+                          value={field.value || ''}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            field.onChange(value === '' ? undefined : parseFloat(value))
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Standaard uurtarief voor deze klant
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}

@@ -354,42 +354,164 @@ GET /api/user/export-data
 # Returns: Complete user data in JSON format
 ```
 
-## 🧪 Testing Strategy
+## 🧪 Comprehensive Testing Strategy
 
-The template follows a 70/20/10 testing approach:
+The template implements enterprise-grade testing following a **70/20/10 strategy** with complete B2B SaaS coverage:
 
-### Unit Tests (70%)
-```bash
-npm run test:unit
-# Tests: Components, hooks, utilities
+### 🎯 **Test Architecture Overview**
+
+```
+src/__tests__/
+├── setup/              # Test configuration & utilities
+├── unit/               # 70% - Fast isolated tests
+│   ├── auth/           # Role-based permissions & tenant isolation
+│   ├── financial/      # Invoice workflows & Dutch VAT compliance
+│   └── notifications/  # Real-time notification system
+├── integration/        # 20% - API & database integration tests
+│   ├── api/            # REST endpoint testing with authentication
+│   └── database/       # RLS policies & data integrity
+└── e2e/               # 10% - Complete user journey testing
 ```
 
-### Integration Tests (20%)
+### 🔐 **Unit Tests (70%) - Business Logic Coverage**
+
+**Role-Based Access Control Testing:**
 ```bash
-npm run test:integration
-# Tests: API routes, database operations, auth flow
+# Test all permission matrices: Owner/Admin/Member roles
+npm run test:unit -- roles.test.ts
+
+# Verify multi-tenant data isolation
+npm run test:unit -- tenant-isolation.test.ts
 ```
 
-### E2E Tests (10%)
+**Financial Workflows Testing:**
 ```bash
-npm run test:e2e
-# Tests: Complete user workflows with Playwright
+# Complete invoice lifecycle: draft → sent → paid/overdue
+npm run test:unit -- invoices.test.ts
+
+# Dutch tax agency expense categories with VAT compliance
+npm run test:unit -- expenses.test.ts
 ```
 
-### Running Tests
-```bash
-# Run all tests
-npm run test:ci
+**Key Features Tested:**
+- ✅ **Permission Matrix**: Owner (full), Admin (management), Member (basic)
+- ✅ **VAT Calculations**: 21% standard, 0% reverse charge, exempt scenarios
+- ✅ **Invoice Statuses**: Draft, sent, paid, overdue, partial, cancelled
+- ✅ **Expense Categories**: Official Dutch tax agency categories with GL codes
+- ✅ **Tenant Isolation**: Complete data separation between organizations
 
-# Watch mode for development
+### 🔌 **Integration Tests (20%) - API & Database**
+
+**Database Integration:**
+```bash
+# RLS policy enforcement and tenant isolation
+npm run test:integration -- database/rls-policies.integration.test.ts
+
+# Data integrity and foreign key constraints
+npm run test:integration -- database/data-integrity.integration.test.ts
+```
+
+**API Endpoint Testing:**
+```bash
+# Authentication-protected API routes
+npm run test:integration -- api/auth-endpoints.integration.test.ts
+
+# Financial operations with real database
+npm run test:integration -- api/financial-apis.integration.test.ts
+```
+
+### 🎭 **E2E Tests (10%) - User Workflows**
+
+**Complete User Journeys:**
+```bash
+# Full onboarding and setup flow
+npm run test:e2e -- onboarding-flow.e2e.test.ts
+
+# Invoice creation to payment workflow
+npm run test:e2e -- invoice-lifecycle.e2e.test.ts
+
+# Expense submission and approval process
+npm run test:e2e -- expense-workflow.e2e.test.ts
+```
+
+### 🚀 **Running Tests**
+
+**Development Testing:**
+```bash
+# Run specific test suites
+npm run test:unit              # Fast feedback loop
+npm run test:integration       # Database + API testing
+npm run test:e2e              # Full workflow validation
+
+# Watch mode for active development
 npm run test:watch
 
-# Coverage report
-npm run test:coverage
-
-# Interactive test UI
+# Interactive test UI with coverage
 npm run test:ui
 ```
+
+**CI/CD & Production:**
+```bash
+# Complete test suite for deployment
+npm run test:ci
+
+# Generate coverage reports
+npm run test:coverage
+
+# Type checking before tests
+npm run type-check
+```
+
+### 📊 **Test Data & Seed Strategy**
+
+The testing strategy uses **comprehensive seed data** that mirrors real B2B SaaS scenarios:
+
+**Multi-Tenant Test Structure:**
+- **Tenant 1 (TechFlow Solutions)**: 3 users (Owner/Admin/Member) + 2 clients
+- **Tenant 2 (Data Analytics Pro)**: 1 user (Owner) + 1 client
+- **Clean Email Separation**: No overlap between team members and clients
+
+**Dutch Tax Compliance:**
+- ✅ **Official Categories**: Kantoorbenodigdheden, Reiskosten, Software & ICT
+- ✅ **VAT Rules**: 21% standard, 0% reverse charge, non-deductible meals
+- ✅ **GL Account Codes**: 4110-4170 range for proper accounting
+
+**Financial Test Coverage:**
+- ✅ **All Invoice Statuses**: Complete lifecycle testing
+- ✅ **VAT Scenarios**: Standard, reverse charge, exempt, reduced rates
+- ✅ **Payment Flows**: Full, partial, and overpayment handling
+- ✅ **Approval Workflows**: Role-based expense approval matrix
+
+### 🛡️ **Test Environment Setup**
+
+**Database Test Configuration:**
+```typescript
+// Automatic test data verification
+export const verifyTestDataExists = async () => {
+  // Ensures all seed data is present before running tests
+  // Validates tenant isolation and user permissions
+}
+
+// RLS policy testing utilities
+export const testRLS = {
+  verifyTenantIsolation: async (tenantId, userId) => { /* ... */ },
+  verifyRolePermissions: async (userId, role, action) => { /* ... */ }
+}
+```
+
+### 📈 **Coverage Goals & Quality Gates**
+
+| Test Type | Coverage Target | Quality Gates |
+|-----------|----------------|---------------|
+| **Unit Tests** | 85%+ | All business logic paths |
+| **Integration** | 80%+ | API contracts & RLS policies |
+| **E2E Tests** | Critical paths | Key user journeys only |
+
+**Automated Quality Checks:**
+- ✅ TypeScript compilation
+- ✅ ESLint code quality
+- ✅ Test coverage thresholds
+- ✅ Integration test data validation
 
 ## 📦 Available Scripts
 

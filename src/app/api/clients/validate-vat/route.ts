@@ -122,14 +122,14 @@ async function validateVATWithVIES(vatNumber: string, countryCode: string): Prom
     const data = await response.json()
     
     console.log(`VIES response for ${countryCode}${vatNumberOnly}:`, {
-      valid: data.valid,
+      isValid: data.isValid,
       hasCompanyInfo: !!(data.name || data.address)
     })
     
     return {
       vat_number: vatNumber,
       country_code: countryCode,
-      valid: data.valid === true,
+      valid: data.isValid === true,
       company_name: data.name || undefined,
       company_address: data.address || undefined,
       validation_date: new Date().toISOString()

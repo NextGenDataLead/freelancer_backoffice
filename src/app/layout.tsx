@@ -7,6 +7,8 @@ import { RouteGuard } from '@/components/auth/route-guard'
 import { InactivityWarning } from '@/components/auth/inactivity-warning'
 import { CookieConsent } from '@/components/cookie-consent'
 import { ConsentAwareAnalytics } from '@/components/analytics/consent-aware-analytics'
+import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from 'sonner'
 // LiveChat and HelpSystem components not yet implemented
 import './globals.css'
 
@@ -70,25 +72,33 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <ClerkProvider
         signUpForceRedirectUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL || "/onboarding"}
         signInForceRedirectUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL || "/dashboard"}
       >
         <body className={inter.className}>
-          <QueryProvider>
-            <AuthProvider>
-              <RouteGuard requireAuth={false}>
-                {children}
-                <InactivityWarning />
-              </RouteGuard>
-            </AuthProvider>
-            <CookieConsent />
-            <ConsentAwareAnalytics 
-              debug={process.env.NODE_ENV === 'development'}
-            />
-            {/* LiveChat and HelpSystem components not yet implemented */}
-          </QueryProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem={true}
+            disableTransitionOnChange={false}
+          >
+            <QueryProvider>
+              <AuthProvider>
+                <RouteGuard requireAuth={false}>
+                  {children}
+                  <InactivityWarning />
+                </RouteGuard>
+              </AuthProvider>
+              <CookieConsent />
+              <ConsentAwareAnalytics 
+                debug={process.env.NODE_ENV === 'development'}
+              />
+              <Toaster position="top-right" />
+              {/* LiveChat and HelpSystem components not yet implemented */}
+            </QueryProvider>
+          </ThemeProvider>
         </body>
       </ClerkProvider>
     </html>

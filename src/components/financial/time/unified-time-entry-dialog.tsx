@@ -41,19 +41,24 @@ import {
   Loader2,
   Building2,
   PlayCircle,
+  FolderOpen,
 } from 'lucide-react'
 import { CreateTimeEntrySchema } from '@/lib/validations/financial'
 import type { TimeEntryWithClient, Client } from '@/lib/types/financial'
 import { z } from 'zod'
+import { format } from 'date-fns'
 
 interface UnifiedTimeEntryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   timeEntry?: TimeEntryWithClient
+  selectedDate?: Date
+  calendarMode?: boolean
   onSuccess?: (timeEntry: TimeEntryWithClient) => void
   onStartTimer?: (timerData: {
     clientId: string
     clientName: string
+    projectId: string
     project: string
     description: string
     billable: boolean
@@ -68,6 +73,16 @@ interface ClientOption {
   company_name?: string
   is_business: boolean
   country_code: string
+  hourly_rate?: number
+}
+
+interface ProjectOption {
+  id: string
+  name: string
+  description?: string
+  client_id: string
+  hourly_rate?: number
+  active: boolean
 }
 
 type EntryMode = 'manual' | 'timer'
@@ -76,11 +91,15 @@ export function UnifiedTimeEntryDialog({
   open, 
   onOpenChange, 
   timeEntry, 
+  selectedDate,
+  calendarMode = false,
   onSuccess,
   onStartTimer 
 }: UnifiedTimeEntryDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [clients, setClients] = useState<ClientOption[]>([])
+  const [projects, setProjects] = useState<ProjectOption[]>([])
+  const [filteredProjects, setFilteredProjects] = useState<ProjectOption[]>([])
   const [clientsLoading, setClientsLoading] = useState(true)
   const [entryMode, setEntryMode] = useState<EntryMode>('manual')
 
@@ -88,7 +107,9 @@ export function UnifiedTimeEntryDialog({
     resolver: zodResolver(CreateTimeEntrySchema),
     defaultValues: {
       client_id: timeEntry?.client_id || '',
-      entry_date: timeEntry?.entry_date || new Date().toISOString().split('T')[0],
+      project_id: timeEntry?.project_id || '',
+      entry_date: timeEntry?.entry_date || 
+                  (selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
       description: timeEntry?.description || '',
       hours: timeEntry?.hours || 0,
       hourly_rate: timeEntry?.hourly_rate || undefined,
@@ -98,27 +119,38 @@ export function UnifiedTimeEntryDialog({
     },
   })
 
-  // Load clients on component mount
+  // Load clients and projects on component mount
   useEffect(() => {
-    const fetchClients = async () => {
+    const fetchData = async () => {
       try {
         setClientsLoading(true)
-        const response = await fetch('/api/clients?limit=100')
-        if (response.ok) {
-          const data = await response.json()
-          setClients(data.data || [])
+        
+        // Fetch clients
+        const clientsResponse = await fetch('/api/clients?limit=100&active=true')
+        if (clientsResponse.ok) {
+          const clientsData = await clientsResponse.json()
+          setClients(clientsData.data || [])
         } else {
-          console.error('Failed to fetch clients:', response.status)
+          console.error('Failed to fetch clients:', clientsResponse.status)
+        }
+
+        // Fetch projects
+        const projectsResponse = await fetch('/api/projects?limit=100&active=true')
+        if (projectsResponse.ok) {
+          const projectsData = await projectsResponse.json()
+          setProjects(projectsData.data || [])
+        } else {
+          console.error('Failed to fetch projects:', projectsResponse.status)
         }
       } catch (error) {
-        console.error('Failed to load clients:', error)
+        console.error('Failed to load data:', error)
       } finally {
         setClientsLoading(false)
       }
     }
 
     if (open) {
-      fetchClients()
+      fetchData()
     }
   }, [open])
 
@@ -130,6 +162,7 @@ export function UnifiedTimeEntryDialog({
         setEntryMode('manual')
         form.reset({
           client_id: timeEntry.client_id,
+          project_id: timeEntry.project_id || '',
           entry_date: timeEntry.entry_date,
           description: timeEntry.description,
           hours: timeEntry.hours,
@@ -139,10 +172,15 @@ export function UnifiedTimeEntryDialog({
           invoiced: timeEntry.invoiced,
         })
       } else {
-        // New entry - allow both modes
+        // New entry - allow both modes, handle calendar mode
+        const defaultDate = selectedDate 
+          ? format(selectedDate, 'yyyy-MM-dd')
+          : format(new Date(), 'yyyy-MM-dd')
+          
         form.reset({
           client_id: '',
-          entry_date: new Date().toISOString().split('T')[0],
+          project_id: '',
+          entry_date: defaultDate,
           description: '',
           hours: undefined, // Don't set to 0, leave undefined to avoid validation
           hourly_rate: undefined,
@@ -156,24 +194,62 @@ export function UnifiedTimeEntryDialog({
   }, [open, timeEntry, form])
 
   const watchedClientId = form.watch('client_id')
+  const watchedProjectId = form.watch('project_id')
   const watchedProjectName = form.watch('project_name')
   const watchedHours = form.watch('hours')
   const watchedHourlyRate = form.watch('hourly_rate')
   const watchedBillable = form.watch('billable')
   const watchedInvoiced = form.watch('invoiced')
 
-  // Calculate total value
-  const totalValue = watchedHours && watchedHourlyRate 
-    ? Math.round(watchedHours * watchedHourlyRate * 100) / 100
+  // Update filtered projects when client changes
+  useEffect(() => {
+    if (watchedClientId) {
+      const clientProjects = projects.filter(p => p.client_id === watchedClientId)
+      setFilteredProjects(clientProjects)
+      
+      // Clear project selection if current project doesn't belong to selected client
+      if (watchedProjectId) {
+        const selectedProject = projects.find(p => p.id === watchedProjectId)
+        if (!selectedProject || selectedProject.client_id !== watchedClientId) {
+          form.setValue('project_id', '')
+        }
+      }
+    } else {
+      setFilteredProjects([])
+      form.setValue('project_id', '')
+    }
+  }, [watchedClientId, watchedProjectId, projects, form])
+
+  // Calculate effective hourly rate (project-first, then client)
+  const getEffectiveHourlyRate = () => {
+    if (watchedProjectId) {
+      const project = projects.find(p => p.id === watchedProjectId)
+      if (project?.hourly_rate) return project.hourly_rate
+    }
+    
+    if (watchedClientId) {
+      const client = clients.find(c => c.id === watchedClientId)
+      if (client?.hourly_rate) return client.hourly_rate
+    }
+    
+    return null
+  }
+
+  // Calculate total value using effective hourly rate
+  const effectiveHourlyRate = getEffectiveHourlyRate()
+  const totalValue = watchedHours && effectiveHourlyRate 
+    ? Math.round(watchedHours * effectiveHourlyRate * 100) / 100
     : 0
 
-  // Separate validation for each mode
+  // Separate validation for each mode - now requires client and project
   const isManualValid = watchedClientId && 
+    watchedProjectId &&
     watchedHours && watchedHours > 0 && 
-    watchedHourlyRate && watchedHourlyRate > 0
+    effectiveHourlyRate && effectiveHourlyRate > 0
     
   const isTimerValid = watchedClientId && 
-    watchedHourlyRate && watchedHourlyRate > 0 // Client and hourly rate required for timer
+    watchedProjectId &&
+    effectiveHourlyRate && effectiveHourlyRate > 0
     
   // Check if form is valid for current mode
   const isFormValid = entryMode === 'manual' ? isManualValid : isTimerValid
@@ -207,7 +283,27 @@ export function UnifiedTimeEntryDialog({
       return
     }
 
-    // Custom validation for manual mode - hours and hourly rate are required
+    // Validate client and project selection for both modes
+    if (!data.client_id?.trim()) {
+      console.error('ERROR: No client_id in form data!')
+      alert('Selecteer eerst een klant')
+      return
+    }
+    
+    if (!data.project_id?.trim()) {
+      console.error('ERROR: No project_id in form data!')
+      alert('Selecteer eerst een project')
+      return
+    }
+
+    // Get effective hourly rate and set it in the data
+    const effectiveRate = getEffectiveHourlyRate()
+    if (!effectiveRate || effectiveRate <= 0) {
+      alert('Geen geldig uurtarief gevonden voor het geselecteerde project of klant')
+      return
+    }
+
+    // Custom validation for manual mode - hours are required
     if (entryMode === 'manual') {
       if (!data.hours || data.hours <= 0) {
         form.setError('hours', { 
@@ -216,34 +312,12 @@ export function UnifiedTimeEntryDialog({
         })
         return
       }
-      
-      if (!data.hourly_rate || data.hourly_rate <= 0) {
-        form.setError('hourly_rate', { 
-          type: 'required', 
-          message: 'Uurtarief moet groter zijn dan 0 voor handmatige invoer' 
-        })
-        return
-      }
     }
     
     if (entryMode === 'timer') {
       console.log('=== TIMER MODE ===')
       
-      // Validate client selection
-      if (!data.client_id?.trim()) {
-        console.error('ERROR: No client_id in form data!')
-        alert('Selecteer eerst een klant voordat je de timer start')
-        return
-      }
-      
-      // Validate hourly rate for timer mode
-      if (!data.hourly_rate || data.hourly_rate <= 0) {
-        form.setError('hourly_rate', { 
-          type: 'required', 
-          message: 'Uurtarief is verplicht voor de timer' 
-        })
-        return
-      }
+      // Client and project validation already done above
 
       const selectedClient = clients.find(c => c.id === data.client_id)
       console.log('Selected client lookup result:', selectedClient)
@@ -259,14 +333,18 @@ export function UnifiedTimeEntryDialog({
       const clientName = selectedClient.company_name || selectedClient.name || ''
       console.log('Resolved client name:', clientName)
 
+      const selectedProject = projects.find(p => p.id === data.project_id)
+      const projectName = selectedProject?.name || data.project_name || ''
+
       const timerData = {
         clientId: data.client_id,
         clientName,
-        project: data.project_name || '',
+        projectId: data.project_id,
+        project: projectName,
         description: data.description || '',
         billable: data.billable,
         invoiced: data.invoiced,
-        hourlyRate: data.hourly_rate
+        hourlyRate: effectiveRate
       }
 
       console.log('=== STARTING TIMER ===')
@@ -287,13 +365,19 @@ export function UnifiedTimeEntryDialog({
     // Manual mode - save immediately
     setIsSubmitting(true)
     try {
+      // Set the effective hourly rate from the selected project/client
+      const submissionData = {
+        ...data,
+        hourly_rate: effectiveRate
+      }
+
       const url = timeEntry ? `/api/time-entries/${timeEntry.id}` : '/api/time-entries'
       const method = timeEntry ? 'PUT' : 'POST'
 
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(submissionData)
       })
 
       if (!response.ok) {
@@ -325,9 +409,19 @@ export function UnifiedTimeEntryDialog({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            {timeEntry ? 'Tijdregistratie bewerken' : 'Nieuwe tijdregistratie'}
+            {calendarMode ? <Calendar className="h-5 w-5" /> : <User className="h-5 w-5" />}
+            {timeEntry ? 'Tijdregistratie bewerken' : calendarMode ? 'Nieuwe tijdregistratie voor kalender' : 'Nieuwe tijdregistratie'}
           </DialogTitle>
+          {calendarMode && selectedDate && (
+            <p className="text-sm text-muted-foreground">
+              Datum: {selectedDate.toLocaleDateString('nl-NL', { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </p>
+          )}
         </DialogHeader>
 
         <div className="space-y-6">
@@ -462,29 +556,76 @@ export function UnifiedTimeEntryDialog({
                         <FormItem>
                           <FormLabel className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" />
-                            Datum
+                            Datum {calendarMode && <span className="text-xs text-muted-foreground">(vooringevuld)</span>}
                           </FormLabel>
                           <FormControl>
-                            <Input type="date" {...field} />
+                            <Input 
+                              type="date" 
+                              {...field} 
+                              disabled={calendarMode}
+                              className={calendarMode ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800" : ""}
+                            />
                           </FormControl>
+                          <FormDescription>
+                            {calendarMode 
+                              ? 'Datum is automatisch ingesteld vanuit de kalender' 
+                              : 'Selecteer de datum waarop de tijd is gewerkt'
+                            }
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
 
-                  {/* Project Name */}
+                  {/* Project Selection */}
                   <FormField
                     control={form.control}
-                    name="project_name"
+                    name="project_id"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Project naam (optioneel)</FormLabel>
+                        <FormLabel className="flex items-center gap-2">
+                          <FolderOpen className="h-4 w-4" />
+                          Project <span className="text-red-500">*</span>
+                        </FormLabel>
                         <FormControl>
-                          <Input placeholder="Website ontwikkeling..." {...field} />
+                          <Select 
+                            onValueChange={field.onChange} 
+                            value={field.value}
+                            disabled={!watchedClientId || filteredProjects.length === 0}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={
+                                !watchedClientId 
+                                  ? "Selecteer eerst een klant" 
+                                  : filteredProjects.length === 0
+                                    ? "Geen projecten beschikbaar"
+                                    : "Selecteer project"
+                              } />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {filteredProjects.map((project) => (
+                                <SelectItem key={project.id} value={project.id}>
+                                  <div className="flex flex-col">
+                                    <span>{project.name}</span>
+                                    {project.description && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {project.description}
+                                      </span>
+                                    )}
+                                    {project.hourly_rate && (
+                                      <span className="text-xs text-green-600">
+                                        €{project.hourly_rate.toFixed(2)}/uur
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </FormControl>
                         <FormDescription>
-                          Voor betere organisatie van je tijdregistraties
+                          Kies een project voor deze tijdregistratie. Het uurtarief wordt automatisch bepaald door het project.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -556,33 +697,27 @@ export function UnifiedTimeEntryDialog({
                       )}
                     </div>
 
-                    {/* Rate Field - Always shown */}
-                    <FormField
-                      control={form.control}
-                      name="hourly_rate"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="flex items-center gap-1">
-                            <Euro className="h-3 w-3" />
-                            Uurtarief
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="0.00"
-                              {...field}
-                              onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Laat leeg om standaard tarief te gebruiken
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    {/* Rate Field - Read-only, derived from project */}
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1">
+                        <Euro className="h-3 w-3" />
+                        Uurtarief
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="text"
+                          value={(() => {
+                            const effectiveRate = getEffectiveHourlyRate()
+                            return effectiveRate ? `€${effectiveRate.toFixed(2)}` : 'Geen tarief ingesteld'
+                          })()}
+                          disabled
+                          className="bg-muted"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Automatisch bepaald door het geselecteerde project
+                      </FormDescription>
+                    </FormItem>
                   </div>
 
                   {/* Timer Mode Info */}

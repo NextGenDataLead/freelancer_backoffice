@@ -22,6 +22,7 @@ import { z } from 'zod'
 // Query schema for time entries
 const TimeEntriesQuerySchema = PaginationSchema.extend({
   client_id: z.string().uuid().optional(),
+  project_id: z.string().uuid().optional(),
   date_from: z.string().datetime().optional(),
   date_to: z.string().datetime().optional(),
   billable: z.coerce.boolean().optional(),
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
     
     const validatedQuery = TimeEntriesQuerySchema.parse(queryParams)
 
-    // Build query with optional client join
+    // Build query with client and project joins
     let query = supabaseAdmin
       .from('time_entries')
       .select(`
@@ -58,7 +59,15 @@ export async function GET(request: Request) {
           name,
           company_name,
           email,
-          country_code
+          country_code,
+          hourly_rate
+        ),
+        project:projects(
+          id,
+          name,
+          description,
+          hourly_rate,
+          active
         ),
         invoice:invoices(
           id,
@@ -72,6 +81,10 @@ export async function GET(request: Request) {
     // Apply filters
     if (validatedQuery.client_id) {
       query = query.eq('client_id', validatedQuery.client_id)
+    }
+
+    if (validatedQuery.project_id) {
+      query = query.eq('project_id', validatedQuery.project_id)
     }
 
     if (validatedQuery.date_from) {
@@ -156,13 +169,43 @@ export async function POST(request: Request) {
     // Validate request data
     const validatedData = CreateTimeEntrySchema.parse(body)
 
-    // Verify client exists and belongs to tenant (if provided)
-    if (validatedData.client_id) {
+    let clientId = validatedData.client_id
+    let projectId = validatedData.project_id
+    
+    // If project is provided, get client from project and verify access
+    if (projectId) {
+      const { data: project, error: projectError } = await supabaseAdmin
+        .from('projects')
+        .select(`
+          id, 
+          name, 
+          client_id, 
+          hourly_rate,
+          clients(
+            id,
+            name,
+            hourly_rate
+          )
+        `)
+        .eq('id', projectId)
+        .eq('tenant_id', profile.tenant_id)
+        .eq('active', true)
+        .single()
+
+      if (projectError || !project) {
+        const notFoundError = ApiErrors.NotFound('Project')
+        return NextResponse.json(notFoundError, { status: notFoundError.status })
+      }
+      
+      clientId = project.client_id // Get client from project
+    } else if (clientId) {
+      // Verify client exists and belongs to tenant
       const { data: client, error: clientError } = await supabaseAdmin
         .from('clients')
-        .select('id, name')
-        .eq('id', validatedData.client_id)
+        .select('id, name, hourly_rate')
+        .eq('id', clientId)
         .eq('tenant_id', profile.tenant_id)
+        .eq('active', true)
         .single()
 
       if (clientError || !client) {
@@ -171,16 +214,29 @@ export async function POST(request: Request) {
       }
     }
 
-    // Get default hourly rate from profile if not provided
-    let hourlyRate = validatedData.hourly_rate
-    if (!hourlyRate) {
+    // Calculate effective hourly rate using the database function
+    let effectiveHourlyRate = validatedData.hourly_rate
+    
+    if (!effectiveHourlyRate && (clientId || projectId)) {
+      const { data: calculatedRate } = await supabaseAdmin
+        .rpc('calculate_effective_hourly_rate', {
+          client_id_param: clientId,
+          project_id_param: projectId,
+          manual_rate_param: validatedData.hourly_rate
+        })
+      
+      effectiveHourlyRate = calculatedRate
+    }
+    
+    // If still no rate, try to get default from profile
+    if (!effectiveHourlyRate) {
       const { data: profileData } = await supabaseAdmin
         .from('profiles')
         .select('hourly_rate')
         .eq('id', profile.id)
         .single()
       
-      hourlyRate = profileData?.hourly_rate || undefined
+      effectiveHourlyRate = profileData?.hourly_rate || undefined
     }
 
     // Create time entry
@@ -188,7 +244,10 @@ export async function POST(request: Request) {
       .from('time_entries')
       .insert({
         ...validatedData,
-        hourly_rate: hourlyRate,
+        client_id: clientId,
+        project_id: projectId,
+        hourly_rate: validatedData.hourly_rate, // Keep original manual rate
+        effective_hourly_rate: effectiveHourlyRate, // Store calculated rate
         tenant_id: profile.tenant_id,
         created_by: profile.id
       })
@@ -199,7 +258,15 @@ export async function POST(request: Request) {
           name,
           company_name,
           email,
-          country_code
+          country_code,
+          hourly_rate
+        ),
+        project:projects(
+          id,
+          name,
+          description,
+          hourly_rate,
+          active
         )
       `)
       .single()
