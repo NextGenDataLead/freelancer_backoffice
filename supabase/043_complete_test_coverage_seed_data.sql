@@ -255,6 +255,42 @@ INSERT INTO platform_subscription_payments (id, tenant_id, subscription_id, paym
 ('70000024-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 79.00, 'EUR', 'paid', (NOW() - INTERVAL '1 month')::date, NULL, 'Professional plan - Enterprise B', '{"customer": "enterprise-b", "payment_method": "card"}', NOW() - INTERVAL '1 month'),
 ('70000025-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 79.00, 'EUR', 'paid', NOW()::date, NULL, 'Professional plan - Enterprise B (Current)', '{"customer": "enterprise-b", "payment_method": "card"}', NOW()),
 
-('70000026-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 79.00, 'EUR', 'paid', NOW()::date, NULL, 'Professional plan - Enterprise C (New this month)', '{"customer": "enterprise-c", "payment_method": "card"}', NOW());
+('70000026-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 79.00, 'EUR', 'paid', NOW()::date, NULL, 'Professional plan - Enterprise C (New this month)', '{"customer": "enterprise-c", "payment_method": "card"}', NOW()),
+
+-- ====================
+-- ENHANCED SUBSCRIPTION DATA FOR TESTING MAU & AVERAGE SUBSCRIPTION FEE
+-- ====================
+
+-- Additional historical data for 3-month trend analysis
+-- Previous 3 months: Customers K-O (5 customers) for growth testing
+('70000031-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 29.00, 'EUR', 'paid', (NOW() - INTERVAL '3 months')::date, NULL, 'Starter plan - Customer K (3 months ago)', '{"customer": "customer-k", "payment_method": "ideal"}', NOW() - INTERVAL '3 months'),
+('70000032-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 29.00, 'EUR', 'paid', (NOW() - INTERVAL '2 months')::date, NULL, 'Starter plan - Customer K', '{"customer": "customer-k", "payment_method": "ideal"}', NOW() - INTERVAL '2 months'),
+('70000033-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 29.00, 'EUR', 'paid', (NOW() - INTERVAL '1 month')::date, NULL, 'Starter plan - Customer K', '{"customer": "customer-k", "payment_method": "ideal"}', NOW() - INTERVAL '1 month'),
+-- Customer K churned (no current month payment)
+
+-- Premium tier customers (higher subscription fees for average calculation)
+('70000034-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 149.00, 'EUR', 'paid', (NOW() - INTERVAL '2 months')::date, NULL, 'Premium plan - Customer L', '{"customer": "customer-l", "payment_method": "sepa"}', NOW() - INTERVAL '2 months'),
+('70000035-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 149.00, 'EUR', 'paid', (NOW() - INTERVAL '1 month')::date, NULL, 'Premium plan - Customer L', '{"customer": "customer-l", "payment_method": "sepa"}', NOW() - INTERVAL '1 month'),
+('70000036-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 149.00, 'EUR', 'paid', NOW()::date, NULL, 'Premium plan - Customer L (Current)', '{"customer": "customer-l", "payment_method": "sepa"}', NOW()),
+
+('70000037-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 199.00, 'EUR', 'paid', (NOW() - INTERVAL '1 month')::date, NULL, 'Enterprise plan - Customer M', '{"customer": "customer-m", "payment_method": "sepa"}', NOW() - INTERVAL '1 month'),
+('70000038-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 199.00, 'EUR', 'paid', NOW()::date, NULL, 'Enterprise plan - Customer M (Current)', '{"customer": "customer-m", "payment_method": "sepa"}', NOW()),
+
+-- Failed payments for realistic testing
+('70000039-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 29.00, 'EUR', 'failed', NOW()::date, 'Insufficient funds', 'Starter plan - Customer N (Payment failed)', '{"customer": "customer-n", "payment_method": "ideal"}', NOW()),
+
+-- Diverse payment methods and amounts
+('7000003a-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 49.00, 'EUR', 'paid', (NOW() - INTERVAL '1 month')::date, NULL, 'Growth plan - Customer O', '{"customer": "customer-o", "payment_method": "paypal"}', NOW() - INTERVAL '1 month'),
+('7000003b-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '40000001-1111-1111-1111-111111111111', 'mollie', 49.00, 'EUR', 'paid', NOW()::date, NULL, 'Growth plan - Customer O (Current)', '{"customer": "customer-o", "payment_method": "paypal"}', NOW()),
+
+-- Tenant 2: Enhanced enterprise data with varied pricing
+('70000041-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 299.00, 'EUR', 'paid', (NOW() - INTERVAL '3 months')::date, NULL, 'Enterprise Plus - Enterprise D', '{"customer": "enterprise-d", "payment_method": "card"}', NOW() - INTERVAL '3 months'),
+('70000042-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 299.00, 'EUR', 'paid', (NOW() - INTERVAL '2 months')::date, NULL, 'Enterprise Plus - Enterprise D', '{"customer": "enterprise-d", "payment_method": "card"}', NOW() - INTERVAL '2 months'),
+('70000043-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 299.00, 'EUR', 'paid', (NOW() - INTERVAL '1 month')::date, NULL, 'Enterprise Plus - Enterprise D', '{"customer": "enterprise-d", "payment_method": "card"}', NOW() - INTERVAL '1 month'),
+('70000044-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 299.00, 'EUR', 'paid', NOW()::date, NULL, 'Enterprise Plus - Enterprise D (Current)', '{"customer": "enterprise-d", "payment_method": "card"}', NOW()),
+
+-- Annual subscriptions for diverse billing patterns
+('70000045-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 948.00, 'EUR', 'paid', (NOW() - INTERVAL '1 month')::date, NULL, 'Professional Annual - Enterprise E', '{"customer": "enterprise-e", "payment_method": "card", "billing_cycle": "annual"}', NOW() - INTERVAL '1 month'),
+('70000046-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', '40000007-2222-2222-2222-222222222222', 'stripe', 948.00, 'EUR', 'paid', NOW()::date, NULL, 'Professional Annual - Enterprise E (Current)', '{"customer": "enterprise-e", "payment_method": "card", "billing_cycle": "annual"}', NOW());
 
 SET row_security = on;

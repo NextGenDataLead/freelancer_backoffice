@@ -2,10 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
+import { useRouter } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { FinancialHealthScore } from './financial-health-score'
+import { smartRulesEngine, type BusinessData, type SmartAlert } from '@/lib/smart-rules-engine'
 import {
   Euro,
   TrendingUp,
@@ -108,11 +111,13 @@ const formatCurrency = (amount: number) => `€${amount.toLocaleString()}`
 const formatHours = (hours: number) => `${hours}h`
 
 export function MetricsCards() {
+  const router = useRouter()
   const [dashboardMetrics, setDashboardMetrics] = useState<DashboardMetricsResponse['data'] | null>(null)
   const [timeStats, setTimeStats] = useState<TimeStatsResponse['data'] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [actionsOpen, setActionsOpen] = useState(true)
+  const [smartAlerts, setSmartAlerts] = useState<SmartAlert[]>([])
 
   // Fetch data from APIs
   useEffect(() => {
@@ -163,6 +168,79 @@ export function MetricsCards() {
         })
         setTimeStats(timeData.data)
 
+        // Fetch client stats for accurate Smart Alerts
+        console.log('👥 Fetching client stats...')
+        const clientResponse = await fetch('/api/clients/stats')
+        let clientStats = null
+        if (clientResponse.ok) {
+          const clientData = await clientResponse.json()
+          clientStats = clientData.success ? clientData.data : null
+          console.log('✅ Client stats data:', clientStats)
+        }
+
+        // Fetch client revenue for top client analysis
+        console.log('💰 Fetching client revenue data...')
+        const clientRevenueResponse = await fetch('/api/financial/client-revenue')
+        let topClientData = null
+        if (clientRevenueResponse.ok) {
+          const clientRevenueResult = await clientRevenueResponse.json()
+          if (clientRevenueResult.success && clientRevenueResult.data.clients.length > 0) {
+            const topClient = clientRevenueResult.data.clients[0]
+            topClientData = {
+              name: topClient.name,
+              revenueShare: topClient.percentage
+            }
+            console.log('✅ Top client data:', topClientData)
+          }
+        }
+
+        // Generate Smart Alerts using rules engine with real data
+        if (dashboardData.data && timeData.data) {
+          const businessData: BusinessData = {
+            revenue: {
+              current: dashboardData.data.totale_registratie,
+              target: 12000, // Make configurable
+              previousMonth: dashboardData.data.totale_registratie * 0.9 // Mock previous month data
+            },
+            hours: {
+              thisMonth: timeData.data.thisMonth.hours,
+              thisWeek: timeData.data.thisWeek.hours,
+              target: 160, // Make configurable
+              unbilledHours: timeData.data.unbilled.hours,
+              unbilledRevenue: timeData.data.unbilled.revenue
+            },
+            invoices: {
+              overdue: {
+                count: dashboardData.data.achterstallig_count,
+                amount: dashboardData.data.achterstallig
+              },
+              pending: {
+                count: 0, // TODO: Add pending invoices API
+                amount: 0
+              },
+              averagePaymentDays: 25 // Mock data - TODO: Calculate from invoice data
+            },
+            clients: {
+              total: clientStats?.totalActiveClients || 0,
+              activeThisMonth: clientStats?.activeThisMonth || 0,
+              topClient: topClientData || {
+                name: 'No client data',
+                revenueShare: 0
+              }
+            },
+            rate: {
+              current: timeData.data.thisMonth.hours > 0
+                ? Math.round(timeData.data.thisMonth.revenue / timeData.data.thisMonth.hours)
+                : 0,
+              target: 100 // Make configurable
+            }
+          }
+
+          const alerts = smartRulesEngine.analyzeData(businessData)
+          setSmartAlerts(alerts)
+          console.log('🧠 Smart alerts generated with real client data:', alerts.length)
+        }
+
         setError(null)
         console.log('🎉 Metrics fetch completed successfully!')
       } catch (err) {
@@ -179,7 +257,65 @@ export function MetricsCards() {
     const interval = setInterval(fetchMetrics, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [])
-  
+
+  // Smart Action Handlers
+  const handleCreateInvoice = async () => {
+    if (timeStats && timeStats.unbilled.hours > 0) {
+      // Pre-fill invoice with unbilled hours data
+      const unbilledHours = timeStats.unbilled.hours
+      const unbilledAmount = timeStats.unbilled.revenue
+
+      // Navigate to invoice creation with pre-filled data
+      router.push(`/dashboard/financieel?tab=facturen&action=create&unbilled_hours=${unbilledHours}&unbilled_amount=${unbilledAmount}`)
+    } else {
+      // Navigate to regular invoice creation
+      router.push('/dashboard/financieel?tab=facturen&action=create')
+    }
+  }
+
+  const handleReviewOverdue = () => {
+    if (dashboardMetrics && dashboardMetrics.achterstallig_count > 0) {
+      // Navigate to filtered invoice list showing only overdue
+      router.push('/dashboard/financieel?tab=facturen&filter=overdue')
+    }
+  }
+
+  const handleStartTimer = () => {
+    // Navigate to time tracking tab and trigger timer start
+    router.push('/dashboard/financieel?tab=tijd&action=start_timer')
+  }
+
+  const handleLogExpense = () => {
+    // Navigate to expenses tab with OCR camera
+    router.push('/dashboard/financieel?tab=uitgaven&action=add_expense')
+  }
+
+  const handleSmartAction = (alert: SmartAlert, actionIndex: number) => {
+    const action = alert.actions[actionIndex]
+    console.log(`🎯 Smart action triggered:`, action)
+
+    switch (action.type) {
+      case 'navigate':
+        if (action.target) {
+          router.push(action.target)
+        }
+        break
+      case 'api_call':
+        // TODO: Implement API calls
+        console.log('API call action:', action.payload)
+        break
+      case 'external':
+        if (action.target) {
+          window.open(action.target, '_blank')
+        }
+        break
+      case 'modal':
+        // TODO: Implement modal system
+        console.log('Modal action:', action.payload)
+        break
+    }
+  }
+
 
 
   // Show loading state
@@ -285,6 +421,13 @@ export function MetricsCards() {
           />
         </div>
       </div>
+
+      {/* Financial Health Score - Prominent Display */}
+      <FinancialHealthScore
+        dashboardMetrics={dashboardMetrics}
+        timeStats={timeStats}
+        loading={loading}
+      />
 
       {/* 5-Card Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
@@ -693,74 +836,127 @@ export function MetricsCards() {
 
           <CollapsibleContent className="mt-3">
             <div className="space-y-3">
-              {/* Overdue Invoices */}
-              {dashboardMetrics && dashboardMetrics.achterstallig > 0 && (
-                <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/20">
-                  <div className="flex items-center gap-3">
-                    <div className="p-1.5 bg-red-500/20 rounded-lg">
-                      <CreditCard className="h-4 w-4 text-red-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-red-600">Overdue Invoices</p>
-                      <p className="text-xs text-muted-foreground">
-                        {dashboardMetrics.achterstallig_count} invoice(s) worth {formatCurrency(dashboardMetrics.achterstallig)}
-                      </p>
-                    </div>
-                  </div>
-                  <button className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md transition-colors">
-                    Review
-                  </button>
-                </div>
-              )}
+              {/* Smart Alerts */}
+              {smartAlerts.length > 0 ? (
+                smartAlerts.map((alert, index) => {
+                  const alertColors = {
+                    critical: { bg: 'bg-red-500/5', border: 'border-red-500/20', icon: 'bg-red-500/20', text: 'text-red-600', button: 'bg-red-500 hover:bg-red-600' },
+                    warning: { bg: 'bg-orange-500/5', border: 'border-orange-500/20', icon: 'bg-orange-500/20', text: 'text-orange-600', button: 'bg-orange-500 hover:bg-orange-600' },
+                    opportunity: { bg: 'bg-blue-500/5', border: 'border-blue-500/20', icon: 'bg-blue-500/20', text: 'text-blue-600', button: 'bg-blue-500 hover:bg-blue-600' },
+                    info: { bg: 'bg-gray-500/5', border: 'border-gray-500/20', icon: 'bg-gray-500/20', text: 'text-gray-600', button: 'bg-gray-500 hover:bg-gray-600' }
+                  }
+                  const colors = alertColors[alert.type]
 
-              {/* Unbilled Hours */}
-              {timeStats && timeStats.unbilled.hours > 0 && (
-                <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/5 border border-orange-500/20">
-                  <div className="flex items-center gap-3">
-                    <div className="p-1.5 bg-orange-500/20 rounded-lg">
-                      <Clock className="h-4 w-4 text-orange-500" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-orange-600">Unbilled Hours</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatHours(timeStats.unbilled.hours)} worth {formatCurrency(timeStats.unbilled.revenue)}
-                      </p>
-                    </div>
-                  </div>
-                  <button className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-md transition-colors">
-                    Create Invoice
-                  </button>
-                </div>
-              )}
+                  // Icon based on category
+                  let AlertIcon = AlertTriangle
+                  if (alert.category === 'cash_flow') AlertIcon = CreditCard
+                  else if (alert.category === 'efficiency') AlertIcon = Clock
+                  else if (alert.category === 'growth') AlertIcon = TrendingUp
+                  else if (alert.category === 'risk') AlertIcon = AlertTriangle
 
-              {/* Missing Time Entries - Example action */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
-                <div className="flex items-center gap-3">
-                  <div className="p-1.5 bg-blue-500/20 rounded-lg">
-                    <FileText className="h-4 w-4 text-blue-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-blue-600">Time Entry Reminder</p>
-                    <p className="text-xs text-muted-foreground">
-                      Don't forget to log your hours for today
-                    </p>
-                  </div>
-                </div>
-                <button className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md transition-colors">
-                  Log Time
-                </button>
-              </div>
+                  return (
+                    <div key={alert.id} className={`p-3 rounded-lg ${colors.bg} ${colors.border} border`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className={`p-1.5 ${colors.icon} rounded-lg mt-0.5 flex-shrink-0`}>
+                            <AlertIcon className={`h-4 w-4 ${alert.type === 'critical' ? 'text-red-500' :
+                              alert.type === 'warning' ? 'text-orange-500' :
+                              alert.type === 'opportunity' ? 'text-blue-500' : 'text-gray-500'}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between mb-1">
+                              <p className={`text-sm font-medium ${colors.text} truncate`}>{alert.title}</p>
+                              {alert.priority >= 8 && (
+                                <Badge className="ml-2 bg-red-100 text-red-700 border-red-200 text-xs flex-shrink-0">
+                                  HIGH
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{alert.description}</p>
 
-              {/* No actions message */}
-              {(!dashboardMetrics || dashboardMetrics.achterstallig === 0) &&
-               (!timeStats || timeStats.unbilled.hours === 0) && (
-                <div className="text-center py-4">
-                  <div className="flex items-center justify-center mb-2">
-                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  </div>
-                  <p className="text-sm text-green-600 font-medium">All caught up!</p>
-                  <p className="text-xs text-muted-foreground">No urgent actions required</p>
-                </div>
+                            {/* Action Buttons */}
+                            {alert.actions.length > 0 && (
+                              <div className="flex gap-2 mt-3">
+                                {alert.actions.slice(0, 2).map((action, actionIndex) => (
+                                  <button
+                                    key={actionIndex}
+                                    onClick={() => handleSmartAction(alert, actionIndex)}
+                                    className={`text-xs text-white px-3 py-1 rounded-md transition-colors ${
+                                      action.primary ? colors.button : 'bg-gray-500 hover:bg-gray-600'
+                                    }`}
+                                  >
+                                    {action.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              ) : (
+                /* No smart alerts - fallback to basic alerts */
+                <>
+                  {/* Basic Overdue Invoices */}
+                  {dashboardMetrics && dashboardMetrics.achterstallig > 0 && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/20">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 bg-red-500/20 rounded-lg">
+                          <CreditCard className="h-4 w-4 text-red-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-red-600">Overdue Invoices</p>
+                          <p className="text-xs text-muted-foreground">
+                            {dashboardMetrics.achterstallig_count} invoice(s) worth {formatCurrency(dashboardMetrics.achterstallig)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleReviewOverdue}
+                        className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md transition-colors"
+                      >
+                        Review
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Basic Unbilled Hours */}
+                  {timeStats && timeStats.unbilled.hours > 0 && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/5 border border-orange-500/20">
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 bg-orange-500/20 rounded-lg">
+                          <Clock className="h-4 w-4 text-orange-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-orange-600">Unbilled Hours</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatHours(timeStats.unbilled.hours)} worth {formatCurrency(timeStats.unbilled.revenue)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleCreateInvoice}
+                        className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-md transition-colors"
+                      >
+                        Create Invoice
+                      </button>
+                    </div>
+                  )}
+
+                  {/* All caught up message */}
+                  {(!dashboardMetrics || dashboardMetrics.achterstallig === 0) &&
+                   (!timeStats || timeStats.unbilled.hours === 0) && (
+                    <div className="text-center py-4">
+                      <div className="flex items-center justify-center mb-2">
+                        <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                      </div>
+                      <p className="text-sm text-green-600 font-medium">All caught up!</p>
+                      <p className="text-xs text-muted-foreground">No urgent actions required</p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </CollapsibleContent>

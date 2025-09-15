@@ -79,10 +79,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             />
             <span className="text-muted-foreground">{entry.dataKey}:</span>
             <span className="font-medium text-foreground">
-              {typeof entry.value === 'number' ? 
-                entry.dataKey.includes('rate') || entry.dataKey.includes('growth') ? 
-                  `${entry.value}%` : 
-                  `€${entry.value.toLocaleString()}` 
+              {typeof entry.value === 'number' ?
+                (typeof entry.dataKey === 'string' && (entry.dataKey.includes('rate') || entry.dataKey.includes('growth'))) ?
+                  `${entry.value}%` :
+                  `€${entry.value.toLocaleString()}`
                 : entry.value}
             </span>
           </div>
@@ -105,11 +105,26 @@ const chartColors = {
 }
 
 // Revenue & Profit Trend Chart
-export function RevenueTrendChart() {
+export function RevenueTrendChart({
+  data
+}: {
+  data?: any[]
+}) {
+  const chartData = data && data.length > 0 ? data.map(item => ({
+    ...item,
+    revenue: item.revenue || 0,
+    // Add breakdown lines - use actual data if available, otherwise estimate
+    timeRevenue: item.timeRevenue || item.revenue * 0.85 || 0,
+    platformRevenue: item.subscriptionRevenue || item.revenue * 0.15 || 0
+  })) : revenueData.map(item => ({
+    ...item,
+    timeRevenue: item.revenue * 0.85,
+    platformRevenue: item.revenue * 0.15
+  }))
   return (
     <div className="h-64 sm:h-80">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={revenueData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+        <ComposedChart data={chartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} opacity={0.3} />
           <XAxis 
             dataKey="month" 
@@ -162,6 +177,28 @@ export function RevenueTrendChart() {
             dot={{ fill: chartColors.success, strokeWidth: 0, r: 4 }}
             activeDot={{ r: 6, fill: chartColors.success, stroke: 'none' }}
           />
+
+          {/* Time Revenue dotted line */}
+          <Line
+            type="monotone"
+            dataKey="timeRevenue"
+            stroke={chartColors.primary}
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            dot={false}
+            activeDot={{ r: 4, fill: chartColors.primary, stroke: 'none' }}
+          />
+
+          {/* Platform Revenue dotted line */}
+          <Line
+            type="monotone"
+            dataKey="platformRevenue"
+            stroke={chartColors.purple}
+            strokeWidth={2}
+            strokeDasharray="8 3"
+            dot={false}
+            activeDot={{ r: 4, fill: chartColors.purple, stroke: 'none' }}
+          />
           
           {/* Gradients */}
           <defs>
@@ -181,13 +218,18 @@ export function RevenueTrendChart() {
 }
 
 // Client Revenue Distribution Chart
-export function ClientRevenueChart() {
+export function ClientRevenueChart({
+  data
+}: {
+  data?: any[]
+}) {
+  const chartData = data && data.length > 0 ? data : clientRevenueData
   return (
     <div className="h-48 sm:h-64">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
-            data={clientRevenueData}
+            data={chartData}
             cx="50%"
             cy="50%"
             innerRadius={40}
@@ -195,7 +237,7 @@ export function ClientRevenueChart() {
             paddingAngle={2}
             dataKey="revenue"
           >
-            {clientRevenueData.map((entry, index) => (
+            {chartData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color} />
             ))}
           </Pie>
@@ -207,11 +249,16 @@ export function ClientRevenueChart() {
 }
 
 // Time Tracking Analytics Chart
-export function TimeTrackingChart() {
+export function TimeTrackingChart({
+  data
+}: {
+  data?: any[]
+}) {
+  const chartData = data && data.length > 0 ? data : timeTrackingData
   return (
     <div className="h-48 sm:h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={timeTrackingData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+        <BarChart data={chartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} opacity={0.3} />
           <XAxis 
             dataKey="week" 
@@ -219,7 +266,7 @@ export function TimeTrackingChart() {
             fontSize={12}
             tickLine={false}
           />
-          <YAxis 
+          <YAxis
             stroke={chartColors.text}
             fontSize={12}
             tickLine={false}
@@ -235,14 +282,14 @@ export function TimeTrackingChart() {
             opacity={0.7}
           />
           
-          <Bar 
-            dataKey="billable" 
+          <Bar
+            dataKey="billable"
             stackId="hours"
             fill={chartColors.success}
             radius={[0, 0, 0, 0]}
           />
-          <Bar 
-            dataKey="nonBillable" 
+          <Bar
+            dataKey="nonBillable"
             stackId="hours"
             fill={chartColors.danger}
             radius={[2, 2, 0, 0]}
@@ -254,11 +301,16 @@ export function TimeTrackingChart() {
 }
 
 // Cash Flow Analysis Chart
-export function CashFlowChart() {
+export function CashFlowChart({
+  data
+}: {
+  data?: any[]
+}) {
+  const chartData = data && data.length > 0 ? data : cashFlowData
   return (
     <div className="h-64 sm:h-80">
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={cashFlowData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
+        <ComposedChart data={chartData} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} opacity={0.3} />
           <XAxis 
             dataKey="date" 
@@ -282,7 +334,7 @@ export function CashFlowChart() {
             opacity={0.8}
             radius={[2, 2, 0, 0]}
           />
-          
+
           {/* Outgoing bars */}
           <Bar
             dataKey="outgoing"
@@ -290,7 +342,7 @@ export function CashFlowChart() {
             opacity={0.8}
             radius={[2, 2, 0, 0]}
           />
-          
+
           {/* Net line */}
           <Line
             type="monotone"

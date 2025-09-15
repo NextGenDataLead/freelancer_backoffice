@@ -74,26 +74,26 @@ async function createClerkUsers() {
     } catch (error) {
       console.log(`❌ Error creating ${userData.email}:`, error.message);
 
-      // If user already exists, try to find them
-      if (error.message.includes('already exists') || error.message.includes('taken')) {
-        try {
-          console.log(`🔍 User exists, searching for: ${userData.email}`);
-          const userList = await clerkClient.users.getUserList({
-            emailAddress: [userData.email]
-          });
+      // Always try to find existing users
+      try {
+        console.log(`🔍 Searching for existing user: ${userData.email}`);
+        const userList = await clerkClient.users.getUserList({
+          emailAddress: [userData.email]
+        });
 
-          if (userList.data.length > 0) {
-            const existingUser = userList.data[0];
-            createdUsers.push({
-              ...userData,
-              clerkUserId: existingUser.id,
-              clerkUser: existingUser
-            });
-            console.log(`✅ Found existing: ${existingUser.id} for ${userData.email}`);
-          }
-        } catch (searchError) {
-          console.log(`❌ Could not find existing user: ${searchError.message}`);
+        if (userList.data.length > 0) {
+          const existingUser = userList.data[0];
+          createdUsers.push({
+            ...userData,
+            clerkUserId: existingUser.id,
+            clerkUser: existingUser
+          });
+          console.log(`✅ Found existing: ${existingUser.id} for ${userData.email}`);
+        } else {
+          console.log(`❌ No existing user found for ${userData.email}`);
         }
+      } catch (searchError) {
+        console.log(`❌ Could not search for user: ${searchError.message}`);
       }
     }
 
@@ -263,6 +263,13 @@ async function main() {
     console.log('3. Password: temp-password-123!');
     console.log('4. Check your metrics dashboard - it should show real data now!');
     console.log('5. Change your password after first login');
+    console.log('\n📊 Enhanced Test Data Summary:');
+    console.log('   • 4 test users with different roles (owner, admin, member)');
+    console.log('   • 15+ subscription customers with varied pricing (€29-€948)');
+    console.log('   • 3-month historical data for MAU trend testing');
+    console.log('   • Multiple projects, time entries, and billable hours');
+    console.log('   • Failed payments and churn scenarios for realistic metrics');
+    console.log('   • Both Mollie and Stripe payment providers');
 
   } catch (error) {
     console.log('\n❌ Setup failed:', error.message);
