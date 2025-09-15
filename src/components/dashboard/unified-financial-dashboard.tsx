@@ -29,7 +29,10 @@ import {
   ChevronRight,
   ChevronDown,
   X,
-  Info
+  Info,
+  LayoutDashboard,
+  AlertTriangle,
+  Award
 } from 'lucide-react'
 
 // Dynamic imports for chart components to avoid SSR issues
@@ -117,11 +120,13 @@ export function UnifiedFinancialDashboard() {
   const router = useRouter()
   const [dashboardMetrics, setDashboardMetrics] = useState<DashboardMetricsResponse['data'] | null>(null)
   const [timeStats, setTimeStats] = useState<TimeStatsResponse['data'] | null>(null)
+  const [revenueTrend, setRevenueTrend] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [smartAlerts, setSmartAlerts] = useState<SmartAlert[]>([])
   const [healthScoreOpen, setHealthScoreOpen] = useState(false)
   const [showExplanation, setShowExplanation] = useState<string | null>(null)
+  const [showHealthReport, setShowHealthReport] = useState(false)
 
   // Official Cash Flow Scoring Function (Based on Accounting Standards)
   const calculateAdvancedCashFlowScore = (metrics: any) => {
@@ -193,14 +198,84 @@ export function UnifiedFinancialDashboard() {
     }
   }, [])
 
+  // MTD Comparison calculation using existing monthly data (as per optimization recommendation)
+  const mtdComparison = useMemo(() => {
+    if (!revenueTrend || revenueTrend.length < 2) {
+      return {
+        current: 0,
+        previous: 0,
+        difference: 0,
+        trend: 'neutral' as const,
+        percentageChange: 0
+      }
+    }
+
+    const currentMonth = revenueTrend[revenueTrend.length - 1]
+    const previousMonth = revenueTrend[revenueTrend.length - 2]
+
+    // Calculate MTD portions (day X of 30 days = X/30 of monthly total)
+    const { currentDay, daysInMonth } = mtdCalculations
+    const mtdRatio = currentDay / daysInMonth
+
+    const currentMTD = currentMonth.revenue * mtdRatio
+    const previousMTD = previousMonth.revenue * mtdRatio
+    const difference = currentMTD - previousMTD
+    const percentageChange = previousMTD > 0 ? (difference / previousMTD) * 100 : 0
+
+    return {
+      current: currentMTD,
+      previous: previousMTD,
+      difference,
+      trend: difference >= 0 ? 'positive' as const : 'negative' as const,
+      percentageChange
+    }
+  }, [revenueTrend, mtdCalculations])
+
+  // Average Rate comparison calculation using previous month's total average
+  const rateComparison = useMemo(() => {
+    if (!revenueTrend || revenueTrend.length < 2 || !timeStats?.thisMonth.hours) {
+      return {
+        current: 0,
+        previous: 0,
+        difference: 0,
+        trend: 'neutral' as const,
+        percentageChange: 0
+      }
+    }
+
+    const currentMonth = revenueTrend[revenueTrend.length - 1]
+    const previousMonth = revenueTrend[revenueTrend.length - 2]
+
+    // Current rate = current time revenue / current hours
+    const currentRate = timeStats.thisMonth.hours > 0 ?
+      (dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours : 0
+
+    // Previous rate = previous month total time revenue / total hours
+    const previousRate = previousMonth.totalHours > 0 ?
+      previousMonth.timeRevenue / previousMonth.totalHours : 0
+
+    const difference = currentRate - previousRate
+    const percentageChange = previousRate > 0 ? (difference / previousRate) * 100 : 0
+
+    return {
+      current: currentRate,
+      previous: previousRate,
+      difference,
+      trend: difference >= 0 ? 'positive' as const : 'negative' as const,
+      percentageChange
+    }
+  }, [revenueTrend, timeStats, dashboardMetrics])
+
   // Calculate health scores using centralized MTD calculations
   const healthScores = useMemo(() => {
     if (!dashboardMetrics || !timeStats) return { total: 0, revenue: 0, cashflow: 0, efficiency: 0, risk: 0 }
 
     const { mtdRevenueTarget, mtdHoursTarget } = mtdCalculations
 
-    // Revenue Health (25 points max) - MTD based
-    const revenueScore = Math.min(Math.round((dashboardMetrics.totale_registratie / mtdRevenueTarget) * 25), 25)
+    // Revenue Health (25 points max) - MTD based on total revenue (registered time + subscriptions)
+    const calculatedSubscriptionRevenue = (timeStats.subscription?.monthlyActiveUsers?.current || 0) * (timeStats.subscription?.averageSubscriptionFee?.current || 0)
+    const totalRevenue = (dashboardMetrics.totale_registratie || 0) + calculatedSubscriptionRevenue
+    const revenueScore = Math.min(Math.round((totalRevenue / mtdRevenueTarget) * 25), 25)
 
     // Cash Flow Health (25 points max) - sophisticated time-weighted scoring
     const cashflowScore = calculateAdvancedCashFlowScore(dashboardMetrics)
@@ -208,11 +283,13 @@ export function UnifiedFinancialDashboard() {
     // Efficiency Health (25 points max) - MTD based
     const efficiencyScore = Math.min(Math.round((timeStats.thisMonth.hours / mtdHoursTarget) * 25), 25)
 
-    // Risk Management (25 points max) - operational risks (matching modal calculation)
-    const unbilledRisk = Math.round(Math.min((timeStats.unbilled.hours / 40) * 12, 12))
+    // Risk Management (25 points max) - frequency-aware operational risks
+    // Use factureerbaar (ready-to-bill) instead of total unbilled for risk calculation
+    const readyToBillAmount = dashboardMetrics.factureerbaar || 0
+    const readyToBillRisk = Math.round(Math.min((readyToBillAmount / 3000) * 12, 12)) // Max 12 points penalty at €3k ready-to-bill
     const clientConcentrationRisk = 3 // Assume moderate risk
     const workloadRisk = timeStats.thisMonth.hours > 200 ? 5 : timeStats.thisMonth.hours < 80 ? 3 : 0
-    const riskScore = Math.max(0, 25 - unbilledRisk - workloadRisk - clientConcentrationRisk)
+    const riskScore = Math.max(0, 25 - readyToBillRisk - workloadRisk - clientConcentrationRisk)
 
     // Calculate total as exact sum of rounded individual card scores
     const totalScore = revenueScore + cashflowScore + efficiencyScore + riskScore
@@ -237,20 +314,23 @@ export function UnifiedFinancialDashboard() {
         setLoading(true)
 
         // Parallel fetch of all required data
-        const [dashboardResponse, timeResponse] = await Promise.all([
+        const [dashboardResponse, timeResponse, revenueTrendResponse] = await Promise.all([
           fetch('/api/invoices/dashboard-metrics'),
-          fetch('/api/time-entries/stats')
+          fetch('/api/time-entries/stats'),
+          fetch('/api/financial/revenue-trend')
         ])
 
-        if (!dashboardResponse.ok || !timeResponse.ok) {
+        if (!dashboardResponse.ok || !timeResponse.ok || !revenueTrendResponse.ok) {
           throw new Error('Failed to fetch dashboard data')
         }
 
         const dashboardData: DashboardMetricsResponse = await dashboardResponse.json()
         const timeData: TimeStatsResponse = await timeResponse.json()
+        const revenueTrendData = await revenueTrendResponse.json()
 
         setDashboardMetrics(dashboardData.data)
         setTimeStats(timeData.data)
+        setRevenueTrend(revenueTrendData.data || [])
 
         // Generate smart alerts
         if (dashboardData.data && timeData.data) {
@@ -377,13 +457,17 @@ export function UnifiedFinancialDashboard() {
 
     switch (category) {
       case 'revenue':
-        const revenueScore = Math.round((dashboardMetrics.totale_registratie / mtdRevenueTarget) * 25)
-        const revenueProgress = (dashboardMetrics.totale_registratie / mtdRevenueTarget) * 100
+        const calculatedSubscriptionRevenue = (timeStats.subscription?.monthlyActiveUsers?.current || 0) * (timeStats.subscription?.averageSubscriptionFee?.current || 0)
+        const totalRevenue = (dashboardMetrics.totale_registratie || 0) + calculatedSubscriptionRevenue
+        const revenueScore = Math.round((totalRevenue / mtdRevenueTarget) * 25)
+        const revenueProgress = (totalRevenue / mtdRevenueTarget) * 100
         return {
           title: 'Revenue Health - MTD (25 points max)',
           score: Math.min(revenueScore, 25),
           details: [
-            `Current Revenue (MTD): ${formatCurrency(dashboardMetrics.totale_registratie)}`,
+            `Total Revenue (MTD): ${formatCurrency(totalRevenue)}`,
+            `  • Registered Time: ${formatCurrency(dashboardMetrics.totale_registratie)}`,
+            `  • Subscriptions: ${formatCurrency(calculatedSubscriptionRevenue)}`,
             `MTD Target (Day ${currentDay}/${daysInMonth}): ${formatCurrency(mtdRevenueTarget)}`,
             `Monthly Target: ${formatCurrency(12000)}`,
             `Month Progress: ${(monthProgress * 100).toFixed(1)}%`,
@@ -392,19 +476,19 @@ export function UnifiedFinancialDashboard() {
             'Calculation:',
             `MTD Target = €12,000 × (${currentDay}/${daysInMonth}) = ${formatCurrency(mtdRevenueTarget)}`,
             `Score = min(current/mtd_target, 1) × 25`,
-            `Score = min(${dashboardMetrics.totale_registratie}/${mtdRevenueTarget.toFixed(0)}, 1) × 25 = ${Math.min(revenueScore, 25)}`
+            `Score = min(${totalRevenue}/${mtdRevenueTarget.toFixed(0)}, 1) × 25 = ${Math.min(revenueScore, 25)}`
           ]
         }
       case 'cashflow':
-        const totalRevenue = dashboardMetrics.totale_registratie
+        const cashflowTotalRevenue = dashboardMetrics.totale_registratie
         const overdueAmount = dashboardMetrics.achterstallig
-        const paidAmount = totalRevenue - overdueAmount
+        const paidAmount = cashflowTotalRevenue - overdueAmount
         const overdueCount = dashboardMetrics.achterstallig_count
 
         // Calculate each component
-        const operatingCashFlowRatio = paidAmount / totalRevenue
-        const currentLiabilityCoverage = paidAmount / totalRevenue
-        const dsoEquivalent = (overdueAmount / totalRevenue) * 30
+        const operatingCashFlowRatio = paidAmount / cashflowTotalRevenue
+        const currentLiabilityCoverage = paidAmount / cashflowTotalRevenue
+        const dsoEquivalent = (overdueAmount / cashflowTotalRevenue) * 30
 
         // Score each component
         let ocfScore = operatingCashFlowRatio >= 0.90 ? 10 : operatingCashFlowRatio >= 0.75 ? 7 : operatingCashFlowRatio >= 0.60 ? 5 : operatingCashFlowRatio >= 0.40 ? 3 : 1
@@ -420,7 +504,7 @@ export function UnifiedFinancialDashboard() {
           details: [
             `Paid Amount: ${formatCurrency(paidAmount)}`,
             `Overdue Amount: ${formatCurrency(overdueAmount)}`,
-            `Total Revenue: ${formatCurrency(totalRevenue)}`,
+            `Total Revenue: ${formatCurrency(cashflowTotalRevenue)}`,
             `Overdue Count: ${overdueCount} invoices`,
             '',
             'Official Accounting Ratios:',
@@ -461,25 +545,26 @@ export function UnifiedFinancialDashboard() {
           ]
         }
       case 'risk':
-        // Focus on operational and business continuity risks (not cash flow overlap)
-        const unbilledRisk = Math.round(Math.min((timeStats.unbilled.hours / 40) * 12, 12)) // Max 12 points penalty
+        // Focus on operational and business continuity risks (frequency-aware)
+        const readyToBillAmount = dashboardMetrics.factureerbaar || 0
+        const readyToBillRisk = Math.round(Math.min((readyToBillAmount / 3000) * 12, 12)) // Max 12 points penalty
         const clientConcentrationRisk = 3 // Assume moderate risk - could be enhanced with actual client data
         const workloadRisk = timeStats.thisMonth.hours > 200 ? 5 : timeStats.thisMonth.hours < 80 ? 3 : 0 // Burnout or underutilization risk
 
-        const operationalRiskScore = Math.max(0, 25 - unbilledRisk - workloadRisk - clientConcentrationRisk)
+        const operationalRiskScore = Math.max(0, 25 - readyToBillRisk - workloadRisk - clientConcentrationRisk)
 
         return {
-          title: 'Operational Risk Management (25 points max)',
+          title: 'Frequency-Aware Risk Management (25 points max)',
           score: operationalRiskScore,
           details: [
-            `Unbilled Hours: ${timeStats.unbilled.hours}h`,
-            `Unbilled Revenue: ${formatCurrency(timeStats.unbilled.revenue)}`,
+            `Ready to Bill: ${formatCurrency(readyToBillAmount)} (respects client frequencies)`,
+            `Total Unbilled: ${formatCurrency(timeStats.unbilled.revenue)} (includes current periods)`,
             `Monthly Hours: ${timeStats.thisMonth.hours}h`,
             '',
-            'Operational Risk Assessment:',
-            `1. Revenue Risk (Unbilled): -${unbilledRisk}/12 pts`,
-            `   Formula: round(min((${timeStats.unbilled.hours}h / 40h) × 12, 12))`,
-            `   Risk: >40h unbilled = high revenue at risk`,
+            'Frequency-Aware Risk Assessment:',
+            `1. Invoice Processing Risk: -${readyToBillRisk}/12 pts`,
+            `   Formula: round(min((€${Math.round(readyToBillAmount)} / €3,000) × 12, 12))`,
+            `   Risk: >€3k ready-to-bill = delayed invoice processing`,
             '',
             `2. Workload Risk: -${workloadRisk}/5 pts`,
             `   Current: ${timeStats.thisMonth.hours}h/month`,
@@ -488,7 +573,7 @@ export function UnifiedFinancialDashboard() {
             `3. Business Continuity: -${clientConcentrationRisk}/8 pts`,
             `   Estimated client concentration risk`,
             '',
-            `Total Score: 25 - ${unbilledRisk} - ${workloadRisk} - ${clientConcentrationRisk} = ${operationalRiskScore}`
+            `Total Score: 25 - ${readyToBillRisk} - ${workloadRisk} - ${clientConcentrationRisk} = ${operationalRiskScore}`
           ]
         }
       default:
@@ -569,209 +654,288 @@ export function UnifiedFinancialDashboard() {
               <Card className="p-4">
                 <CollapsibleTrigger className="w-full">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-full ${
-                        (dashboardMetrics?.achterstallig === 0 && (timeStats?.unbilled.hours || 0) < 20)
-                          ? 'bg-green-500/20 border-green-500/30'
-                          : (dashboardMetrics?.achterstallig || 0) > 0
-                            ? 'bg-red-500/20 border-red-500/30'
-                            : 'bg-orange-500/20 border-orange-500/30'
-                      } border`}>
-                        <Activity className={`h-5 w-5 ${
-                          (dashboardMetrics?.achterstallig === 0 && (timeStats?.unbilled.hours || 0) < 20)
-                            ? 'text-green-500'
-                            : (dashboardMetrics?.achterstallig || 0) > 0
-                              ? 'text-red-500'
-                              : 'text-orange-500'
-                        }`} />
-                      </div>
-                      <div className="text-left">
-                        <h3 className="font-semibold">Business Health Score</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {healthScores.total >= 85 ? 'Excellent financial performance (MTD)' :
-                           healthScores.total >= 70 ? 'Good progress towards monthly targets' :
-                           healthScores.total >= 50 ? 'Some areas need attention' :
-                           'Immediate action required'
-                          }
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className={`text-3xl font-bold ${
+                    <div className="flex items-center gap-4">
+                      {/* Animated Health Icon */}
+                      <div className={`relative p-3 rounded-xl transition-all duration-300 border-2 ${
+                        healthScores.totalRounded >= 85 ? 'bg-gradient-to-br from-green-500/20 to-green-600/30 border-green-500/40' :
+                        healthScores.totalRounded >= 70 ? 'bg-gradient-to-br from-blue-500/20 to-blue-600/30 border-blue-500/40' :
+                        healthScores.totalRounded >= 50 ? 'bg-gradient-to-br from-orange-500/20 to-orange-600/30 border-orange-500/40' :
+                        'bg-gradient-to-br from-red-500/20 to-red-600/30 border-red-500/40'
+                      }`}
+                      style={{
+                        animation: healthScores.totalRounded < 70
+                          ? 'pulse 1s ease-in-out 3' // Pulse 3 times (3 seconds total)
+                          : undefined
+                      }}>
+                        <Activity className={`h-6 w-6 transition-colors duration-300 ${
                           healthScores.totalRounded >= 85 ? 'text-green-500' :
                           healthScores.totalRounded >= 70 ? 'text-blue-500' :
                           healthScores.totalRounded >= 50 ? 'text-orange-500' : 'text-red-500'
-                        }`}>
-                          {healthScores.totalRounded}%
+                        }`} />
+
+                        {/* Achievement Ring */}
+                        <div className="absolute -top-1 -right-1">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                            healthScores.totalRounded >= 85 ? 'bg-green-500 text-white' :
+                            healthScores.totalRounded >= 70 ? 'bg-blue-500 text-white' :
+                            healthScores.totalRounded >= 50 ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
+                          }`}>
+                            {healthScores.totalRounded >= 85 ? '👑' :
+                             healthScores.totalRounded >= 70 ? '⭐' :
+                             healthScores.totalRounded >= 50 ? '📊' : '⚠️'}
+                          </div>
                         </div>
-                        <Badge className={`${
-                          healthScores.totalRounded >= 85 ? 'bg-green-500/10 text-green-500' :
-                          healthScores.totalRounded >= 70 ? 'bg-blue-500/10 text-blue-500' :
-                          healthScores.totalRounded >= 50 ? 'bg-orange-500/10 text-orange-500' : 'bg-red-500/10 text-red-500'
+                      </div>
+
+                      <div className="text-left">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-bold text-lg">Business Health Score</h3>
+                          {/* Streak indicator - gamification prep */}
+                          <div className="px-2 py-1 bg-primary/10 rounded-full">
+                            <span className="text-xs font-semibold text-primary">Day 15</span>
+                          </div>
+                        </div>
+                        <p className={`text-sm font-medium ${
+                          healthScores.totalRounded >= 85 ? 'text-green-600' :
+                          healthScores.totalRounded >= 70 ? 'text-blue-600' :
+                          healthScores.totalRounded >= 50 ? 'text-orange-600' : 'text-red-600'
                         }`}>
-                          {healthScores.totalRounded >= 85 ? 'EXCELLENT' :
-                           healthScores.totalRounded >= 70 ? 'GOOD' :
-                           healthScores.totalRounded >= 50 ? 'WARNING' : 'CRITICAL'
+                          {healthScores.totalRounded >= 85 ? '🚀 Crushing your targets! Keep it up!' :
+                           healthScores.totalRounded >= 70 ? '💪 Strong performance this month' :
+                           healthScores.totalRounded >= 50 ? '📈 Room for improvement - you got this!' :
+                           '🎯 Let\'s turn this around together!'
+                          }
+                        </p>
+
+                        {/* Next milestone indicator */}
+                        <div className="mt-1">
+                          {healthScores.totalRounded < 85 && (
+                            <p className="text-xs text-muted-foreground">
+                              {85 - healthScores.totalRounded} points to next level
+                              {healthScores.totalRounded >= 70 ? ' 👑' : healthScores.totalRounded >= 50 ? ' ⭐' : ' 📊'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                      {/* Central Health Report Button */}
+                      <button
+                        onClick={() => setShowHealthReport(true)}
+                        className="group relative px-6 py-3 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border-2 border-primary/20 hover:border-primary/40 transition-all duration-300 hover:scale-105 hover:shadow-lg"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded-lg bg-primary/20 group-hover:bg-primary/30 transition-colors">
+                            <FileText className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="text-left">
+                            <div className="text-sm font-semibold text-primary">Health Report</div>
+                            <div className="text-xs text-muted-foreground">Full Analysis</div>
+                          </div>
+                        </div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
+                      </button>
+
+                      {/* Enhanced Score Display */}
+                      <div className="text-right">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className={`text-4xl font-black tracking-tight transition-all duration-500 ${
+                            healthScores.totalRounded >= 85 ? 'text-green-500 drop-shadow-lg' :
+                            healthScores.totalRounded >= 70 ? 'text-blue-500 drop-shadow-lg' :
+                            healthScores.totalRounded >= 50 ? 'text-orange-500 drop-shadow-lg' : 'text-red-500 drop-shadow-lg'
+                          }`}>
+                            {healthScores.totalRounded}
+                          </div>
+                          <div className="text-xl text-muted-foreground font-medium">/100</div>
+                        </div>
+
+                        {/* Achievement Badge */}
+                        <Badge className={`text-xs font-bold px-3 py-1 ${
+                          healthScores.totalRounded >= 85 ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg' :
+                          healthScores.totalRounded >= 70 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' :
+                          healthScores.totalRounded >= 50 ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg' :
+                          'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg'
+                        }`}>
+                          {healthScores.totalRounded >= 85 ? '👑 LEGEND' :
+                           healthScores.totalRounded >= 70 ? '⭐ CHAMPION' :
+                           healthScores.totalRounded >= 50 ? '📊 BUILDER' : '🎯 STARTER'
                           }
                         </Badge>
                       </div>
+
+                      {/* Expand/Collapse with better animation */}
                       <div className="flex items-center">
-                        {healthScoreOpen ? (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-200" />
-                        ) : (
-                          <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform duration-200" />
-                        )}
+                        <div className={`p-2 rounded-full transition-all duration-300 ${
+                          healthScoreOpen ? 'bg-primary/10 rotate-180' : 'bg-muted/50 hover:bg-primary/10'
+                        }`}>
+                          <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-300" />
+                        </div>
                       </div>
                     </div>
                   </div>
                 </CollapsibleTrigger>
 
-                <CollapsibleContent className="space-y-4 mt-4">
-                  {/* Health breakdown - 4 key metrics (Now Clickable!) */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <CollapsibleContent className="space-y-6 mt-6">
+                  {/* Enhanced Health Metrics - More Engaging & Gamified */}
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-3">
+                    {/* Revenue Score Card */}
                     <button
                       onClick={() => setShowExplanation('revenue')}
-                      className="text-center p-3 bg-primary/5 rounded-lg hover:bg-primary/10 transition-colors border border-transparent hover:border-primary/20 cursor-pointer group"
+                      className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 p-3 transition-all duration-300 hover:from-primary/10 hover:to-primary/20 hover:scale-105 hover:shadow-lg border border-primary/20 hover:border-primary/40"
                     >
-                      <div className="flex items-center justify-center mb-1">
-                        <DollarSign className="h-4 w-4 text-primary" />
+                      <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1 rounded-lg bg-primary/20 group-hover:bg-primary/30 transition-colors">
+                              <DollarSign className="h-3.5 w-3.5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-left leading-none">Total Revenue (MTD)</p>
+                              <p className="text-xs text-muted-foreground leading-none">
+                                {healthScores.revenue >= 20 ? 'Crushing it!' :
+                                 healthScores.revenue >= 15 ? 'Strong performance' :
+                                 healthScores.revenue >= 10 ? 'Room to grow' : 'Needs attention'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-lg font-bold text-primary">{healthScores.revenue}</span>
+                              <span className="text-xs text-muted-foreground">/25</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full bg-primary/20 rounded-full h-1 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-primary to-primary/80 h-1 rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${(healthScores.revenue / 25) * 100}%` }}
+                          />
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">Revenue (MTD)</p>
-                      <p className="text-sm font-bold">
-                        {healthScores.revenue}/25
-                      </p>
-                      <Info className="h-3 w-3 text-muted-foreground mx-auto mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </button>
+
+                    {/* Cash Flow Score Card */}
                     <button
                       onClick={() => setShowExplanation('cashflow')}
-                      className="text-center p-3 bg-green-500/5 rounded-lg hover:bg-green-500/10 transition-colors border border-transparent hover:border-green-500/20 cursor-pointer group"
+                      className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-green-500/5 to-green-500/10 p-3 transition-all duration-300 hover:from-green-500/10 hover:to-green-500/20 hover:scale-105 hover:shadow-lg border border-green-500/20 hover:border-green-500/40"
                     >
-                      <div className="flex items-center justify-center mb-1">
-                        <Activity className="h-4 w-4 text-green-500" />
+                      <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1 rounded-lg bg-green-500/20 group-hover:bg-green-500/30 transition-colors">
+                              <Activity className="h-3.5 w-3.5 text-green-500" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-left leading-none">Cash Flow</p>
+                              <p className="text-xs text-muted-foreground leading-none">
+                                {healthScores.cashflow >= 20 ? 'Money flowing!' :
+                                 healthScores.cashflow >= 15 ? 'Healthy collections' :
+                                 healthScores.cashflow >= 10 ? 'Some delays' : 'Collection issues'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-lg font-bold text-green-600">{healthScores.cashflow}</span>
+                              <span className="text-xs text-muted-foreground">/25</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full bg-green-500/20 rounded-full h-1 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-green-500 to-green-400 h-1 rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${(healthScores.cashflow / 25) * 100}%` }}
+                          />
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">Cash Flow</p>
-                      <p className="text-sm font-bold">
-                        {healthScores.cashflow}/25
-                      </p>
-                      <Info className="h-3 w-3 text-muted-foreground mx-auto mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </button>
+
+                    {/* Efficiency Score Card */}
                     <button
                       onClick={() => setShowExplanation('efficiency')}
-                      className="text-center p-3 bg-blue-500/5 rounded-lg hover:bg-blue-500/10 transition-colors border border-transparent hover:border-blue-500/20 cursor-pointer group"
+                      className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/5 to-blue-500/10 p-3 transition-all duration-300 hover:from-blue-500/10 hover:to-blue-500/20 hover:scale-105 hover:shadow-lg border border-blue-500/20 hover:border-blue-500/40"
                     >
-                      <div className="flex items-center justify-center mb-1">
-                        <Clock className="h-4 w-4 text-blue-500" />
+                      <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1 rounded-lg bg-blue-500/20 group-hover:bg-blue-500/30 transition-colors">
+                              <Clock className="h-3.5 w-3.5 text-blue-500" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-left leading-none">Efficiency (MTD)</p>
+                              <p className="text-xs text-muted-foreground leading-none">
+                                {healthScores.efficiency >= 20 ? 'Peak productivity!' :
+                                 healthScores.efficiency >= 15 ? 'Great momentum' :
+                                 healthScores.efficiency >= 10 ? 'Building steam' : 'Ramp up needed'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-lg font-bold text-blue-600">{healthScores.efficiency}</span>
+                              <span className="text-xs text-muted-foreground">/25</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full bg-blue-500/20 rounded-full h-1 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-blue-400 h-1 rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${(healthScores.efficiency / 25) * 100}%` }}
+                          />
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">Efficiency (MTD)</p>
-                      <p className="text-sm font-bold">
-                        {healthScores.efficiency}/25
-                      </p>
-                      <Info className="h-3 w-3 text-muted-foreground mx-auto mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </button>
+
+                    {/* Risk Management Score Card */}
                     <button
                       onClick={() => setShowExplanation('risk')}
-                      className="text-center p-3 bg-purple-500/5 rounded-lg hover:bg-purple-500/10 transition-colors border border-transparent hover:border-purple-500/20 cursor-pointer group"
+                      className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-500/5 to-purple-500/10 p-3 transition-all duration-300 hover:from-purple-500/10 hover:to-purple-500/20 hover:scale-105 hover:shadow-lg border border-purple-500/20 hover:border-purple-500/40"
                     >
-                      <div className="flex items-center justify-center mb-1">
-                        <Users className="h-4 w-4 text-purple-500" />
+                      <div className="relative z-10">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1 rounded-lg bg-purple-500/20 group-hover:bg-purple-500/30 transition-colors">
+                              <Users className="h-3.5 w-3.5 text-purple-500" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-left leading-none">Risk Management</p>
+                              <p className="text-xs text-muted-foreground leading-none">
+                                {healthScores.risk >= 20 ? 'Well protected!' :
+                                 healthScores.risk >= 15 ? 'Manageable risks' :
+                                 healthScores.risk >= 10 ? 'Some concerns' : 'High risk areas'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-lg font-bold text-purple-600">{healthScores.risk}</span>
+                              <span className="text-xs text-muted-foreground">/25</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full bg-purple-500/20 rounded-full h-1 overflow-hidden">
+                          <div
+                            className="bg-gradient-to-r from-purple-500 to-purple-400 h-1 rounded-full transition-all duration-700 ease-out"
+                            style={{ width: `${(healthScores.risk / 25) * 100}%` }}
+                          />
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mb-1">Risk Mgmt</p>
-                      <p className="text-sm font-bold">
-                        {healthScores.risk}/25
-                      </p>
-                      <Info className="h-3 w-3 text-muted-foreground mx-auto mt-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     </button>
                   </div>
 
-                  {/* Progress bar and smart actions */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Overall Health</span>
-                      <span className={`${
-                        healthScores.totalRounded >= 85 ? 'text-green-500' :
-                        healthScores.totalRounded >= 70 ? 'text-blue-500' :
-                        healthScores.totalRounded >= 50 ? 'text-orange-500' : 'text-red-500'
-                      }`}>
-                        {healthScores.totalRounded}%
-                      </span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={`h-2 transition-all duration-500 ${
-                          healthScores.totalRounded >= 85 ? 'bg-green-500' :
-                          healthScores.totalRounded >= 70 ? 'bg-blue-500' :
-                          healthScores.totalRounded >= 50 ? 'bg-orange-500' : 'bg-red-500'
-                        }`}
-                        style={{
-                          width: `${healthScores.totalRounded}%`
-                        }}
-                      />
-                    </div>
-
-                    {/* Integrated Smart Actions */}
-                    <div className="flex items-center justify-between gap-3 pt-1">
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          {(dashboardMetrics?.achterstallig || 0) === 0 ? (
-                            <>
-                              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                              No overdue invoices
-                            </>
-                          ) : (
-                            <>
-                              <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
-                              {dashboardMetrics?.achterstallig_count || 0} overdue invoice(s)
-                            </>
-                          )}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          {(timeStats?.unbilled.hours || 0) === 0 ? (
-                            <>
-                              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-                              No unbilled hours
-                            </>
-                          ) : (
-                            <>
-                              <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-                              {timeStats?.unbilled.hours || 0}h unbilled
-                            </>
-                          )}
-                        </span>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-2">
-                        {dashboardMetrics && dashboardMetrics.achterstallig > 0 && (
-                          <button
-                            onClick={handleReviewOverdue}
-                            className="text-xs bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md transition-colors flex items-center gap-1"
-                          >
-                            <CreditCard className="h-3 w-3" />
-                            Review
-                          </button>
-                        )}
-
-                        {timeStats && timeStats.unbilled.hours > 0 && (
-                          <button
-                            onClick={handleCreateInvoice}
-                            className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-md transition-colors flex items-center gap-1"
-                          >
-                            <FileText className="h-3 w-3" />
-                            Invoice
-                          </button>
-                        )}
-
-                        {(!dashboardMetrics || dashboardMetrics.achterstallig === 0) &&
-                         (!timeStats || timeStats.unbilled.hours === 0) && (
-                          <div className="flex items-center gap-1 text-xs text-green-600">
-                            <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
-                            All caught up!
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
                 </CollapsibleContent>
               </Card>
             </Collapsible>
@@ -788,30 +952,41 @@ export function UnifiedFinancialDashboard() {
                     <div>
                       <h3 className="text-base font-semibold mobile-sharp-text">Revenue</h3>
                       <p className="text-sm text-muted-foreground h-8 flex flex-col justify-center">
-                        <span>Registered time</span>
-                        <span>value</span>
+                        <span>Total revenue</span>
+                        <span>MTD</span>
                       </p>
                     </div>
                   </div>
                   <div className={`mobile-status-indicator ${
-                    ((dashboardMetrics?.totale_registratie || 0) / 12000) * 100 >= 100 ? 'status-active' :
-                    ((dashboardMetrics?.totale_registratie || 0) / 12000) * 100 >= 80 ? 'status-warning' : 'status-inactive'
+                    (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 100 ? 'status-active' :
+                    (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 80 ? 'status-warning' : 'status-inactive'
                   }`}>
-                    <span>{Math.round(((dashboardMetrics?.totale_registratie || 0) / 12000) * 100)}%</span>
+                    <span>{Math.round((((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100)}%</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold metric-number text-accent">
-                      {formatCurrency(dashboardMetrics?.totale_registratie || 0)}
+                      {formatCurrency(Math.round((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))))}
                     </span>
-                    <span className="text-sm text-muted-foreground">/ {formatCurrency(12000)}</span>
+                    <span className="text-sm text-muted-foreground">/ €{Math.round(mtdCalculations.mtdRevenueTarget / 1000)}K MTD <span className="text-xs opacity-75">(€12K)</span></span>
                   </div>
                   <div className="flex items-center gap-2 h-8 flex-col justify-center">
                     <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-green-400" />
-                      <span className="text-sm font-medium text-green-400">Active</span>
-                      <span className="text-sm text-muted-foreground">this month</span>
+                      {mtdComparison.trend === 'positive' ? (
+                        <TrendingUp className="h-4 w-4 text-green-400" />
+                      ) : mtdComparison.trend === 'negative' ? (
+                        <TrendingDown className="h-4 w-4 text-red-400" />
+                      ) : (
+                        <TrendingUp className="h-4 w-4 text-orange-400" />
+                      )}
+                      <span className={`text-sm font-medium ${
+                        mtdComparison.trend === 'positive' ? 'text-green-400' :
+                        mtdComparison.trend === 'negative' ? 'text-red-400' : 'text-orange-400'
+                      }`}>
+                        {mtdComparison.percentageChange >= 0 ? '+' : ''}{mtdComparison.percentageChange.toFixed(1)}%
+                      </span>
+                      <span className="text-sm text-muted-foreground">vs prev MTD</span>
                     </div>
                   </div>
                 </div>
@@ -819,24 +994,30 @@ export function UnifiedFinancialDashboard() {
                   <div className="relative progress-bar">
                     <div
                       className={`progress-fill ${
-                        ((dashboardMetrics?.totale_registratie || 0) / 12000) * 100 >= 100 ? 'progress-fill-success' :
-                        ((dashboardMetrics?.totale_registratie || 0) / 12000) * 100 >= 80 ? 'progress-fill-warning' : 'progress-fill-warning'
+                        (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / 12000) * 100 >= 100 ? 'progress-fill-success' :
+                        (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / 12000) * 100 >= 80 ? 'progress-fill-warning' : 'progress-fill-warning'
                       }`}
-                      style={{ width: `${Math.min(((dashboardMetrics?.totale_registratie || 0) / 12000) * 100, 100)}%` }}
+                      style={{ width: `${Math.min((((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / 12000) * 100, 100)}%` }}
+                    />
+                    {/* MTD Target Line */}
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-primary opacity-90"
+                      style={{ left: `${Math.min((mtdCalculations.mtdRevenueTarget / 12000) * 100, 100)}%` }}
+                      title={`MTD Target: ${formatCurrency(mtdCalculations.mtdRevenueTarget)}`}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
                   <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Billable</p>
+                    <p className="text-xs text-muted-foreground">Time Value</p>
                     <p className="text-sm font-bold text-primary">
-                      {formatCurrency(dashboardMetrics?.factureerbaar || 0)}
+                      {formatCurrency(dashboardMetrics?.totale_registratie || 0)}
                     </p>
                   </div>
                   <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Overdue</p>
-                    <p className="text-sm font-bold text-red-400">
-                      {formatCurrency(dashboardMetrics?.achterstallig || 0)}
+                    <p className="text-xs text-muted-foreground">Subscriptions</p>
+                    <p className="text-sm font-bold text-emerald-500">
+                      {formatCurrency(Math.round((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0)))}
                     </p>
                   </div>
                 </div>
@@ -858,16 +1039,16 @@ export function UnifiedFinancialDashboard() {
                     </div>
                   </div>
                   <div className={`mobile-status-indicator ${
-                    ((timeStats?.thisMonth.hours || 0) / 160) * 100 >= 100 ? 'status-active' :
-                    ((timeStats?.thisMonth.hours || 0) / 160) * 100 >= 75 ? 'status-warning' : 'status-inactive'
+                    ((timeStats?.thisMonth.hours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 100 ? 'status-active' :
+                    ((timeStats?.thisMonth.hours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 75 ? 'status-warning' : 'status-inactive'
                   }`}>
-                    <span>{Math.round(((timeStats?.thisMonth.hours || 0) / 160) * 100)}%</span>
+                    <span>{Math.round(((timeStats?.thisMonth.hours || 0) / mtdCalculations.mtdHoursTarget) * 100)}%</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold metric-number text-green-400">{formatHours(timeStats?.thisMonth.hours || 0)}</span>
-                    <span className="text-sm text-muted-foreground">/ {formatHours(160)}</span>
+                    <span className="text-sm text-muted-foreground">/ {formatHours(mtdCalculations.mtdHoursTarget)} MTD <span className="text-xs opacity-75">({formatHours(160)})</span></span>
                   </div>
                   <div className="flex items-center gap-2 h-8 flex-col justify-center">
                     <div className="flex items-center gap-2">
@@ -893,6 +1074,12 @@ export function UnifiedFinancialDashboard() {
                         ((timeStats?.thisMonth.hours || 0) / 160) * 100 >= 75 ? 'progress-fill-warning' : 'progress-fill-primary'
                       }`}
                       style={{ width: `${Math.min(((timeStats?.thisMonth.hours || 0) / 160) * 100, 100)}%` }}
+                    />
+                    {/* MTD Target Line */}
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-green-500 opacity-90"
+                      style={{ left: `${Math.min((mtdCalculations.mtdHoursTarget / 160) * 100, 100)}%` }}
+                      title={`MTD Target: ${formatHours(mtdCalculations.mtdHoursTarget)}`}
                     />
                   </div>
                 </div>
@@ -924,28 +1111,46 @@ export function UnifiedFinancialDashboard() {
                     </div>
                   </div>
                   <div className={`mobile-status-indicator ${
-                    ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((timeStats?.thisMonth.revenue || 0) / timeStats.thisMonth.hours) : 0) >= 80 ? 'status-active' :
-                    ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((timeStats?.thisMonth.revenue || 0) / timeStats.thisMonth.hours) : 0) >= 60 ? 'status-warning' : 'status-inactive'
+                    ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) >= 80 ? 'status-active' :
+                    ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) >= 60 ? 'status-warning' : 'status-inactive'
                   }`}>
-                    <span>{Math.round((((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((timeStats?.thisMonth.revenue || 0) / timeStats.thisMonth.hours) : 0) / 100) * 100)}%</span>
+                    <span>{Math.round((((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) / 100) * 100)}%</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold metric-number text-blue-400">
-                      €{(timeStats?.thisMonth.hours || 0) > 0 ? Math.round((timeStats?.thisMonth.revenue || 0) / timeStats.thisMonth.hours) : 0}
+                      €{(timeStats?.thisMonth.hours || 0) > 0 ? ((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours).toFixed(1) : '0'}
                     </span>
                     <span className="text-sm text-muted-foreground">/ €100 target</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 h-8 flex-col justify-center">
+                  <div className="flex items-center gap-2">
+                    {rateComparison.trend === 'positive' ? (
+                      <TrendingUp className="h-4 w-4 text-green-400" />
+                    ) : rateComparison.trend === 'negative' ? (
+                      <TrendingDown className="h-4 w-4 text-red-400" />
+                    ) : (
+                      <TrendingUp className="h-4 w-4 text-orange-400" />
+                    )}
+                    <span className={`text-sm font-medium ${
+                      rateComparison.trend === 'positive' ? 'text-green-400' :
+                      rateComparison.trend === 'negative' ? 'text-red-400' : 'text-orange-400'
+                    }`}>
+                      {rateComparison.percentageChange >= 0 ? '+' : ''}{rateComparison.percentageChange.toFixed(1)}%
+                    </span>
+                    <span className="text-sm text-muted-foreground">vs prev month</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="relative progress-bar">
                     <div
                       className={`progress-fill ${
-                        ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((timeStats?.thisMonth.revenue || 0) / timeStats.thisMonth.hours) : 0) >= 80 ? 'progress-fill-success' :
-                        ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((timeStats?.thisMonth.revenue || 0) / timeStats.thisMonth.hours) : 0) >= 60 ? 'progress-fill-warning' : 'progress-fill-primary'
+                        ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) >= 80 ? 'progress-fill-success' :
+                        ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) >= 60 ? 'progress-fill-warning' : 'progress-fill-primary'
                       }`}
-                      style={{ width: `${Math.min(((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((timeStats?.thisMonth.revenue || 0) / timeStats.thisMonth.hours) : 0), 100)}%` }}
+                      style={{ width: `${Math.min(((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0), 100)}%` }}
                     />
                   </div>
                 </div>
@@ -956,7 +1161,7 @@ export function UnifiedFinancialDashboard() {
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Revenue</p>
-                    <p className="text-sm font-bold text-blue-400">{formatCurrency(timeStats?.thisMonth.revenue || 0)}</p>
+                    <p className="text-sm font-bold text-blue-400">{formatCurrency(dashboardMetrics?.totale_registratie || 0)}</p>
                   </div>
                 </div>
               </div>
@@ -971,19 +1176,16 @@ export function UnifiedFinancialDashboard() {
                     <div>
                       <h3 className="text-base font-semibold mobile-sharp-text">MAU</h3>
                       <p className="text-sm text-muted-foreground h-8 flex flex-col justify-center">
-                        <span>Monthly active</span>
+                        <span>Active</span>
                         <span>users</span>
                       </p>
                     </div>
                   </div>
                   <div className={`mobile-status-indicator ${
-                    (timeStats?.subscription?.monthlyActiveUsers?.trend === 'positive') ? 'status-active' :
-                    (timeStats?.subscription?.monthlyActiveUsers?.trend === 'neutral') ? 'status-warning' : 'status-inactive'
+                    ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100 >= 100 ? 'status-active' :
+                    ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100 >= 80 ? 'status-warning' : 'status-inactive'
                   }`}>
-                    <span>
-                      {(timeStats?.subscription?.monthlyActiveUsers?.growth || 0) >= 0 ? '+' : ''}
-                      {Math.round(timeStats?.subscription?.monthlyActiveUsers?.growth || 0)}%
-                    </span>
+                    <span>{Math.round(((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100)}%</span>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -991,7 +1193,7 @@ export function UnifiedFinancialDashboard() {
                     <span className="text-2xl font-bold metric-number text-purple-400">
                       {(timeStats?.subscription?.monthlyActiveUsers?.current || 0).toLocaleString()}
                     </span>
-                    <span className="text-sm text-muted-foreground">users</span>
+                    <span className="text-sm text-muted-foreground">/ 15 target</span>
                   </div>
                   <div className="flex items-center gap-2 h-8 flex-col justify-center">
                     <div className="flex items-center gap-2">
@@ -1011,6 +1213,17 @@ export function UnifiedFinancialDashboard() {
                       </span>
                       <span className="text-sm text-muted-foreground">vs last month</span>
                     </div>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="relative progress-bar">
+                    <div
+                      className={`progress-fill ${
+                        (timeStats?.subscription?.monthlyActiveUsers?.trend === 'positive') ? 'progress-fill-success' :
+                        (timeStats?.subscription?.monthlyActiveUsers?.trend === 'neutral') ? 'progress-fill-warning' : 'progress-fill-primary'
+                      }`}
+                      style={{ width: `${Math.min(((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100, 100)}%` }}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
@@ -1041,21 +1254,18 @@ export function UnifiedFinancialDashboard() {
                     </div>
                   </div>
                   <div className={`mobile-status-indicator ${
-                    (timeStats?.subscription?.averageSubscriptionFee?.trend === 'positive') ? 'status-active' :
-                    (timeStats?.subscription?.averageSubscriptionFee?.trend === 'neutral') ? 'status-warning' : 'status-inactive'
+                    ((timeStats?.subscription?.averageSubscriptionFee?.current || 0) / 75) * 100 >= 100 ? 'status-active' :
+                    ((timeStats?.subscription?.averageSubscriptionFee?.current || 0) / 75) * 100 >= 80 ? 'status-warning' : 'status-inactive'
                   }`}>
-                    <span>
-                      {(timeStats?.subscription?.averageSubscriptionFee?.growth || 0) >= 0 ? '+' : ''}
-                      {Math.round(timeStats?.subscription?.averageSubscriptionFee?.growth || 0)}%
-                    </span>
+                    <span>{Math.round(((timeStats?.subscription?.averageSubscriptionFee?.current || 0) / 75) * 100)}%</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold metric-number text-emerald-400">
-                      €{Math.round(timeStats?.subscription?.averageSubscriptionFee?.current || 0)}
+                      €{(timeStats?.subscription?.averageSubscriptionFee?.current || 0).toFixed(1)}
                     </span>
-                    <span className="text-sm text-muted-foreground">/month</span>
+                    <span className="text-sm text-muted-foreground">/ €75 target</span>
                   </div>
                   <div className="flex items-center gap-2 h-8 flex-col justify-center">
                     <div className="flex items-center gap-2">
@@ -1077,14 +1287,25 @@ export function UnifiedFinancialDashboard() {
                     </div>
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <div className="relative progress-bar">
+                    <div
+                      className={`progress-fill ${
+                        (timeStats?.subscription?.averageSubscriptionFee?.trend === 'positive') ? 'progress-fill-success' :
+                        (timeStats?.subscription?.averageSubscriptionFee?.trend === 'neutral') ? 'progress-fill-warning' : 'progress-fill-primary'
+                      }`}
+                      style={{ width: `${Math.min(((timeStats?.subscription?.averageSubscriptionFee?.current || 0) / 75) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Current</p>
-                    <p className="text-sm font-bold text-emerald-400">€{Math.round(timeStats?.subscription?.averageSubscriptionFee?.current || 0)}</p>
+                    <p className="text-sm font-bold text-emerald-400">€{(timeStats?.subscription?.averageSubscriptionFee?.current || 0).toFixed(1)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Previous</p>
-                    <p className="text-sm font-bold text-muted-foreground">€{Math.round(timeStats?.subscription?.averageSubscriptionFee?.previous || 0)}</p>
+                    <p className="text-sm font-bold text-muted-foreground">€{(timeStats?.subscription?.averageSubscriptionFee?.previous || 0).toFixed(1)}</p>
                   </div>
                 </div>
               </div>
@@ -1237,6 +1458,839 @@ export function UnifiedFinancialDashboard() {
                   className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   Got it
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Comprehensive Health Report Modal */}
+        {showHealthReport && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-card border rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${
+                    healthScores.totalRounded >= 85 ? 'bg-green-500/20' :
+                    healthScores.totalRounded >= 70 ? 'bg-blue-500/20' :
+                    healthScores.totalRounded >= 50 ? 'bg-orange-500/20' : 'bg-red-500/20'
+                  }`}>
+                    <FileText className={`h-6 w-6 ${
+                      healthScores.totalRounded >= 85 ? 'text-green-500' :
+                      healthScores.totalRounded >= 70 ? 'text-blue-500' :
+                      healthScores.totalRounded >= 50 ? 'text-orange-500' : 'text-red-500'
+                    }`} />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">Business Health Report</h2>
+                    <p className="text-muted-foreground">Complete analysis & recommended actions</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowHealthReport(false)}
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Overall Score Summary */}
+              <div className={`p-6 rounded-xl mb-6 ${
+                healthScores.totalRounded >= 85 ? 'bg-gradient-to-r from-green-500/10 to-green-600/5 border border-green-500/20' :
+                healthScores.totalRounded >= 70 ? 'bg-gradient-to-r from-blue-500/10 to-blue-600/5 border border-blue-500/20' :
+                healthScores.totalRounded >= 50 ? 'bg-gradient-to-r from-orange-500/10 to-orange-600/5 border border-orange-500/20' :
+                'bg-gradient-to-r from-red-500/10 to-red-600/5 border border-red-500/20'
+              }`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold mb-2">Overall Business Health</h3>
+                    <p className={`font-medium ${
+                      healthScores.totalRounded >= 85 ? 'text-green-600' :
+                      healthScores.totalRounded >= 70 ? 'text-blue-600' :
+                      healthScores.totalRounded >= 50 ? 'text-orange-600' : 'text-red-600'
+                    }`}>
+                      {healthScores.totalRounded >= 85 ? '🚀 Exceptional Performance - You\'re crushing it!' :
+                       healthScores.totalRounded >= 70 ? '💪 Strong Performance - Keep up the great work!' :
+                       healthScores.totalRounded >= 50 ? '📈 Room for Growth - You\'re on the right track!' :
+                       '🎯 Action Required - Let\'s turn this around together!'
+                      }
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className={`text-4xl font-black ${
+                      healthScores.totalRounded >= 85 ? 'text-green-500' :
+                      healthScores.totalRounded >= 70 ? 'text-blue-500' :
+                      healthScores.totalRounded >= 50 ? 'text-orange-500' : 'text-red-500'
+                    }`}>
+                      {healthScores.totalRounded}/100
+                    </div>
+                    <Badge className={`${
+                      healthScores.totalRounded >= 85 ? 'bg-green-500 text-white' :
+                      healthScores.totalRounded >= 70 ? 'bg-blue-500 text-white' :
+                      healthScores.totalRounded >= 50 ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
+                    }`}>
+                      {healthScores.totalRounded >= 85 ? '👑 LEGEND' :
+                       healthScores.totalRounded >= 70 ? '⭐ CHAMPION' :
+                       healthScores.totalRounded >= 50 ? '📊 BUILDER' : '🎯 STARTER'
+                      }
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Score Breakdown */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* Revenue Health */}
+                <div className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="h-5 w-5 text-primary" />
+                      <h4 className="font-semibold">Revenue Health (MTD)</h4>
+                    </div>
+                    <span className="text-lg font-bold text-primary">{healthScores.revenue}/25</span>
+                  </div>
+                  <div className="w-full bg-primary/20 rounded-full h-2 mb-2">
+                    <div
+                      className="bg-primary h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${(healthScores.revenue / 25) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {healthScores.revenue >= 20 ? 'Excellent revenue performance!' :
+                     healthScores.revenue >= 15 ? 'Strong revenue growth' :
+                     healthScores.revenue >= 10 ? 'Steady progress, room to improve' : 'Revenue needs immediate attention'}
+                  </p>
+                </div>
+
+                {/* Cash Flow Health */}
+                <div className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-5 w-5 text-green-500" />
+                      <h4 className="font-semibold">Cash Flow Health</h4>
+                    </div>
+                    <span className="text-lg font-bold text-green-600">{healthScores.cashflow}/25</span>
+                  </div>
+                  <div className="w-full bg-green-500/20 rounded-full h-2 mb-2">
+                    <div
+                      className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${(healthScores.cashflow / 25) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {healthScores.cashflow >= 20 ? 'Outstanding cash management!' :
+                     healthScores.cashflow >= 15 ? 'Healthy cash flow patterns' :
+                     healthScores.cashflow >= 10 ? 'Some collection delays' : 'Cash flow requires urgent attention'}
+                  </p>
+                </div>
+
+                {/* Efficiency Health */}
+                <div className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-blue-500" />
+                      <h4 className="font-semibold">Efficiency Health (MTD)</h4>
+                    </div>
+                    <span className="text-lg font-bold text-blue-600">{healthScores.efficiency}/25</span>
+                  </div>
+                  <div className="w-full bg-blue-500/20 rounded-full h-2 mb-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${(healthScores.efficiency / 25) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {healthScores.efficiency >= 20 ? 'Peak productivity achieved!' :
+                     healthScores.efficiency >= 15 ? 'Strong efficiency levels' :
+                     healthScores.efficiency >= 10 ? 'Building momentum' : 'Efficiency needs improvement'}
+                  </p>
+                </div>
+
+                {/* Risk Management */}
+                <div className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-5 w-5 text-purple-500" />
+                      <h4 className="font-semibold">Risk Management</h4>
+                    </div>
+                    <span className="text-lg font-bold text-purple-600">{healthScores.risk}/25</span>
+                  </div>
+                  <div className="w-full bg-purple-500/20 rounded-full h-2 mb-2">
+                    <div
+                      className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${(healthScores.risk / 25) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {healthScores.risk >= 20 ? 'Well-protected business!' :
+                     healthScores.risk >= 15 ? 'Manageable risk levels' :
+                     healthScores.risk >= 10 ? 'Some risk concerns' : 'High-risk areas need attention'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Recommended Actions */}
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Target className="h-5 w-5 text-primary" />
+                  Recommended Actions
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Priority Actions based on scores */}
+                  {/* Cash Flow - Always show with dynamic priority */}
+                  <div className={`p-4 rounded-lg ${
+                    healthScores.cashflow < 15
+                      ? 'bg-red-500/10 border border-red-500/20'
+                      : healthScores.cashflow < 20
+                        ? 'bg-yellow-500/10 border border-yellow-500/20'
+                        : 'bg-green-500/10 border border-green-500/20'
+                  }`}>
+                    <h4 className={`font-semibold mb-2 flex items-center gap-2 ${
+                      healthScores.cashflow < 15
+                        ? 'text-red-600'
+                        : healthScores.cashflow < 20
+                          ? 'text-yellow-600'
+                          : 'text-green-600'
+                    }`}>
+                      {healthScores.cashflow < 15 ? '🚨' : healthScores.cashflow < 20 ? '⚠️' : '✅'}
+                      Cash Flow Management
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        healthScores.cashflow < 15
+                          ? 'bg-red-500/20 text-red-600'
+                          : healthScores.cashflow < 20
+                            ? 'bg-yellow-500/20 text-yellow-600'
+                            : 'bg-green-500/20 text-green-600'
+                      }`}>
+                        {healthScores.cashflow < 15 ? 'HIGH PRIORITY' : healthScores.cashflow < 20 ? 'MONITOR' : 'OPTIMIZED'}
+                      </span>
+                    </h4>
+                      <div className="space-y-3 mb-4">
+                        {(() => {
+                          const recommendations = []
+                          const overdueAmount = dashboardMetrics?.achterstallig || 0
+                          const totalRevenue = (dashboardMetrics?.totale_registratie || 0)
+                          const paidAmount = totalRevenue - overdueAmount
+                          const overdueCount = dashboardMetrics?.achterstallig_count || 0
+
+                          // Calculate current score components (ranked by point impact)
+                          const operatingCashFlowRatio = totalRevenue > 0 ? paidAmount / totalRevenue : 1
+                          const dsoEquivalent = totalRevenue > 0 ? (overdueAmount / totalRevenue) * 30 : 0
+
+                          // Rank by potential point gain (highest impact first)
+
+                          // 1. Operating Cash Flow Ratio (up to 10 points) - HIGHEST IMPACT
+                          if (operatingCashFlowRatio < 0.90) {
+                            const targetCollection = totalRevenue * 0.90
+                            const needToCollect = targetCollection - paidAmount
+                            const currentOcfScore = operatingCashFlowRatio >= 0.75 ? 7 : operatingCashFlowRatio >= 0.60 ? 5 : 3
+                            const targetOcfScore = 10
+                            recommendations.push(`🎯 Collect €${Math.round(needToCollect)} overdue to reach 90% ratio (+${targetOcfScore - currentOcfScore} pts)`)
+                          }
+
+                          // 2. DSO Equivalent (up to 4 points) - MEDIUM IMPACT
+                          if (dsoEquivalent > 15) {
+                            const maxAllowedOverdue = totalRevenue * (15/30) // 15 days = 50% of 30-day period
+                            const excessOverdue = overdueAmount - maxAllowedOverdue
+                            const currentDsoScore = dsoEquivalent <= 30 ? 3 : dsoEquivalent <= 45 ? 2 : 1
+                            recommendations.push(`⏰ Reduce overdue by €${Math.round(Math.max(excessOverdue, 0))} to achieve <15 day DSO (+${4 - currentDsoScore} pts)`)
+                          }
+
+                          // 3. Collection Risk by count (up to 3 points) - LOWER IMPACT
+                          if (overdueCount > 2) {
+                            const currentRiskScore = overdueCount <= 4 ? 2 : overdueCount <= 6 ? 1 : 0
+                            recommendations.push(`📋 Clear ${overdueCount - 2} overdue invoices to minimize collection risk (+${3 - currentRiskScore} pts)`)
+                          }
+
+                          // If already optimized, suggest maintenance
+                          if (recommendations.length === 0) {
+                            recommendations.push('✅ Excellent cash flow - maintain current collection efficiency')
+                            recommendations.push('💡 Consider offering early payment discounts for further optimization')
+                          }
+
+                          // Ensure we have 3 recommendations
+                          if (recommendations.length < 3) {
+                            if (operatingCashFlowRatio >= 0.75) {
+                              recommendations.push('📈 Implement automated payment reminders to maintain performance')
+                            } else {
+                              recommendations.push('🚨 Critical: Focus on immediate collections - cash flow below safe levels')
+                            }
+                          }
+
+                          return recommendations.slice(0, 3).map((rec, i) => (
+                            <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                              <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5 ${
+                                healthScores.cashflow < 15
+                                  ? 'bg-red-500/20 text-red-600'
+                                  : healthScores.cashflow < 20
+                                    ? 'bg-yellow-500/20 text-yellow-600'
+                                    : 'bg-green-500/20 text-green-600'
+                              }`}>
+                                {i + 1}
+                              </span>
+                              <span className="flex-1">{rec}</span>
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => {
+                            setShowHealthReport(false)
+                            const params = new URLSearchParams(window.location.search)
+                            params.set('tab', 'facturen')
+                            window.history.pushState({}, '', `${window.location.pathname}?${params}`)
+                          }}
+                          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+                            healthScores.cashflow < 15
+                              ? 'bg-red-500 hover:bg-red-600'
+                              : healthScores.cashflow < 20
+                                ? 'bg-yellow-500 hover:bg-yellow-600'
+                                : 'bg-green-500 hover:bg-green-600'
+                          }`}
+                        >
+                          <FileText className="h-4 w-4" />
+                          {(dashboardMetrics?.achterstallig || 0) > 0 ? 'Manage Overdue Invoices' : 'Review Invoice Status'}
+                        </button>
+                      </div>
+                    </div>
+
+                  {/* Revenue Growth - Always show with dynamic priority */}
+                  <div className={`p-4 rounded-lg ${
+                    healthScores.revenue < 15
+                      ? 'bg-red-500/10 border border-red-500/20'
+                      : healthScores.revenue < 20
+                        ? 'bg-yellow-500/10 border border-yellow-500/20'
+                        : 'bg-green-500/10 border border-green-500/20'
+                  }`}>
+                    <h4 className={`font-semibold mb-2 flex items-center gap-2 ${
+                      healthScores.revenue < 15
+                        ? 'text-red-600'
+                        : healthScores.revenue < 20
+                          ? 'text-yellow-600'
+                          : 'text-green-600'
+                    }`}>
+                      {healthScores.revenue < 15 ? '🚨' : healthScores.revenue < 20 ? '⚠️' : '✅'}
+                      Revenue Growth
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        healthScores.revenue < 15
+                          ? 'bg-red-500/20 text-red-600'
+                          : healthScores.revenue < 20
+                            ? 'bg-yellow-500/20 text-yellow-600'
+                            : 'bg-green-500/20 text-green-600'
+                      }`}>
+                        {healthScores.revenue < 15 ? 'HIGH PRIORITY' : healthScores.revenue < 20 ? 'MONITOR' : 'OPTIMIZED'}
+                      </span>
+                    </h4>
+                      <div className="space-y-3 mb-4">
+                        {(() => {
+                          const recommendations = []
+                          const currentRevenue = (dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))
+                          const mtdTarget = mtdCalculations.mtdRevenueTarget
+                          const progressPercentage = mtdTarget > 0 ? (currentRevenue / mtdTarget) * 100 : 0
+                          const shortfall = Math.max(0, mtdTarget - currentRevenue)
+
+                          if (shortfall > 1000) {
+                            recommendations.push(`Close €${Math.round(shortfall)} revenue gap to meet MTD target (${Math.round(progressPercentage)}% achieved)`)
+                          } else if (progressPercentage < 80) {
+                            recommendations.push(`Increase activity to reach ${Math.round(progressPercentage)}% → 100% of MTD target`)
+                          }
+
+                          // Revenue recommendations focus on business growth and value optimization
+                          if (progressPercentage < 80) {
+                            const currentRate = timeStats?.thisMonth.hours > 0 ? Math.round(currentRevenue / timeStats.thisMonth.hours) : 0
+                            if (currentRate < 100) {
+                              recommendations.push(`Increase hourly rates from €${currentRate} to €100+ for better revenue`)
+                            } else {
+                              recommendations.push(`Target higher-value clients to close €${Math.round(shortfall)} revenue gap`)
+                            }
+                          }
+
+                          if (progressPercentage >= 100) {
+                            recommendations.push(`Excellent revenue performance - consider expanding service offerings`)
+                          } else if (progressPercentage < 50) {
+                            recommendations.push(`Focus on client acquisition - revenue significantly below target`)
+                          }
+
+                          if (recommendations.length === 0) {
+                            recommendations.push('Focus on maintaining current revenue momentum')
+                          }
+
+                          return recommendations.slice(0, 3).map((rec, i) => (
+                            <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                              <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5 ${
+                                healthScores.revenue < 15
+                                  ? 'bg-red-500/20 text-red-600'
+                                  : healthScores.revenue < 20
+                                    ? 'bg-yellow-500/20 text-yellow-600'
+                                    : 'bg-green-500/20 text-green-600'
+                              }`}>
+                                {i + 1}
+                              </span>
+                              <span className="flex-1">{rec}</span>
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => {
+                            setShowHealthReport(false)
+                            const params = new URLSearchParams(window.location.search)
+                            params.set('tab', 'klanten')
+                            window.history.pushState({}, '', `${window.location.pathname}?${params}`)
+                          }}
+                          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+                            healthScores.revenue < 15
+                              ? 'bg-red-500 hover:bg-red-600'
+                              : healthScores.revenue < 20
+                                ? 'bg-yellow-500 hover:bg-yellow-600'
+                                : 'bg-green-500 hover:bg-green-600'
+                          }`}
+                        >
+                          <Users className="h-4 w-4" />
+                          Manage Clients
+                        </button>
+                      </div>
+                    </div>
+
+                  {/* Risk Management - Always show with dynamic priority */}
+                  <div className={`p-4 rounded-lg ${
+                    healthScores.risk < 15
+                      ? 'bg-red-500/10 border border-red-500/20'
+                      : healthScores.risk < 20
+                        ? 'bg-yellow-500/10 border border-yellow-500/20'
+                        : 'bg-green-500/10 border border-green-500/20'
+                  }`}>
+                    <h4 className={`font-semibold mb-2 flex items-center gap-2 ${
+                      healthScores.risk < 15
+                        ? 'text-red-600'
+                        : healthScores.risk < 20
+                          ? 'text-yellow-600'
+                          : 'text-green-600'
+                    }`}>
+                      {healthScores.risk < 15 ? '🚨' : healthScores.risk < 20 ? '⚠️' : '✅'}
+                      Risk Management
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        healthScores.risk < 15
+                          ? 'bg-red-500/20 text-red-600'
+                          : healthScores.risk < 20
+                            ? 'bg-yellow-500/20 text-yellow-600'
+                            : 'bg-green-500/20 text-green-600'
+                      }`}>
+                        {healthScores.risk < 15 ? 'HIGH PRIORITY' : healthScores.risk < 20 ? 'MONITOR' : 'OPTIMIZED'}
+                      </span>
+                    </h4>
+                      <div className="space-y-3 mb-4">
+                        {(() => {
+                          const recommendations = []
+                          // Use frequency-aware data from client_invoicing_summary view
+                          const readyToBillValue = dashboardMetrics?.factureerbaar || 0 // Already frequency-aware
+                          const totalUnbilledValue = timeStats?.unbilled?.value || 0
+                          const overdueAmount = dashboardMetrics?.achterstallig || 0
+                          const totalRevenue = (dashboardMetrics?.totale_registratie || 0) + overdueAmount
+
+                          if (readyToBillValue > 2000) {
+                            recommendations.push(`Invoice €${Math.round(readyToBillValue)} in frequency-ready work (past due periods)`)
+                          } else if (readyToBillValue > 500) {
+                            recommendations.push(`Process €${Math.round(readyToBillValue)} ready for invoicing per client schedules`)
+                          } else if (totalUnbilledValue > 4000) {
+                            recommendations.push(`Monitor €${Math.round(totalUnbilledValue)} total work (includes current periods)`)
+                          }
+
+                          // Risk Management focuses on billing processes, not collections (that's Cash Flow's role)
+                          if (timeStats?.thisMonth.hours && timeStats.thisMonth.hours > mtdCalculations.mtdHoursTarget * 1.5) {
+                            recommendations.push(`Consider work-life balance - ${Math.round(timeStats.thisMonth.hours)} hours tracked this month`)
+                          }
+
+                          if (readyToBillValue === 0 && totalUnbilledValue > 3000) {
+                            recommendations.push(`Review client billing schedules for optimization opportunities`)
+                          } else if (readyToBillValue < 500) {
+                            recommendations.push(`Excellent billing discipline - maintain current invoicing schedule`)
+                          }
+
+                          if (totalRevenue > 0) {
+                            recommendations.push(`Monitor client concentration risk and diversify revenue sources`)
+                          }
+
+                          if (recommendations.length === 0) {
+                            recommendations.push('Maintain current risk management practices')
+                          }
+
+                          return recommendations.slice(0, 3).map((rec, i) => (
+                            <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                              <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5 ${
+                                healthScores.risk < 15
+                                  ? 'bg-red-500/20 text-red-600'
+                                  : healthScores.risk < 20
+                                    ? 'bg-yellow-500/20 text-yellow-600'
+                                    : 'bg-green-500/20 text-green-600'
+                              }`}>
+                                {i + 1}
+                              </span>
+                              <span className="flex-1">{rec}</span>
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => {
+                            setShowHealthReport(false)
+                            const params = new URLSearchParams(window.location.search)
+                            const readyToBillValue = dashboardMetrics?.factureerbaar || 0
+                            // Risk Management focuses on billing processes, not collections
+                            if (readyToBillValue > 500) {
+                              params.set('tab', 'facturen')
+                            } else {
+                              params.set('tab', 'klanten')
+                            }
+                            window.history.pushState({}, '', `${window.location.pathname}?${params}`)
+                          }}
+                          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+                            healthScores.risk < 15
+                              ? 'bg-red-500 hover:bg-red-600'
+                              : healthScores.risk < 20
+                                ? 'bg-yellow-500 hover:bg-yellow-600'
+                                : 'bg-green-500 hover:bg-green-600'
+                          }`}
+                        >
+                          {(dashboardMetrics?.factureerbaar || 0) > 500 ? (
+                            <>
+                              <FileText className="h-4 w-4" />
+                              Process Ready Invoices
+                            </>
+                          ) : (
+                            <>
+                              <Users className="h-4 w-4" />
+                              Review Client Portfolio
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                  {/* Efficiency - Always show with dynamic priority */}
+                  <div className={`p-4 rounded-lg ${
+                    healthScores.efficiency < 15
+                      ? 'bg-red-500/10 border border-red-500/20'
+                      : healthScores.efficiency < 20
+                        ? 'bg-yellow-500/10 border border-yellow-500/20'
+                        : 'bg-green-500/10 border border-green-500/20'
+                  }`}>
+                    <h4 className={`font-semibold mb-2 flex items-center gap-2 ${
+                      healthScores.efficiency < 15
+                        ? 'text-red-600'
+                        : healthScores.efficiency < 20
+                          ? 'text-yellow-600'
+                          : 'text-green-600'
+                    }`}>
+                      {healthScores.efficiency < 15 ? '🚨' : healthScores.efficiency < 20 ? '⚠️' : '✅'}
+                      Efficiency & Productivity
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        healthScores.efficiency < 15
+                          ? 'bg-red-500/20 text-red-600'
+                          : healthScores.efficiency < 20
+                            ? 'bg-yellow-500/20 text-yellow-600'
+                            : 'bg-green-500/20 text-green-600'
+                      }`}>
+                        {healthScores.efficiency < 15 ? 'HIGH PRIORITY' : healthScores.efficiency < 20 ? 'MONITOR' : 'OPTIMIZED'}
+                      </span>
+                    </h4>
+                      <div className="space-y-3 mb-4">
+                        {(() => {
+                          const recommendations = []
+                          const currentHours = timeStats?.thisMonth.hours || 0
+                          const mtdHoursTarget = mtdCalculations.mtdHoursTarget
+                          const hoursProgressPercentage = mtdHoursTarget > 0 ? (currentHours / mtdHoursTarget) * 100 : 0
+                          const hoursShortfall = Math.max(0, mtdHoursTarget - currentHours)
+
+                          if (hoursShortfall > 20) {
+                            recommendations.push(`Log ${Math.round(hoursShortfall)} more hours to meet MTD target (${Math.round(hoursProgressPercentage)}% achieved)`)
+                          } else if (hoursProgressPercentage < 80) {
+                            recommendations.push(`Increase daily productivity to reach ${Math.round(hoursProgressPercentage)}% → 100% of hour target`)
+                          }
+
+                          const avgHoursPerDay = currentHours / mtdCalculations.currentDay
+                          const targetHoursPerDay = mtdHoursTarget / mtdCalculations.currentDay
+                          if (avgHoursPerDay < targetHoursPerDay * 0.8) {
+                            recommendations.push(`Increase daily average from ${avgHoursPerDay.toFixed(1)} to ${targetHoursPerDay.toFixed(1)} hours/day`)
+                          }
+
+                          // Efficiency focuses on productivity and time tracking, not invoicing
+                          const totalUnbilledHours = timeStats?.unbilled?.hours || 0
+                          const avgDailyHours = currentHours / mtdCalculations.currentDay
+                          if (avgDailyHours < 4) {
+                            recommendations.push(`Increase daily productivity - currently averaging ${avgDailyHours.toFixed(1)}h/day`)
+                          } else if (timeStats?.thisMonth.hours && timeStats.thisMonth.hours >= mtdCalculations.mtdHoursTarget * 1.2) {
+                            recommendations.push(`Excellent productivity - ${Math.round(timeStats.thisMonth.hours)} hours tracked`)
+                          } else if (totalUnbilledHours > 50) {
+                            recommendations.push(`Monitor ${Math.round(totalUnbilledHours)} hours of tracked time (includes all periods)`)
+                          }
+
+                          if (recommendations.length === 0) {
+                            recommendations.push('Focus on maintaining consistent daily productivity')
+                          }
+
+                          return recommendations.slice(0, 3).map((rec, i) => (
+                            <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                              <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5 ${
+                                healthScores.efficiency < 15
+                                  ? 'bg-red-500/20 text-red-600'
+                                  : healthScores.efficiency < 20
+                                    ? 'bg-yellow-500/20 text-yellow-600'
+                                    : 'bg-green-500/20 text-green-600'
+                              }`}>
+                                {i + 1}
+                              </span>
+                              <span className="flex-1">{rec}</span>
+                            </div>
+                          ))
+                        })()}
+                      </div>
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => {
+                            setShowHealthReport(false)
+                            const params = new URLSearchParams(window.location.search)
+                            params.set('tab', 'tijd')
+                            window.history.pushState({}, '', `${window.location.pathname}?${params}`)
+                          }}
+                          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+                            healthScores.efficiency < 15
+                              ? 'bg-red-500 hover:bg-red-600'
+                              : healthScores.efficiency < 20
+                                ? 'bg-yellow-500 hover:bg-yellow-600'
+                                : 'bg-green-500 hover:bg-green-600'
+                          }`}
+                        >
+                          <Clock className="h-4 w-4" />
+                          Track Time
+                        </button>
+                      </div>
+                    </div>
+
+                </div>
+              </div>
+
+              {/* Overall Business Performance Summary */}
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Award className="h-5 w-5 text-primary" />
+                  Overall Performance
+                </h3>
+
+                {/* Always show performance summary with dynamic styling */}
+                <div className={`p-4 rounded-lg ${
+                  healthScores.totalRounded >= 80
+                    ? 'bg-green-500/10 border border-green-500/20'
+                    : healthScores.totalRounded >= 60
+                      ? 'bg-yellow-500/10 border border-yellow-500/20'
+                      : 'bg-red-500/10 border border-red-500/20'
+                }`}>
+                  <h4 className={`font-semibold mb-2 flex items-center gap-2 ${
+                    healthScores.totalRounded >= 80
+                      ? 'text-green-600'
+                      : healthScores.totalRounded >= 60
+                        ? 'text-yellow-600'
+                        : 'text-red-600'
+                  }`}>
+                    {healthScores.totalRounded >= 80 ? '🎉' : healthScores.totalRounded >= 60 ? '👍' : '💪'}
+                    {healthScores.totalRounded >= 80 ? 'Excellent Performance!' : healthScores.totalRounded >= 60 ? 'Good Progress!' : 'Focus Areas Identified'}
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      healthScores.totalRounded >= 80
+                        ? 'bg-green-500/20 text-green-600'
+                        : healthScores.totalRounded >= 60
+                          ? 'bg-yellow-500/20 text-yellow-600'
+                          : 'bg-red-500/20 text-red-600'
+                    }`}>
+                      {healthScores.totalRounded}/100 SCORE
+                    </span>
+                  </h4>
+                  <div className="space-y-3 mb-4">
+                    {(() => {
+                      const recommendations = []
+                      const currentRevenue = (dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))
+                      const mtdProgress = mtdCalculations.mtdRevenueTarget > 0 ? (currentRevenue / mtdCalculations.mtdRevenueTarget) * 100 : 0
+                      const overdueRatio = dashboardMetrics?.achterstallig / ((dashboardMetrics?.totale_registratie || 1) + (dashboardMetrics?.achterstallig || 0))
+
+                      if (healthScores.totalRounded >= 80) {
+                        if (mtdProgress > 120) {
+                          recommendations.push(`Exceptional month! You're ${Math.round(mtdProgress)}% of MTD target - consider rate optimization`)
+                        } else if (mtdProgress > 100) {
+                          recommendations.push(`Great performance - ${Math.round(mtdProgress)}% of MTD target achieved`)
+                        }
+                        if (overdueRatio < 0.1) {
+                          recommendations.push(`Excellent cash flow management - maintain payment follow-up process`)
+                        }
+                        if (timeStats?.thisMonth.hours && timeStats.thisMonth.hours >= mtdCalculations.mtdHoursTarget) {
+                          recommendations.push(`Strong work consistency - ${Math.round(timeStats.thisMonth.hours)} hours tracked this month`)
+                        }
+                      } else if (healthScores.totalRounded >= 60) {
+                        recommendations.push(`You're on the right track with ${healthScores.totalRounded}/100 score - focus on priority areas above`)
+                        if (mtdProgress < 80) {
+                          recommendations.push(`Work on reaching ${Math.round(mtdProgress)}% → 100% of your MTD revenue target`)
+                        }
+                        recommendations.push(`Address the highest priority recommendations above to improve your score`)
+                      } else {
+                        recommendations.push(`Multiple areas need attention - start with HIGH PRIORITY items above`)
+                        recommendations.push(`Focus on one area at a time for best results`)
+                        recommendations.push(`Your business fundamentals are solid - these are optimization opportunities`)
+                      }
+
+                      if (recommendations.length === 0) {
+                        recommendations.push('Your business is performing well - keep up the momentum!')
+                      }
+
+                      return recommendations.slice(0, 3).map((rec, i) => (
+                        <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5 ${
+                            healthScores.totalRounded >= 80
+                              ? 'bg-green-500/20 text-green-600'
+                              : healthScores.totalRounded >= 60
+                                ? 'bg-yellow-500/20 text-yellow-600'
+                                : 'bg-red-500/20 text-red-600'
+                          }`}>
+                            {i + 1}
+                          </span>
+                          <span className="flex-1">{rec}</span>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => {
+                        setShowHealthReport(false)
+                        const params = new URLSearchParams(window.location.search)
+                        const mtdProgress = mtdCalculations.mtdRevenueTarget > 0 ? (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 : 0
+                        // Navigate to most relevant section based on performance
+                        if (healthScores.totalRounded >= 80) {
+                          params.set('tab', mtdProgress > 120 ? 'klanten' : 'tijd')
+                        } else if (healthScores.revenue < healthScores.cashflow && healthScores.revenue < healthScores.risk) {
+                          params.set('tab', 'klanten')
+                        } else if (healthScores.cashflow < healthScores.risk) {
+                          params.set('tab', 'facturen')
+                        } else {
+                          params.set('tab', 'tijd')
+                        }
+                        window.history.pushState({}, '', `${window.location.pathname}?${params}`)
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+                        healthScores.totalRounded >= 80
+                          ? 'bg-green-500 hover:bg-green-600'
+                          : healthScores.totalRounded >= 60
+                            ? 'bg-yellow-500 hover:bg-yellow-600'
+                            : 'bg-red-500 hover:bg-red-600'
+                      }`}
+                    >
+                      {healthScores.totalRounded >= 80 ? (
+                        <>
+                          <TrendingUp className="h-4 w-4" />
+                          Continue Growing
+                        </>
+                      ) : healthScores.totalRounded >= 60 ? (
+                        <>
+                          <Target className="h-4 w-4" />
+                          Improve Performance
+                        </>
+                      ) : (
+                        <>
+                          <AlertTriangle className="h-4 w-4" />
+                          Take Action
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Overall Performance Summary */}
+                <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2 text-blue-600">
+                    📊 Overall Performance Summary
+                  </h4>
+                  <div className="space-y-3 mb-4">
+                    {(() => {
+                      const recommendations = []
+                      const currentRevenue = (dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))
+                      const mtdProgress = mtdCalculations.mtdRevenueTarget > 0 ? (currentRevenue / mtdCalculations.mtdRevenueTarget) * 100 : 0
+                      const overdueRatio = dashboardMetrics?.achterstallig / ((dashboardMetrics?.totale_registratie || 1) + (dashboardMetrics?.achterstallig || 0))
+                      const overallScore = (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.riskManagement) / 4
+
+                      if (overallScore >= 20) {
+                        recommendations.push(`🎉 Excellent overall performance! Average score: ${Math.round(overallScore)}/20`)
+                      } else if (overallScore >= 15) {
+                        recommendations.push(`✅ Good performance with room for improvement. Average score: ${Math.round(overallScore)}/20`)
+                      } else {
+                        recommendations.push(`⚠️ Focus needed on key areas. Average score: ${Math.round(overallScore)}/20`)
+                      }
+
+                      if (mtdProgress > 120) {
+                        recommendations.push(`🚀 Exceptional month! You're ${Math.round(mtdProgress)}% of MTD target - consider rate optimization`)
+                      } else if (mtdProgress > 100) {
+                        recommendations.push(`📈 Great performance - ${Math.round(mtdProgress)}% of MTD target achieved`)
+                      } else if (mtdProgress > 80) {
+                        recommendations.push(`⚡ Good progress - ${Math.round(mtdProgress)}% of MTD target, push for final stretch`)
+                      } else {
+                        recommendations.push(`🎯 Focus needed - ${Math.round(mtdProgress)}% of MTD target, review strategy`)
+                      }
+
+                      if (overdueRatio < 0.1) {
+                        recommendations.push(`💰 Excellent cash flow management - maintain payment follow-up process`)
+                      } else if (overdueRatio < 0.2) {
+                        recommendations.push(`💳 Good cash flow management - slight room for improvement`)
+                      } else {
+                        recommendations.push(`🚨 Cash flow needs attention - review payment processes`)
+                      }
+
+                      return recommendations.slice(0, 3).map((rec, i) => (
+                        <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <span className="flex-shrink-0 w-5 h-5 bg-blue-500/20 text-blue-600 rounded-full flex items-center justify-center text-xs font-semibold mt-0.5">
+                            {i + 1}
+                          </span>
+                          <span className="flex-1">{rec}</span>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                  <div className="flex justify-center">
+                    <button
+                      onClick={() => {
+                        setShowHealthReport(false)
+                        const params = new URLSearchParams(window.location.search)
+                        const overallScore = (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.riskManagement) / 4
+                        // Navigate to most relevant section based on lowest score
+                        const lowestScore = Math.min(healthScores.revenue, healthScores.cashflow, healthScores.efficiency, healthScores.riskManagement)
+                        if (lowestScore === healthScores.revenue) {
+                          params.set('tab', 'klanten')
+                        } else if (lowestScore === healthScores.cashflow) {
+                          params.set('tab', 'facturen')
+                        } else {
+                          params.set('tab', 'tijd')
+                        }
+                        window.history.pushState({}, '', `${window.location.pathname}?${params}`)
+                      }}
+                      className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
+                        (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.riskManagement) / 4 >= 20
+                          ? 'bg-green-500 hover:bg-green-600'
+                          : (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.riskManagement) / 4 >= 15
+                          ? 'bg-yellow-500 hover:bg-yellow-600'
+                          : 'bg-red-500 hover:bg-red-600'
+                      }`}
+                    >
+                      <TrendingUp className="h-4 w-4" />
+                      Take Action
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Close Button */}
+              <div className="flex justify-end mt-6 pt-4 border-t">
+                <button
+                  onClick={() => setShowHealthReport(false)}
+                  className="px-6 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors"
+                >
+                  Close
                 </button>
               </div>
             </div>

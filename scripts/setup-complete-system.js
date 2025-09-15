@@ -107,7 +107,7 @@ async function createClerkUsers() {
 async function updateSeedFile(createdUsers) {
   console.log('\n📝 Updating seed file with real Clerk user IDs...\n');
 
-  const seedFilePath = path.join(__dirname, '../supabase/043_complete_test_coverage_seed_data.sql');
+  const seedFilePath = path.join(__dirname, '../supabase/043_complete_test_coverage_seed_data_safe.sql');
 
   try {
     let seedContent = await fs.readFile(seedFilePath, 'utf8');
