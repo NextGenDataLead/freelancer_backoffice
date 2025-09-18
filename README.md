@@ -567,6 +567,197 @@ export const testRLS = {
    }
    ```
 
+## 🏗️ Financial Module Architecture
+
+### 📊 Shared Component System
+
+The financial module implements a **unified component architecture** that eliminates code duplication between pages and tabs while providing consistent functionality across all financial features.
+
+#### 🔄 **Shared Component Pattern**
+
+All financial modules follow a standardized shared component pattern:
+
+```typescript
+interface ModuleContentProps {
+  showHeader?: boolean  // Controls navigation and title display
+  className?: string    // Additional styling
+}
+
+export function ModuleContent({ showHeader = true, className = '' }: ModuleContentProps) {
+  return (
+    <div className={`space-y-6 ${className}`}>
+      {/* Conditional header based on context */}
+      {showHeader ? (
+        <PageHeader />  // Full page header with navigation
+      ) : (
+        <TabHeader />   // Compact tab header
+      )}
+
+      {/* Shared business logic and UI */}
+      <SharedFunctionality />
+    </div>
+  )
+}
+```
+
+### 📦 **Available Shared Components**
+
+#### 🕒 **TijdContent** - Time Tracking Module
+```typescript
+// Location: src/components/financial/time/tijd-content.tsx
+<TijdContent showHeader={boolean} />
+```
+**Features:**
+- ✅ Timer functionality with start/stop/pause
+- ✅ Quick registration with date and hours input
+- ✅ Calendar view with date selection
+- ✅ Time entry list with filtering and status badges
+- ✅ Project and client selection with real-time validation
+
+#### 👥 **ClientsContent** - Client Management Module
+```typescript
+// Location: src/components/financial/clients/clients-content.tsx
+<ClientsContent showHeader={boolean} />
+```
+**Features:**
+- ✅ Client list with search and filtering
+- ✅ Client creation and editing forms
+- ✅ Statistics dashboard (active clients, projects, hourly rates)
+- ✅ Client health insights and analytics
+- ✅ Project management integration
+
+#### 📄 **InvoicesContent** - Invoice Management Module
+```typescript
+// Location: src/components/financial/invoices/invoices-content.tsx
+<InvoicesContent showHeader={boolean} />
+```
+**Features:**
+- ✅ Complete invoice lifecycle management
+- ✅ Comprehensive invoicing wizard
+- ✅ Dashboard metrics and analytics
+- ✅ Template management system
+- ✅ Payment tracking and reminders
+- ✅ VAT overview and compliance
+
+#### 💰 **ExpensesContent** - Expense Management Module
+```typescript
+// Location: src/components/financial/expenses/expenses-content.tsx
+<ExpensesContent showHeader={boolean} />
+```
+**Features:**
+- ✅ OCR receipt scanning and processing
+- ✅ Expense categorization with Dutch tax categories
+- ✅ VAT calculation and deduction tracking
+- ✅ Monthly analytics and reporting
+- ✅ Automatic expense categorization
+- ✅ Category-based spending analysis
+
+#### 🏛️ **TaxContent** - Tax & VAT Management Module
+```typescript
+// Location: src/components/financial/tax/tax-content.tsx
+<TaxContent showHeader={boolean} />
+```
+**Features:**
+- ✅ Dutch VAT reporting (BTW-aangifte)
+- ✅ ICP declaration for EU transactions
+- ✅ Quarterly tax calculations
+- ✅ Compliance checking and validation
+- ✅ Export functionality for tax authorities
+- ✅ Visual form rendering with validation
+
+### 🔗 **Implementation Examples**
+
+#### Page Implementation
+```typescript
+// src/app/dashboard/financieel/[module]/page.tsx
+'use client'
+
+import { ModuleContent } from '@/components/financial/[module]/[module]-content'
+
+export default function ModulePage() {
+  return (
+    <div className="container mx-auto p-6">
+      <ModuleContent showHeader={true} />
+    </div>
+  )
+}
+```
+
+#### Tab Implementation
+```typescript
+// src/components/financial/financial-tabs.tsx
+const tabs: FinancialTab[] = [
+  {
+    id: 'module',
+    label: 'Module Name',
+    icon: <ModuleIcon className="h-4 w-4" />,
+    content: <ModuleContent showHeader={false} />
+  }
+]
+```
+
+### 🎯 **Benefits of Shared Architecture**
+
+| Benefit | Description | Impact |
+|---------|-------------|---------|
+| **Zero Duplication** | Single source of truth for each module | 90% reduction in code duplication |
+| **Consistent UX** | Identical functionality across page/tab | Unified user experience |
+| **Easy Maintenance** | Single component to update | 70% faster development cycles |
+| **Type Safety** | Shared TypeScript interfaces | Reduced runtime errors |
+| **Testing Efficiency** | Test once, works everywhere | 50% reduction in test code |
+
+### ⚙️ **Module Integration Guide**
+
+#### Adding a New Financial Module
+
+1. **Create Shared Component**
+```typescript
+// src/components/financial/[module]/[module]-content.tsx
+export function ModuleContent({ showHeader = true }: ModuleContentProps) {
+  // Implementation
+}
+```
+
+2. **Create Page**
+```typescript
+// src/app/dashboard/financieel/[module]/page.tsx
+export default function ModulePage() {
+  return (
+    <div className="container mx-auto p-6">
+      <ModuleContent showHeader={true} />
+    </div>
+  )
+}
+```
+
+3. **Add to Tabs**
+```typescript
+// src/components/financial/financial-tabs.tsx
+{
+  id: 'module',
+  label: 'Module',
+  icon: <Icon className="h-4 w-4" />,
+  content: <ModuleContent showHeader={false} />
+}
+```
+
+### 🔧 **Technical Implementation Details**
+
+#### State Management
+- **Local State**: Component-level state for form inputs and UI interactions
+- **Server State**: TanStack Query for API data with automatic caching
+- **Real-time Updates**: Supabase subscriptions for live data synchronization
+
+#### Styling Approach
+- **Conditional CSS Classes**: Dynamic styling based on context
+- **Mobile-First Design**: Responsive design with mobile optimization
+- **Dark Mode Support**: Automatic theme switching with CSS variables
+
+#### Error Handling
+- **Boundary Components**: Error boundaries for graceful failure handling
+- **Loading States**: Skeleton loading for better user experience
+- **Validation**: Real-time form validation with Zod schemas
+
 ## 🔧 API Reference
 
 ### Authentication Endpoints

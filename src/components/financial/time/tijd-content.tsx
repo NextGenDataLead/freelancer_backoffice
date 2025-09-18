@@ -1,8 +1,5 @@
 'use client'
 
-// This component extracts the main content from the tijd page
-// without the navigation header to be used in the tab
-
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -13,16 +10,18 @@ import { TimerDialog } from '@/components/financial/time/timer-dialog'
 import { QuickRegistrationDialog } from '@/components/financial/time/quick-registration-dialog'
 import { CalendarTimeEntryView } from '@/components/financial/time/calendar-time-entry-view'
 import { TimeEntryList } from '@/components/financial/time/time-entry-list'
-import { ComprehensiveInvoicingWizard } from '@/components/financial/invoices/comprehensive-invoicing-wizard'
-import { HoursReportModal } from '@/components/financial/reports/hours-report-modal'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { UnbilledTimeEntriesSelector } from '@/components/financial/time/unbilled-time-entries-selector'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Clock, Plus, Play, Pause, Square, Euro, Users, Keyboard, List, Calendar as CalendarIcon } from 'lucide-react'
 
-export function TimeTabContent() {
+interface TijdContentProps {
+  showHeader?: boolean
+}
+
+export function TijdContent({ showHeader = true }: TijdContentProps) {
   const searchParams = useSearchParams()
   const [editingTimeEntry, setEditingTimeEntry] = useState<any>(null)
   const [timerRunning, setTimerRunning] = useState(false)
@@ -34,23 +33,15 @@ export function TimeTabContent() {
   const [selectedClientId, setSelectedClientId] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const [showUnifiedDialog, setShowUnifiedDialog] = useState(false)
-  const [showStartTimerDialog, setShowStartTimerDialog] = useState(false)
-  const [startTimerClientId, setStartTimerClientId] = useState('')
-  const [startTimerProjectId, setStartTimerProjectId] = useState('')
-  const [startTimerDescription, setStartTimerDescription] = useState('')
-  const [startTimerHourlyRate, setStartTimerHourlyRate] = useState(0)
-  const [projects, setProjects] = useState<any[]>([])
-  const [projectsLoading, setProjectsLoading] = useState(false)
   const [timerPaused, setTimerPaused] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [showComprehensiveWizard, setShowComprehensiveWizard] = useState(false)
-  const [showHoursReport, setShowHoursReport] = useState(false)
+  const [showInvoiceDialog, setShowInvoiceDialog] = useState(false)
+  const [unbilledEntries, setUnbilledEntries] = useState<any[]>([])
   const [clients, setClients] = useState<any[]>([])
   const [clientsLoading, setClientsLoading] = useState(true)
   const [pausedTime, setPausedTime] = useState(0) // Accumulated time during pauses
   const [timeStats, setTimeStats] = useState<any>(null)
   const [statsLoading, setStatsLoading] = useState(true)
-  const [activeView, setActiveView] = useState<'list' | 'calendar'>('list')
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(undefined)
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date())
   const [calendarMode, setCalendarMode] = useState(false)
@@ -59,6 +50,7 @@ export function TimeTabContent() {
   const [timerDialogDate, setTimerDialogDate] = useState<Date | undefined>(undefined)
   const [showQuickRegistrationDialog, setShowQuickRegistrationDialog] = useState(false)
   const [quickRegistrationDate, setQuickRegistrationDate] = useState<Date | undefined>(undefined)
+  const [selectedFilterDate, setSelectedFilterDate] = useState<Date | undefined>(undefined)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const fetchClients = async () => {
@@ -73,27 +65,6 @@ export function TimeTabContent() {
       console.error('Failed to fetch clients:', error)
     } finally {
       setClientsLoading(false)
-    }
-  }
-
-  const fetchProjects = async (clientId: string) => {
-    if (!clientId) {
-      setProjects([])
-      return
-    }
-
-    try {
-      setProjectsLoading(true)
-      const response = await fetch(`/api/projects?client_id=${clientId}&limit=100`)
-      if (response.ok) {
-        const data = await response.json()
-        setProjects(data.data || [])
-      }
-    } catch (error) {
-      console.error('Failed to fetch projects:', error)
-      setProjects([])
-    } finally {
-      setProjectsLoading(false)
     }
   }
 
@@ -166,9 +137,9 @@ export function TimeTabContent() {
 
   // Handle action parameter from URL (e.g., when navigating from dashboard start timer button)
   useEffect(() => {
-    const action = searchParams.get('action')
+    const action = searchParams?.get('action')
     if (action === 'start_timer') {
-      setShowStartTimerDialog(true)
+      startTimer()
     }
   }, [searchParams])
 
@@ -237,49 +208,6 @@ export function TimeTabContent() {
     setShowTimerDialog(true)
   }
 
-  const handleStartTimerClientSelect = (clientId: string) => {
-    setStartTimerClientId(clientId)
-    setStartTimerProjectId('')
-    const client = clients.find(c => c.id === clientId)
-    if (client?.hourly_rate) {
-      setStartTimerHourlyRate(client.hourly_rate)
-    }
-    fetchProjects(clientId)
-  }
-
-  const handleStartTimerSubmit = () => {
-    if (!startTimerClientId) {
-      alert('Selecteer eerst een klant')
-      return
-    }
-
-    const client = clients.find(c => c.id === startTimerClientId)
-    const project = projects.find(p => p.id === startTimerProjectId)
-
-    if (!client) {
-      alert('Geselecteerde klant niet gevonden')
-      return
-    }
-
-    const timerData = {
-      clientId: startTimerClientId,
-      clientName: client.name,
-      projectId: startTimerProjectId,
-      project: project?.name || 'General',
-      description: startTimerDescription,
-      billable: true,
-      invoiced: false,
-      hourlyRate: startTimerHourlyRate || client.hourly_rate || 0
-    }
-
-    handleStartTimer(timerData)
-    setShowStartTimerDialog(false)
-    setStartTimerClientId('')
-    setStartTimerProjectId('')
-    setStartTimerDescription('')
-    setStartTimerHourlyRate(0)
-  }
-
   const handleStartTimer = (timerData: {
     clientId: string
     clientName: string
@@ -290,8 +218,9 @@ export function TimeTabContent() {
     invoiced: boolean
     hourlyRate: number
     selectedDate?: Date
+    hours?: number
   }) => {
-    console.log('=== TIME TAB: HANDLE START TIMER CALLED ===')
+    console.log('=== HANDLE START TIMER CALLED ===')
     console.log('Timer data received:', timerData)
 
     const targetDate = timerData.selectedDate || timerDialogDate
@@ -304,6 +233,7 @@ export function TimeTabContent() {
 
     if (!isToday && targetDate) {
       // For past/future dates, save a time entry directly instead of starting timer
+      // Create a time entry for the specific date
       const saveTimeEntry = async () => {
         try {
           const timeEntryData = {
@@ -312,7 +242,7 @@ export function TimeTabContent() {
             project_name: timerData.project || '',
             description: timerData.description || '',
             entry_date: targetDate.toISOString().split('T')[0],
-            hours: 1, // Default to 1 hour - user can edit if needed
+            hours: timerData.hours || 1, // Use provided hours or default to 1
             hourly_rate: timerData.hourlyRate || 0,
             billable: timerData.billable ?? true,
             invoiced: timerData.invoiced ?? false
@@ -486,18 +416,16 @@ export function TimeTabContent() {
     setSelectedProjectId('')
   }
 
-
-  const handleComprehensiveWizardSuccess = (invoices: any[]) => {
-    setShowComprehensiveWizard(false)
-    // Show success message and refresh data
-    console.log('Generated invoices:', invoices)
-    alert(`Succesvol ${invoices.length} factuur(facturen) aangemaakt!`)
-    // Refresh the time entries list and stats
-    handleRefresh()
-  }
-
+  // Calendar-specific handlers
   const handleDateSelect = (date: Date) => {
+    // Click any date: Filter table AND open quick registration dialog
+    console.log('Date selected for filtering and quick registration:', date)
     setSelectedCalendarDate(date)
+    setSelectedFilterDate(date)
+
+    // Also open quick registration dialog for this date
+    setQuickRegistrationDate(date)
+    setShowQuickRegistrationDialog(true)
   }
 
   const handleMonthChange = (date: Date) => {
@@ -505,17 +433,21 @@ export function TimeTabContent() {
   }
 
   const handleCreateTimeEntryForDate = (date: Date) => {
-    console.log('=== TIME TAB: HANDLE CREATE TIME ENTRY FOR DATE ===')
+    console.log('=== HANDLE CREATE TIME ENTRY FOR DATE ===')
     console.log('Date clicked:', date)
+    console.log('Setting quick registration dialog date to:', date)
     setQuickRegistrationDate(date)
     setShowQuickRegistrationDialog(true)
+    console.log('Quick registration dialog should be opening...')
   }
 
   const handleCalendarTimeEntrySuccess = (timeEntry: any) => {
     setShowUnifiedDialog(false)
     setCalendarMode(false)
     setSelectedCalendarDate(undefined)
+    // Trigger calendar refresh
     setCalendarRefreshTrigger(prev => prev + 1)
+    // Also refresh the regular time entry list and stats
     handleTimeEntryCreated(timeEntry)
   }
 
@@ -530,7 +462,42 @@ export function TimeTabContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
+      {showHeader && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Tijdregistratie</h1>
+            <p className="text-muted-foreground mt-1">
+              Registreer gewerkte uren met ingebouwde timer en projectkoppeling
+            </p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" title="Sneltoetsen: Ctrl+N (Nieuw), Ctrl+K (Timer), Spatie (Timer), Esc (Sluiten)">
+          <Keyboard className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="outline"
+          onClick={() => {
+            console.log('=== SNELLE REGISTRATIE CLICKED ===')
+            setQuickRegistrationDate(undefined) // No specific date, user can choose
+            setShowQuickRegistrationDialog(true)
+            console.log('showQuickRegistrationDialog set to true')
+          }}
+        >
+          <Clock className="h-4 w-4 mr-2" />
+          Snelle registratie
+        </Button>
+
+        <Button onClick={() => setShowUnifiedDialog(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Nieuwe Tijdregistratie
+        </Button>
+      </div>
+
       {/* Active Timer Card */}
       <Card className="border-2 border-primary/20 bg-primary/5">
         <CardHeader>
@@ -608,38 +575,6 @@ export function TimeTabContent() {
         </CardContent>
       </Card>
 
-      {/* Header Actions */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Tijdregistratie</h3>
-          <p className="text-muted-foreground text-sm">
-            Registreer gewerkte uren met ingebouwde timer en projectkoppeling
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" title="Sneltoetsen: Ctrl+N (Nieuw), Ctrl+K (Timer), Spatie (Timer), Esc (Sluiten)">
-            <Keyboard className="h-4 w-4" />
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={() => {
-              setQuickRegistrationDate(undefined) // No specific date, user can choose
-              setShowQuickRegistrationDialog(true)
-            }}
-          >
-            <Clock className="h-4 w-4 mr-2" />
-            Snelle registratie
-          </Button>
-
-          <Button onClick={() => setShowUnifiedDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nieuwe Tijdregistratie
-          </Button>
-        </div>
-      </div>
-
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -709,10 +644,7 @@ export function TimeTabContent() {
 
       {/* Quick Actions */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card
-          className="hover:bg-accent/50 transition-colors cursor-pointer"
-          onClick={() => setShowComprehensiveWizard(true)}
-        >
+        <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
           <CardContent className="flex items-center p-4">
             <Euro className="h-6 w-6 text-blue-600 mr-3" />
             <div>
@@ -722,10 +654,7 @@ export function TimeTabContent() {
           </CardContent>
         </Card>
 
-        <Card
-          className="hover:bg-accent/50 transition-colors cursor-pointer"
-          onClick={() => setShowHoursReport(true)}
-        >
+        <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
           <CardContent className="flex items-center p-4">
             <Clock className="h-6 w-6 text-purple-600 mr-3" />
             <div>
@@ -736,29 +665,14 @@ export function TimeTabContent() {
         </Card>
       </div>
 
-      {/* Time Entry Views - Tabs */}
-      <Tabs value={activeView} onValueChange={(value) => setActiveView(value as 'list' | 'calendar')} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="list" className="flex items-center gap-2">
-            <List className="h-4 w-4" />
-            Lijstweergave
-          </TabsTrigger>
-          <TabsTrigger value="calendar" className="flex items-center gap-2">
-            <CalendarIcon className="h-4 w-4" />
-            Kalenderweergave
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="list" className="space-y-4">
-          <TimeEntryList
-            key={refreshKey}
-            onEdit={handleEditTimeEntry}
-            onRefresh={handleRefresh}
-            limit={50}
-          />
-        </TabsContent>
-
-        <TabsContent value="calendar" className="space-y-4">
+      {/* Unified Time Entry View - Calendar + List */}
+      <div className="space-y-6">
+        {/* Calendar View - Full Width */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarIcon className="h-5 w-5" />
+            <h2 className="text-lg font-semibold">Kalenderweergave</h2>
+          </div>
           <CalendarTimeEntryView
             selectedMonth={selectedMonth}
             onMonthChange={handleMonthChange}
@@ -766,21 +680,44 @@ export function TimeTabContent() {
             onCreateTimeEntry={handleCreateTimeEntryForDate}
             refreshTrigger={calendarRefreshTrigger}
           />
-        </TabsContent>
-      </Tabs>
+        </div>
 
-      {/* Comprehensive Invoicing Wizard */}
-      <ComprehensiveInvoicingWizard
-        isOpen={showComprehensiveWizard}
-        onClose={() => setShowComprehensiveWizard(false)}
-        onSuccess={handleComprehensiveWizardSuccess}
-      />
-
-      {/* Hours Report Modal */}
-      <HoursReportModal
-        isOpen={showHoursReport}
-        onClose={() => setShowHoursReport(false)}
-      />
+        {/* List View - Full Width Below Calendar */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <List className="h-5 w-5" />
+              <h2 className="text-lg font-semibold">Recente Tijdsregistraties</h2>
+            </div>
+            {selectedFilterDate && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CalendarIcon className="h-4 w-4" />
+                <span>Gefilterd op: {selectedFilterDate.toLocaleDateString('nl-NL', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedFilterDate(undefined)}
+                  className="h-6 px-2 text-xs"
+                >
+                  ✕ Wis filter
+                </Button>
+              </div>
+            )}
+          </div>
+          <TimeEntryList
+            key={refreshKey}
+            onEdit={handleEditTimeEntry}
+            onRefresh={handleRefresh}
+            limit={50} // Show more entries since we have full width
+            dateFilter={selectedFilterDate}
+          />
+        </div>
+      </div>
 
       {/* Unified Time Entry Dialog */}
       <UnifiedTimeEntryDialog
@@ -797,94 +734,6 @@ export function TimeTabContent() {
         onSuccess={calendarMode ? handleCalendarTimeEntrySuccess : handleTimeEntryCreated}
         onStartTimer={handleStartTimer}
       />
-
-      {/* Start Timer Dialog */}
-      <Dialog open={showStartTimerDialog} onOpenChange={setShowStartTimerDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Start Timer</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="client">Client *</Label>
-              <Select value={startTimerClientId} onValueChange={handleStartTimerClientSelect}>
-                <SelectTrigger>
-                  <SelectValue placeholder={clientsLoading ? "Loading clients..." : "Select a client"} />
-                </SelectTrigger>
-                <SelectContent style={{ zIndex: 10000 }}>
-                  {clientsLoading ? (
-                    <div className="p-2 text-sm text-muted-foreground">Loading clients...</div>
-                  ) : clients.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground">No clients found</div>
-                  ) : (
-                    clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {startTimerClientId && (
-              <div className="space-y-2">
-                <Label htmlFor="project">Project</Label>
-                <Select value={startTimerProjectId} onValueChange={setStartTimerProjectId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select a project (optional)"} />
-                  </SelectTrigger>
-                  <SelectContent style={{ zIndex: 10000 }}>
-                    {projectsLoading ? (
-                      <div className="p-2 text-sm text-muted-foreground">Loading projects...</div>
-                    ) : projects.length === 0 ? (
-                      <div className="p-2 text-sm text-muted-foreground">No projects found for this client</div>
-                    ) : (
-                      projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Input
-                id="description"
-                value={startTimerDescription}
-                onChange={(e) => setStartTimerDescription(e.target.value)}
-                placeholder="What are you working on?"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="rate">Hourly Rate (€)</Label>
-              <Input
-                id="rate"
-                type="number"
-                value={startTimerHourlyRate}
-                onChange={(e) => setStartTimerHourlyRate(Number(e.target.value))}
-                placeholder="0"
-                step="0.01"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setShowStartTimerDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleStartTimerSubmit} disabled={!startTimerClientId}>
-                <Play className="h-4 w-4 mr-2" />
-                Start Timer
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Edit Time Entry Dialog */}
       {editingTimeEntry && (

@@ -31,7 +31,7 @@ interface CashFlowAnalysis {
     date: string
     type: 'low_balance' | 'negative_balance' | 'major_payment'
     description: string
-    amount: number
+    total_amount: number
   }[]
 }
 
@@ -60,7 +60,7 @@ export async function GET() {
     // Get outstanding invoices with due dates
     const { data: outstandingInvoices, error: invoicesError } = await supabaseAdmin
       .from('invoices')
-      .select('id, amount, due_date, status, client_id, clients(name)')
+      .select('id, total_amount, due_date, status, client_id, clients(name)')
       .eq('tenant_id', profile.tenant_id)
       .in('status', ['sent', 'overdue'])
       .order('due_date', { ascending: true })
@@ -107,7 +107,7 @@ export async function GET() {
 
       invoicesDue.forEach(invoice => {
         const paymentProbability = invoice.status === 'overdue' ? 0.6 : 0.85
-        inflows += invoice.amount * paymentProbability
+        inflows += invoice.total_amount * paymentProbability
         confidence *= paymentProbability
       })
 

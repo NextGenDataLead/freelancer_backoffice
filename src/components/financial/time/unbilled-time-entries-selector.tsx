@@ -23,6 +23,8 @@ import {
   CheckCircle
 } from 'lucide-react'
 import type { TimeEntryWithClient } from '@/lib/types/financial'
+import { getTimeEntryStatus } from '@/lib/utils/time-entry-status'
+import { TimeEntryStatusBadge } from '@/components/financial/time-entries/time-entry-status-badge'
 
 interface UnbilledTimeEntriesSelectorProps {
   entries: TimeEntryWithClient[]
@@ -203,6 +205,7 @@ export function UnbilledTimeEntriesSelector({
                   <TableHead className="text-right">Uren</TableHead>
                   <TableHead className="text-right">Tarief</TableHead>
                   <TableHead className="text-right">Waarde</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -267,6 +270,21 @@ export function UnbilledTimeEntriesSelector({
                           {formatCurrency(entry.hours * entry.hourly_rate)}
                         </div>
                       ) : '-'}
+                    </TableCell>
+
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center">
+                        {entry.client ? (
+                          <TimeEntryStatusBadge
+                            statusInfo={getTimeEntryStatus(entry, entry.client)}
+                            size="sm"
+                            showTooltip={true}
+                            showIcon={true}
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Geen klant</span>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

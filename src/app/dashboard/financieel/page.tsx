@@ -70,8 +70,7 @@ export default function FinancialDashboard() {
               </TabsTrigger>
               <TabsTrigger
                 value="uitgaven"
-                disabled
-                className="flex items-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm opacity-50"
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
               >
                 <Receipt className="h-4 w-4" />
                 <span className="hidden sm:inline">Expenses</span>
@@ -79,8 +78,7 @@ export default function FinancialDashboard() {
               </TabsTrigger>
               <TabsTrigger
                 value="facturen"
-                disabled
-                className="flex items-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm opacity-50"
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
               >
                 <FileText className="h-4 w-4" />
                 <span className="hidden sm:inline">Invoices</span>
@@ -96,8 +94,7 @@ export default function FinancialDashboard() {
               </TabsTrigger>
               <TabsTrigger
                 value="belasting"
-                disabled
-                className="flex items-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm opacity-50"
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
               >
                 <Calculator className="h-4 w-4" />
                 <span className="hidden sm:inline">Tax</span>
@@ -116,7 +113,19 @@ export default function FinancialDashboard() {
           <FinancialTabs />
         </TabsContent>
 
+        <TabsContent value="uitgaven" className="mt-0 focus-visible:outline-none">
+          <FinancialTabs />
+        </TabsContent>
+
+        <TabsContent value="facturen" className="mt-0 focus-visible:outline-none">
+          <FinancialTabs />
+        </TabsContent>
+
         <TabsContent value="klanten" className="mt-0 focus-visible:outline-none">
+          <FinancialTabs />
+        </TabsContent>
+
+        <TabsContent value="belasting" className="mt-0 focus-visible:outline-none">
           <FinancialTabs />
         </TabsContent>
       </Tabs>

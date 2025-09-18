@@ -207,16 +207,20 @@ function calculateDashboardMetrics(
   // 3. ACHTERSTALLIG - Overdue invoices past client payment terms
   let achterstallig = 0
   let achterstalligCount = 0
-  
+
   processedInvoices
-    .filter(inv => inv.payment_status !== 'paid' && inv.status !== 'draft')
+    .filter(inv =>
+      inv.payment_status !== 'paid' &&
+      inv.status !== 'draft' &&
+      inv.status !== 'cancelled'
+    )
     .forEach(invoice => {
       const client = clientMap.get(invoice.client_id)
       if (!client) return
-      
+
       const dueDate = new Date(invoice.due_date)
       const today = new Date(periods.today)
-      
+
       if (dueDate < today) {
         achterstallig += invoice.outstanding_amount
         achterstalligCount++

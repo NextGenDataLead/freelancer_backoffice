@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,16 +19,17 @@ import {
   DropdownMenuTrigger,
   DropdownMenuPortal 
 } from '@/components/ui/dropdown-menu'
-import { 
-  Clock, 
-  MoreHorizontal, 
-  Edit2, 
-  Trash2, 
+import {
+  Clock,
+  MoreHorizontal,
+  Edit2,
+  Trash2,
   Building2,
   Calendar,
   Euro,
   FolderOpen,
-  Info
+  Info,
+  Lock
 } from 'lucide-react'
 import type { TimeEntryWithClient, Client } from '@/lib/types/financial'
 import { getTimeEntryStatus } from '@/lib/utils/time-entry-status'
@@ -39,14 +40,31 @@ interface TimeEntryListProps {
   onRefresh?: () => void
   limit?: number
   showPagination?: boolean
+  dateFilter?: Date
 }
 
-export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: TimeEntryListProps) {
+// Helper function to check if a time entry is invoiced (Gefactureerd status)
+const isTimeEntryInvoiced = (timeEntry: TimeEntryWithClient): boolean => {
+  return timeEntry.invoiced || !!timeEntry.invoice_id
+}
+
+export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFilter }: TimeEntryListProps) {
   const [timeEntries, setTimeEntries] = useState<TimeEntryWithClient[]>([])
   const [clients, setClients] = useState<Map<string, Client>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+
+  // Filter time entries by date if dateFilter is provided
+  const filteredTimeEntries = useMemo(() => {
+    if (!dateFilter) return timeEntries
+
+    // Use local timezone to avoid off-by-one errors
+    const filterDateStr = `${dateFilter.getFullYear()}-${String(dateFilter.getMonth() + 1).padStart(2, '0')}-${String(dateFilter.getDate()).padStart(2, '0')}`
+    return timeEntries.filter(entry =>
+      entry.entry_date === filterDateStr
+    )
+  }, [timeEntries, dateFilter])
   const [pagination, setPagination] = useState({
     page: 1,
     totalPages: 0,
@@ -180,10 +198,10 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
   }
 
   const getTotalStats = () => {
-    const billableEntries = timeEntries.filter(entry => entry.billable && !entry.invoiced)
-    const totalHours = timeEntries.reduce((sum, entry) => sum + entry.hours, 0)
+    const billableEntries = filteredTimeEntries.filter(entry => entry.billable && !entry.invoiced)
+    const totalHours = filteredTimeEntries.reduce((sum, entry) => sum + entry.hours, 0)
     const billableHours = billableEntries.reduce((sum, entry) => sum + entry.hours, 0)
-    const totalValue = timeEntries.reduce((sum, entry) => 
+    const totalValue = filteredTimeEntries.reduce((sum, entry) =>
       sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
     const unbilledValue = billableEntries.reduce((sum, entry) => 
       sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
@@ -247,7 +265,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
             Tijdregistraties
           </div>
           <div className="text-sm text-muted-foreground">
-            {timeEntries.length} van {pagination.total} registraties
+            {filteredTimeEntries.length} van {timeEntries.length} registraties
             {limit && ` (max ${limit})`}
           </div>
         </CardTitle>
@@ -295,7 +313,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
       </CardHeader>
 
       <CardContent>
-        {timeEntries.length === 0 ? (
+        {filteredTimeEntries.length === 0 ? (
           <div className="text-center py-8">
             <Clock className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">Nog geen tijdregistraties</h3>
@@ -320,7 +338,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {timeEntries.map((entry) => (
+                {filteredTimeEntries.map((entry) => (
                   <TableRow key={entry.id} className="hover:bg-muted/50">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
@@ -503,30 +521,39 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination }: Time
                         </Button>
                         
                         {openDropdown === entry.id && (
-                          <div 
+                          <div
                             className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg min-w-[160px] z-50"
                             onBlur={() => setOpenDropdown(null)}
                           >
-                            <div 
-                              className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer flex items-center"
-                              onClick={() => {
-                                onEdit?.(entry)
-                                setOpenDropdown(null)
-                              }}
-                            >
-                              <Edit2 className="h-4 w-4 mr-2" />
-                              Bewerken
-                            </div>
-                            <div 
-                              className="px-3 py-2 text-sm hover:bg-red-50 cursor-pointer flex items-center text-red-600"
-                              onClick={() => {
-                                handleDelete(entry.id)
-                                setOpenDropdown(null)
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Verwijderen
-                            </div>
+                            {isTimeEntryInvoiced(entry) ? (
+                              <div className="px-3 py-2 text-sm text-gray-500 flex items-center">
+                                <Lock className="h-4 w-4 mr-2" />
+                                Gefactureerd - bewerken niet mogelijk
+                              </div>
+                            ) : (
+                              <>
+                                <div
+                                  className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer flex items-center"
+                                  onClick={() => {
+                                    onEdit?.(entry)
+                                    setOpenDropdown(null)
+                                  }}
+                                >
+                                  <Edit2 className="h-4 w-4 mr-2" />
+                                  Bewerken
+                                </div>
+                                <div
+                                  className="px-3 py-2 text-sm hover:bg-red-50 cursor-pointer flex items-center text-red-600"
+                                  onClick={() => {
+                                    handleDelete(entry.id)
+                                    setOpenDropdown(null)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Verwijderen
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>

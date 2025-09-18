@@ -130,7 +130,77 @@ export async function GET() {
       totalRevenue: client.revenue + 0 // time + subscription
     }))
 
-    // Calculate summary statistics
+    // Get SaaS/Platform revenue breakdown by subscription plans and payment providers
+    const { data: subscriptionPayments, error: subscriptionError } = await supabaseAdmin
+      .from('platform_subscription_payments')
+      .select(`
+        amount,
+        payment_date,
+        payment_provider,
+        description,
+        tenant_platform_subscriptions!inner(
+          platform_subscription_plans!inner(
+            name,
+            billing_interval
+          )
+        )
+      `)
+      .eq('tenant_id', profile.tenant_id)
+      .eq('status', 'paid')
+      .gte('payment_date', threeMonthsAgo.toISOString().split('T')[0])
+      .lte('payment_date', now.toISOString().split('T')[0])
+
+    // Process SaaS revenue data for chart breakdown
+    const saasRevenueMap = new Map()
+    let totalSaasRevenue = 0
+
+    if (!subscriptionError && subscriptionPayments) {
+      subscriptionPayments.forEach(payment => {
+        const plan = payment.tenant_platform_subscriptions?.platform_subscription_plans
+        const planName = plan?.name || 'Unknown Plan'
+        const provider = payment.payment_provider || 'Unknown Provider'
+        const interval = plan?.billing_interval || 'monthly'
+        const revenue = parseFloat(payment.amount.toString())
+
+        totalSaasRevenue += revenue
+
+        // Group by plan name for cleaner visualization
+        const key = `${planName} (${interval})`
+
+        if (saasRevenueMap.has(key)) {
+          const existing = saasRevenueMap.get(key)
+          saasRevenueMap.set(key, {
+            ...existing,
+            revenue: existing.revenue + revenue,
+            payments: existing.payments + 1
+          })
+        } else {
+          saasRevenueMap.set(key, {
+            id: key.toLowerCase().replace(/\s+/g, '-'),
+            name: key,
+            revenue,
+            payments: 1,
+            provider,
+            interval,
+            planName
+          })
+        }
+      })
+    }
+
+    // Convert SaaS revenue to array and calculate percentages
+    const saasRevenueData = Array.from(saasRevenueMap.values())
+      .map((item, index) => ({
+        ...item,
+        revenue: Math.round(item.revenue * 100) / 100,
+        percentage: totalSaasRevenue > 0 ? Math.round((item.revenue / totalSaasRevenue) * 100 * 100) / 100 : 0,
+        rank: index + 1,
+        color: getClientColor(index),
+        isTopPlan: index === 0
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+
+    // Calculate summary statistics for both revenue types
     const summary = {
       totalRevenue: Math.round(totalRevenue * 100) / 100,
       totalClients: rankedData.length,
@@ -145,10 +215,26 @@ export async function GET() {
       } : null
     }
 
+    const saasSummary = {
+      totalSaasRevenue: Math.round(totalSaasRevenue * 100) / 100,
+      totalPlans: saasRevenueData.length,
+      totalPayments: saasRevenueData.reduce((sum, plan) => sum + plan.payments, 0),
+      averageRevenuePerPlan: saasRevenueData.length > 0
+        ? Math.round((totalSaasRevenue / saasRevenueData.length) * 100) / 100
+        : 0,
+      topPlan: saasRevenueData.length > 0 ? {
+        name: saasRevenueData[0].name,
+        revenue: saasRevenueData[0].revenue,
+        percentage: saasRevenueData[0].percentage
+      } : null
+    }
+
     const response = createApiResponse({
       clients: rankedData,
-      summary
-    }, 'Client revenue distribution retrieved successfully')
+      saasRevenue: saasRevenueData,
+      summary,
+      saasSummary
+    }, 'Client and SaaS revenue distribution retrieved successfully')
 
     return NextResponse.json(response)
 

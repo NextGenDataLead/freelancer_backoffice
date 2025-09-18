@@ -1,8 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { TimerDialog } from '@/components/financial/time/timer-dialog'
+import { useNotificationsStore } from '@/store/notifications-store'
 import {
   Play,
   Pause,
@@ -19,22 +22,26 @@ import {
 // Types for timer functionality
 interface ActiveTimer {
   id?: string
-  client: string
+  clientId: string
+  clientName: string
+  projectId: string
   project: string
   description?: string
   startTime: string
-  elapsedTime: number // in seconds
+  pausedTime: number // Accumulated paused time in seconds
   isRunning: boolean
+  isPaused: boolean
+  billable: boolean
+  hourlyRate: number
 }
 
 interface RecentTimeEntry {
   id: string
-  client: string
-  project: string
+  client_name: string
+  project_name: string
   description: string
-  duration: number // in minutes
-  date: string
-  billable: boolean
+  hours: number
+  entry_date: string
 }
 
 interface TodayStats {
@@ -44,6 +51,7 @@ interface TodayStats {
   revenue: number
 }
 
+
 // Format time helpers
 const formatTimer = (seconds: number): string => {
   const hours = Math.floor(seconds / 3600)
@@ -51,19 +59,9 @@ const formatTimer = (seconds: number): string => {
   const remainingSeconds = seconds % 60
 
   if (hours > 0) {
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
   }
-  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-}
-
-const formatDuration = (minutes: number): string => {
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
-
-  if (hours > 0) {
-    return `${hours}h ${mins}m`
-  }
-  return `${mins}m`
+  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`
 }
 
 const formatCurrency = (amount: number) => `€${amount.toLocaleString()}`
@@ -83,6 +81,46 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
     revenue: 0
   })
   const [loading, setLoading] = useState(true)
+  const [showStartDialog, setShowStartDialog] = useState(false)
+  const [currentTime, setCurrentTime] = useState('00:00:00')
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Get notifications store for success messages
+  const { addNotification } = useNotificationsStore()
+
+  // Function to refresh widget data
+  const refreshWidgetData = async () => {
+    try {
+      // Fetch today's stats and recent entries from API
+      const response = await fetch('/api/time-entries/today')
+      if (response.ok) {
+        const result = await response.json()
+        const data = result.data
+
+        // Use the calculated stats from the API
+        setTodayStats({
+          totalHours: data.today.totalHours || 0,
+          billableHours: data.today.billableHours || 0,
+          entries: data.today.entriesCount || 0,
+          revenue: data.today.revenue || 0
+        })
+
+        // Set recent entries (use recent entries from API)
+        const formattedEntries = (data.recentEntries || []).slice(0, 3).map((entry: any) => ({
+          id: entry.id,
+          client_name: entry.client || 'Unknown Client',
+          project_name: entry.project || 'General',
+          description: entry.description || '',
+          hours: entry.hours || 0,
+          entry_date: entry.date || new Date().toISOString().split('T')[0]
+        }))
+
+        setRecentEntries(formattedEntries)
+      }
+    } catch (error) {
+      console.error('Failed to refresh widget data:', error)
+    }
+  }
 
   // Fetch real timer data from API
   useEffect(() => {
@@ -91,47 +129,35 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
         setLoading(true)
 
         // Load active timer from localStorage (for timer persistence)
-        const timerData = localStorage.getItem('activeTimer')
+        const timerData = localStorage.getItem('activeTimerSession')
         if (timerData) {
           const timer = JSON.parse(timerData)
-          setActiveTimer({
-            ...timer,
-            elapsedTime: Math.floor((Date.now() - new Date(timer.startTime).getTime()) / 1000)
-          })
+          const now = new Date()
+          const sessionStartTime = new Date(timer.startTime)
+
+          // Only restore if session is less than 24 hours old
+          const hoursSinceStart = (now.getTime() - sessionStartTime.getTime()) / (1000 * 60 * 60)
+          if (hoursSinceStart < 24) {
+            setActiveTimer({
+              clientId: timer.clientId,
+              clientName: timer.clientName,
+              projectId: timer.projectId || '',
+              project: timer.project,
+              description: timer.description || '',
+              startTime: timer.startTime,
+              pausedTime: timer.pausedTime || 0,
+              isRunning: !timer.isPaused,
+              isPaused: timer.isPaused || false,
+              billable: timer.billable ?? true,
+              hourlyRate: timer.hourlyRate || 0
+            })
+          } else {
+            localStorage.removeItem('activeTimerSession')
+          }
         }
 
-        // Fetch today's stats and recent entries from API
-        const response = await fetch('/api/time-entries/today')
-        if (!response.ok) {
-          throw new Error(`Failed to fetch today's data: ${response.status}`)
-        }
-
-        const result = await response.json()
-
-        if (result.success && result.data) {
-          const { today, recentEntries: apiRecentEntries } = result.data
-
-          // Update today's stats
-          setTodayStats({
-            totalHours: today.totalHours || 0,
-            billableHours: today.billableHours || 0,
-            entries: today.entriesCount || 0,
-            revenue: today.revenue || 0
-          })
-
-          // Format recent entries for display
-          const formattedEntries: RecentTimeEntry[] = apiRecentEntries.map((entry: any) => ({
-            id: entry.id,
-            client: entry.client,
-            project: entry.project,
-            description: entry.description || '',
-            duration: Math.round(entry.hours * 60), // Convert hours to minutes
-            date: entry.date,
-            billable: true // Assume billable for now, could be added to API response
-          }))
-
-          setRecentEntries(formattedEntries)
-        }
+        // Load initial data
+        await refreshWidgetData()
 
       } catch (error) {
         console.error('Failed to fetch timer data:', error)
@@ -142,53 +168,215 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
           entries: 0,
           revenue: 0
         })
-        setRecentEntries([])
       } finally {
         setLoading(false)
       }
     }
 
     fetchTimerData()
+  }, [])
 
-    // Update timer every second if running
-    const interval = setInterval(() => {
-      if (activeTimer?.isRunning) {
-        setActiveTimer(prev => prev ? {
-          ...prev,
-          elapsedTime: Math.floor((Date.now() - new Date(prev.startTime).getTime()) / 1000)
-        } : null)
-      }
-    }, 1000)
 
-    return () => clearInterval(interval)
-  }, [activeTimer?.isRunning])
+  // Timer update effect
+  useEffect(() => {
+    if (activeTimer?.isRunning) {
+      intervalRef.current = setInterval(() => {
+        const now = new Date()
+        const sessionStartTime = new Date(activeTimer.startTime)
+        const currentSessionElapsed = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
+        const totalElapsed = currentSessionElapsed + (activeTimer.pausedTime || 0)
 
-  const handleStartTimer = () => {
-    // TODO: Implement start timer logic
-    const newTimer: ActiveTimer = {
-      client: 'Quick Entry',
-      project: 'General',
-      startTime: new Date().toISOString(),
-      elapsedTime: 0,
-      isRunning: true
+        const hours = Math.floor(totalElapsed / 3600)
+        const minutes = Math.floor((totalElapsed % 3600) / 60)
+        const seconds = totalElapsed % 60
+
+        setCurrentTime(
+          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+        )
+      }, 1000)
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
     }
-    setActiveTimer(newTimer)
-    localStorage.setItem('activeTimer', JSON.stringify(newTimer))
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [activeTimer?.isRunning, activeTimer?.startTime, activeTimer?.pausedTime])
+
+  // Update display time for paused timer
+  useEffect(() => {
+    if (activeTimer?.isPaused) {
+      const totalSeconds = activeTimer.pausedTime || 0
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      const seconds = totalSeconds % 60
+      setCurrentTime(
+        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      )
+    }
+  }, [activeTimer?.isPaused, activeTimer?.pausedTime])
+
+  const handleStartTimer = (timerData: {
+    clientId: string
+    clientName: string
+    projectId: string
+    project: string
+    description: string
+    billable: boolean
+    invoiced: boolean
+    hourlyRate: number
+    selectedDate?: Date
+  }) => {
+    const timerSession = {
+      ...timerData,
+      startTime: new Date().toISOString(),
+      pausedTime: 0,
+      isPaused: false
+    }
+
+    localStorage.setItem('activeTimerSession', JSON.stringify(timerSession))
+
+    setActiveTimer({
+      ...timerSession,
+      isRunning: true
+    })
+
+    setShowStartDialog(false)
   }
 
   const handlePauseTimer = () => {
-    if (activeTimer) {
-      const updatedTimer = { ...activeTimer, isRunning: false }
-      setActiveTimer(updatedTimer)
-      localStorage.setItem('activeTimer', JSON.stringify(updatedTimer))
+    if (!activeTimer) return
+
+    const now = new Date()
+    const sessionStartTime = new Date(activeTimer.startTime)
+    const currentSessionElapsed = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
+    const newPausedTime = (activeTimer.pausedTime || 0) + currentSessionElapsed
+
+    const updatedTimer = {
+      ...activeTimer,
+      isRunning: false,
+      isPaused: true,
+      pausedTime: newPausedTime
+    }
+
+    setActiveTimer(updatedTimer)
+
+    // Update localStorage
+    const timerSession = localStorage.getItem('activeTimerSession')
+    if (timerSession) {
+      try {
+        const sessionData = JSON.parse(timerSession)
+        sessionData.pausedTime = newPausedTime
+        sessionData.isPaused = true
+        localStorage.setItem('activeTimerSession', JSON.stringify(sessionData))
+      } catch (e) {
+        console.error('Error updating timer session:', e)
+      }
+    }
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
     }
   }
 
-  const handleStopTimer = () => {
-    if (activeTimer) {
-      // TODO: Save time entry to database
-      setActiveTimer(null)
-      localStorage.removeItem('activeTimer')
+  const handleResumeTimer = () => {
+    if (!activeTimer) return
+
+    const updatedTimer = {
+      ...activeTimer,
+      startTime: new Date().toISOString(),
+      isRunning: true,
+      isPaused: false
+    }
+
+    setActiveTimer(updatedTimer)
+
+    // Update localStorage
+    const timerSession = localStorage.getItem('activeTimerSession')
+    if (timerSession) {
+      try {
+        const sessionData = JSON.parse(timerSession)
+        sessionData.startTime = new Date().toISOString()
+        sessionData.isPaused = false
+        localStorage.setItem('activeTimerSession', JSON.stringify(sessionData))
+      } catch (e) {
+        console.error('Error updating timer session:', e)
+      }
+    }
+  }
+
+  const handleStopTimer = async () => {
+    if (!activeTimer) return
+
+    const now = new Date()
+    const sessionStartTime = new Date(activeTimer.startTime)
+    const currentSessionElapsed = activeTimer.isRunning
+      ? Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
+      : 0
+    const totalElapsedSeconds = currentSessionElapsed + (activeTimer.pausedTime || 0)
+    const elapsed = totalElapsedSeconds / 3600
+
+    if (elapsed > 0.0001) {
+      const hours = Math.round(elapsed * 100) / 100
+
+      try {
+        const timeEntryData = {
+          client_id: activeTimer.clientId,
+          project_id: activeTimer.projectId,
+          project_name: activeTimer.project || '',
+          description: activeTimer.description || '',
+          entry_date: new Date().toISOString().split('T')[0],
+          hours: hours,
+          hourly_rate: activeTimer.hourlyRate || 0,
+          billable: activeTimer.billable ?? true,
+          invoiced: false
+        }
+
+        const response = await fetch('/api/time-entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(timeEntryData)
+        })
+
+        if (response.ok) {
+          // Show beautiful success notification
+          addNotification({
+            type: 'success',
+            title: 'Timer Gestopt!',
+            message: `${hours} uur succesvol geregistreerd voor "${activeTimer.clientName}"`,
+            duration: 5000 // Auto-dismiss after 5 seconds
+          })
+
+          // Refresh the widget data without full page reload
+          setTimeout(async () => {
+            await refreshWidgetData()
+
+            // Trigger a custom event to notify the financial dashboard to refresh
+            window.dispatchEvent(new CustomEvent('time-entry-created', {
+              detail: { clientName: activeTimer.clientName, hours }
+            }))
+          }, 500)
+        } else {
+          const error = await response.json()
+          throw new Error(error.message || 'Failed to register time')
+        }
+      } catch (error) {
+        console.error('Error registering time:', error)
+        alert(`Er ging iets mis bij het registreren: ${error instanceof Error ? error.message : 'Onbekende fout'}`)
+      }
+    }
+
+    localStorage.removeItem('activeTimerSession')
+    setActiveTimer(null)
+    setCurrentTime('00:00:00')
+
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
     }
   }
 
@@ -237,8 +425,11 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
             <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
               <div className="flex items-center justify-between mb-2">
                 <div>
-                  <p className="font-medium text-sm">{activeTimer.client}</p>
+                  <p className="font-medium text-sm">{activeTimer.clientName}</p>
                   <p className="text-xs text-muted-foreground">{activeTimer.project}</p>
+                  {activeTimer.description && (
+                    <p className="text-xs text-muted-foreground">{activeTimer.description}</p>
+                  )}
                 </div>
                 <Badge className={`${
                   activeTimer.isRunning ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'
@@ -252,110 +443,93 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
                 <div className={`text-2xl font-mono font-bold ${
                   activeTimer.isRunning ? 'text-green-600' : 'text-orange-600'
                 }`}>
-                  {formatTimer(activeTimer.elapsedTime)}
+                  {currentTime}
                 </div>
-
-                {/* Timer Controls */}
-                <div className="flex items-center gap-2">
-                  {activeTimer.isRunning ? (
-                    <button
-                      onClick={handlePauseTimer}
-                      className="p-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
-                    >
-                      <Pause className="h-4 w-4" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => setActiveTimer(prev => prev ? { ...prev, isRunning: true } : null)}
-                      className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
-                    >
-                      <Play className="h-4 w-4" />
-                    </button>
-                  )}
-                  <button
-                    onClick={handleStopTimer}
-                    className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={activeTimer.isRunning ? handlePauseTimer : handleResumeTimer}
                   >
-                    <Square className="h-4 w-4" />
-                  </button>
+                    {activeTimer.isRunning ? (
+                      <>
+                        <Pause className="h-3 w-3 mr-1" />
+                        Pause
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-3 w-3 mr-1" />
+                        Resume
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleStopTimer}
+                  >
+                    <Square className="h-3 w-3 mr-1" />
+                    Stop
+                  </Button>
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          /* No Active Timer - Quick Start */
-          <div className="text-center py-4">
-            <div className="p-3 bg-muted/50 rounded-lg mb-3">
-              <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground mb-3">No timer running</p>
-              <button
-                onClick={handleStartTimer}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                <Play className="h-4 w-4" />
-                Quick Start
-              </button>
+          <div className="text-center py-6 space-y-3">
+            <div className="w-12 h-12 bg-muted/50 rounded-full flex items-center justify-center mx-auto">
+              <Timer className="h-6 w-6 text-muted-foreground" />
             </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">No active timer</p>
+              <p className="text-xs text-muted-foreground">Start tracking your time</p>
+            </div>
+            <Button size="sm" onClick={() => setShowStartDialog(true)}>
+              <Play className="h-3 w-3 mr-1" />
+              Start Timer
+            </Button>
           </div>
         )}
 
         {/* Today's Stats */}
-        <div>
-          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Today's Summary
-          </h4>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="text-center p-2 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-lg font-bold text-blue-600">{todayStats.totalHours}h</p>
-              <p className="text-xs text-blue-600">Total</p>
-            </div>
-            <div className="text-center p-2 bg-green-50 rounded-lg border border-green-200">
-              <p className="text-lg font-bold text-green-600">{formatCurrency(todayStats.revenue)}</p>
-              <p className="text-xs text-green-600">Revenue</p>
-            </div>
+        <div className="grid grid-cols-2 gap-3 pt-3 border-t">
+          <div className="text-center">
+            <div className="text-lg font-bold text-primary">{todayStats.totalHours}h</div>
+            <div className="text-xs text-muted-foreground">Today</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-bold text-green-600">{formatCurrency(todayStats.revenue)}</div>
+            <div className="text-xs text-muted-foreground">Revenue</div>
           </div>
         </div>
 
         {/* Recent Entries */}
         {recentEntries.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              Recent Entries
-            </h4>
-            <div className="space-y-2">
-              {recentEntries.slice(0, 2).map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{entry.client}</p>
-                    <p className="text-xs text-muted-foreground truncate">{entry.project}</p>
-                  </div>
-                  <div className="text-right ml-2">
-                    <p className="text-sm font-medium">{formatDuration(entry.duration)}</p>
-                    <Badge className={`text-xs ${
-                      entry.billable ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                    }`}>
-                      {entry.billable ? 'Billable' : 'Non-bill'}
-                    </Badge>
+          <div className="space-y-2 pt-3 border-t">
+            <h4 className="text-sm font-medium text-muted-foreground">Recent Entries</h4>
+            {recentEntries.map((entry) => (
+              <div key={entry.id} className="flex items-center justify-between p-2 rounded bg-muted/30">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <User className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium truncate">{entry.client_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{entry.project_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{new Date(entry.entry_date).toLocaleDateString()}</p>
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className="text-xs font-medium text-primary">{entry.hours}h</div>
+              </div>
+            ))}
           </div>
         )}
-
-        {/* Quick Action */}
-        <div className="pt-2 border-t border-border/20">
-          <button
-            onClick={onNavigateToTimer}
-            className="w-full flex items-center justify-center gap-2 p-2 text-sm text-primary hover:bg-primary/10 rounded-lg transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Time Entry
-          </button>
-        </div>
       </div>
+
+      {/* Start Timer Dialog */}
+      <TimerDialog
+        open={showStartDialog}
+        onOpenChange={setShowStartDialog}
+        onStartTimer={handleStartTimer}
+      />
     </Card>
   )
 }

@@ -3,6 +3,15 @@
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import {
   Users,
   TrendingUp,
@@ -14,7 +23,11 @@ import {
   Calendar,
   ArrowUpDown,
   ChevronRight,
-  Building2
+  Building2,
+  HelpCircle,
+  Activity,
+  CreditCard,
+  Target
 } from 'lucide-react'
 
 // Client health scoring interfaces
@@ -55,6 +68,186 @@ interface ClientHealthScore {
     engagement: 'up' | 'down' | 'stable'
     payment: 'improving' | 'declining' | 'stable'
   }
+}
+
+// Help Modal Component for Client Health
+function ClientHealthHelpModal() {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm sm:max-w-2xl lg:max-w-4xl xl:max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle>Client Health Dashboard Explained</DialogTitle>
+          <DialogDescription>
+            Understanding how we measure and track your client relationships
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+          {/* Health Score System */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Health Score System</h3>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="border-l-4 border-purple-500 pl-4">
+                <h4 className="font-medium text-purple-700">How Scores Work</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Client health scores range from 0-100, calculated using multiple factors:
+                </p>
+                <ul className="text-sm text-muted-foreground mt-2 ml-4 list-disc space-y-1">
+                  <li>Payment behavior and timing</li>
+                  <li>Revenue consistency and growth</li>
+                  <li>Project engagement levels</li>
+                  <li>Communication frequency</li>
+                </ul>
+              </div>
+
+              <div className="border-l-4 border-blue-500 pl-4">
+                <h4 className="font-medium text-blue-700">Score Categories</h4>
+                <div className="space-y-2 mt-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                    <span><strong>Excellent (80-100):</strong> Top-tier clients</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                    <span><strong>Good (60-79):</strong> Solid relationships</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                    <span><strong>Warning (40-59):</strong> Needs attention</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                    <span><strong>At Risk (0-39):</strong> Immediate action required</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Metrics */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Key Metrics Tracked</h3>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <h4 className="font-medium text-green-700 flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Revenue Metrics
+                </h4>
+                <ul className="text-sm text-green-600 mt-2 space-y-1">
+                  <li>• Monthly revenue trends</li>
+                  <li>• Total lifetime value</li>
+                  <li>• Growth patterns</li>
+                </ul>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <h4 className="font-medium text-blue-700 flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Payment Behavior
+                </h4>
+                <ul className="text-sm text-blue-600 mt-2 space-y-1">
+                  <li>• Average payment days</li>
+                  <li>• Overdue amounts</li>
+                  <li>• Payment reliability</li>
+                </ul>
+              </div>
+
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 md:col-span-2 lg:col-span-1">
+                <h4 className="font-medium text-purple-700 flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Engagement Level
+                </h4>
+                <ul className="text-sm text-purple-600 mt-2 space-y-1">
+                  <li>• Recent activity</li>
+                  <li>• Communication score</li>
+                  <li>• Project involvement</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Sorting Options */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Sorting & Views</h3>
+
+            <div className="bg-gray-50 rounded-lg p-4">
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="text-center">
+                  <Target className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+                  <h4 className="font-medium text-blue-700">Score</h4>
+                  <p className="text-sm text-muted-foreground">Sort by overall health score</p>
+                </div>
+                <div className="text-center">
+                  <TrendingUp className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                  <h4 className="font-medium text-green-700">Revenue</h4>
+                  <p className="text-sm text-muted-foreground">Sort by monthly revenue</p>
+                </div>
+                <div className="text-center">
+                  <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+                  <h4 className="font-medium text-red-700">Risk</h4>
+                  <p className="text-sm text-muted-foreground">Show highest risk clients first</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Guidelines */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Taking Action</h3>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
+                <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-green-700">Excellent Clients</h4>
+                  <p className="text-sm text-green-600">Maintain relationships, consider upselling opportunities, request referrals</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-orange-500 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-orange-700">Warning Clients</h4>
+                  <p className="text-sm text-orange-600">Increase communication, address any concerns, monitor payment behavior</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg md:col-span-2 lg:col-span-1">
+                <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
+                <div>
+                  <h4 className="font-medium text-red-700">At-Risk Clients</h4>
+                  <p className="text-sm text-red-600">Immediate follow-up required, review contracts, consider payment terms adjustment</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Data Sources */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Data Sources</h3>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-sm text-muted-foreground mb-2">
+                Health scores are calculated from real business data:
+              </p>
+              <ul className="text-sm text-muted-foreground ml-4 list-disc space-y-1">
+                <li><strong>Invoice Data:</strong> Payment timing, amounts, and overdue status</li>
+                <li><strong>Project Activity:</strong> Active projects, completion rates, and engagement</li>
+                <li><strong>Time Tracking:</strong> Billable hours and project involvement</li>
+                <li><strong>Communication History:</strong> Recent interactions and responsiveness</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 // Calculate client health score
@@ -222,9 +415,20 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
         const clientHealthData: ClientHealthData[] = await Promise.all(
           clients.map(async (client: any) => {
             // Fetch time entries for this client to calculate engagement
-            const timeResponse = await fetch(`/api/time-entries?clientId=${client.id}`)
+            // FIXED: Use client_id (snake_case) instead of clientId (camelCase)
+            const timeResponse = await fetch(`/api/time-entries?client_id=${client.id}`)
             const timeResult = timeResponse.ok ? await timeResponse.json() : { data: [] }
             const timeEntries = timeResult.data || []
+
+            // Fetch projects for this client
+            const projectsResponse = await fetch(`/api/projects?client_id=${client.id}`)
+            const projectsResult = projectsResponse.ok ? await projectsResponse.json() : { data: [] }
+            const projects = projectsResult.data || []
+
+            // Fetch invoices for this client to calculate overdue amounts
+            const invoicesResponse = await fetch(`/api/invoices?client_id=${client.id}`)
+            const invoicesResult = invoicesResponse.ok ? await invoicesResponse.json() : { data: [] }
+            const invoices = invoicesResult.data || []
 
             // Calculate this month's hours and revenue
             const thisMonth = new Date().getMonth()
@@ -247,6 +451,39 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
 
             const lastMonthRevenue = lastMonthEntries.reduce((sum: number, entry: any) => sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
 
+            // Calculate project counts
+            const activeProjects = projects.filter((p: any) => p.active === true).length
+            const inactiveProjects = projects.filter((p: any) => p.active === false).length
+
+            // Calculate overdue amounts from invoices (exclude cancelled invoices)
+            const currentDate = new Date()
+            const overdueInvoices = invoices.filter((invoice: any) => {
+              const dueDate = new Date(invoice.due_date)
+              const isPastDue = dueDate < currentDate
+              const isUnpaid = !invoice.paid_at || (invoice.paid_amount < invoice.total_amount)
+              const isNotCancelled = invoice.status !== 'cancelled'
+              const isNotDraft = invoice.status !== 'draft'
+              return isPastDue && isUnpaid && isNotCancelled && isNotDraft
+            })
+
+            const overdueAmount = overdueInvoices.reduce((sum: number, invoice: any) => {
+              return sum + (invoice.total_amount - (invoice.paid_amount || 0))
+            }, 0)
+
+            // Get last payment date from invoices
+            const paidInvoices = invoices.filter((inv: any) => inv.paid_at).sort((a: any, b: any) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+            const lastPaymentDate = paidInvoices.length > 0 ? paidInvoices[0].paid_at.split('T')[0] : new Date().toISOString().split('T')[0]
+
+            // Calculate average payment days from paid invoices
+            const averagePaymentDays = paidInvoices.length > 0
+              ? Math.round(paidInvoices.reduce((sum: number, inv: any) => {
+                  const dueDate = new Date(inv.due_date)
+                  const paidDate = new Date(inv.paid_at)
+                  const daysDiff = Math.floor((paidDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+                  return sum + Math.max(0, daysDiff) // Don't count early payments as negative days
+                }, 0) / paidInvoices.length)
+              : (client.default_payment_terms || 30)
+
             return {
               id: client.id,
               name: client.name,
@@ -256,15 +493,15 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
                 total: timeEntries.reduce((sum: number, entry: any) => sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
               },
               payment: {
-                averageDays: client.default_payment_terms || 30,
-                overdueAmount: 0, // TODO: Calculate from invoices
-                overdueCount: 0, // TODO: Calculate from invoices
-                lastPayment: new Date().toISOString().split('T')[0] // Mock - TODO: Get from last invoice payment
+                averageDays: averagePaymentDays,
+                overdueAmount: Math.round(overdueAmount * 100) / 100,
+                overdueCount: overdueInvoices.length,
+                lastPayment: lastPaymentDate
               },
               projects: {
-                active: 1, // TODO: Count active projects for this client
-                completed: 0, // TODO: Count completed projects
-                onHold: 0
+                active: activeProjects,
+                completed: inactiveProjects,
+                onHold: 0 // Not tracked in current schema
               },
               engagement: {
                 lastActivity: thisMonthEntries.length > 0 ? thisMonthEntries[thisMonthEntries.length - 1].entry_date : new Date().toISOString().split('T')[0],
@@ -378,19 +615,20 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
             )}
           </div>
           <div className="flex items-center gap-2">
+            <ClientHealthHelpModal />
             <button
               onClick={() => setSortBy(sortBy === 'score' ? 'risk' : sortBy === 'risk' ? 'revenue' : 'score')}
-              className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1"
+              className="px-2 py-1 text-xs rounded-md bg-muted text-muted-foreground hover:bg-muted/80 hover:text-primary flex items-center gap-1 transition-colors"
             >
-              <ArrowUpDown className="h-4 w-4" />
+              <ArrowUpDown className="h-3 w-3" />
               {sortBy === 'score' ? 'Score' : sortBy === 'risk' ? 'Risk' : 'Revenue'}
             </button>
             <button
               onClick={onViewAllClients}
-              className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1"
+              className="px-2 py-1 text-xs rounded-md bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground flex items-center gap-1 transition-colors"
             >
               View All
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-3 w-3" />
             </button>
           </div>
         </div>

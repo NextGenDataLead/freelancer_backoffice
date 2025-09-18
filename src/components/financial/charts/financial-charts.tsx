@@ -52,6 +52,7 @@ const ChartSkeleton = () => (
 interface FinancialData {
   revenueData: any[]
   clientRevenueData: any[]
+  saasRevenueData: any[]
   timeAnalyticsData: any[]
   cashFlowData: any[]
   summary: {
@@ -64,6 +65,17 @@ interface FinancialData {
       percentage: number
     } | null
   }
+  saasSummary: {
+    totalSaasRevenue: number
+    totalPlans: number
+    totalPayments: number
+    averageRevenuePerPlan: number
+    topPlan: {
+      name: string
+      revenue: number
+      percentage: number
+    } | null
+  } | null
   timeAnalyticsSummary: {
     averageBillable: number
     averageEfficiency: number
@@ -80,9 +92,11 @@ interface FinancialData {
 
 export function FinancialCharts() {
   const [loading, setLoading] = useState(true)
+  const [revenueViewType, setRevenueViewType] = useState<'clients' | 'saas'>('clients')
   const [financialData, setFinancialData] = useState<FinancialData>({
     revenueData: [],
     clientRevenueData: [],
+    saasRevenueData: [],
     timeAnalyticsData: [],
     cashFlowData: [],
     summary: {
@@ -91,6 +105,7 @@ export function FinancialCharts() {
       averageRevenuePerClient: 0,
       topClient: null
     },
+    saasSummary: null,
     timeAnalyticsSummary: null,
     cashFlowSummary: null
   })
@@ -122,6 +137,7 @@ export function FinancialCharts() {
           setFinancialData({
             revenueData: revenueResult.data || [],
             clientRevenueData: clientResult.data.clients || [],
+            saasRevenueData: clientResult.data.saasRevenue || [],
             timeAnalyticsData: timeAnalyticsResult.success ? timeAnalyticsResult.data.weeklyData || [] : [],
             cashFlowData: cashFlowResult.success ? cashFlowResult.data.monthlyData || [] : [],
             summary: clientResult.data.summary || {
@@ -130,6 +146,7 @@ export function FinancialCharts() {
               averageRevenuePerClient: 0,
               topClient: null
             },
+            saasSummary: clientResult.data.saasSummary || null,
             timeAnalyticsSummary: timeAnalyticsResult.success ? timeAnalyticsResult.data.summary : null,
             cashFlowSummary: cashFlowResult.success ? cashFlowResult.data.summary : null
           })
@@ -223,17 +240,51 @@ export function FinancialCharts() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
         {/* Client Revenue Distribution */}
         <div className="mobile-card-glass space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-success/20 rounded-lg">
-              <PieChartIcon className="h-5 w-5 text-green-400 chart-glow-green" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-success/20 rounded-lg">
+                <PieChartIcon className="h-5 w-5 text-green-400 chart-glow-green" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold mobile-sharp-text">
+                  {revenueViewType === 'clients' ? 'Client Revenue' : 'SaaS Revenue'}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {revenueViewType === 'clients' ? 'Revenue by client' : 'Revenue by subscription plan'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold mobile-sharp-text">Client Revenue</h3>
-              <p className="text-sm text-muted-foreground">Top performing clients</p>
+
+            {/* Toggle Switch */}
+            <div className="flex bg-muted rounded-lg p-1">
+              <button
+                onClick={() => setRevenueViewType('clients')}
+                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                  revenueViewType === 'clients'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-primary'
+                }`}
+              >
+                Clients
+              </button>
+              <button
+                onClick={() => setRevenueViewType('saas')}
+                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                  revenueViewType === 'saas'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-primary'
+                }`}
+              >
+                SaaS
+              </button>
             </div>
           </div>
-          
-          {loading ? <ChartSkeleton /> : <ClientRevenueChart data={financialData.clientRevenueData} />}
+
+          {loading ? <ChartSkeleton /> : (
+            <ClientRevenueChart
+              data={revenueViewType === 'clients' ? financialData.clientRevenueData : financialData.saasRevenueData}
+            />
+          )}
 
           <div className="space-y-2">
             {loading ? (
@@ -251,31 +302,32 @@ export function FinancialCharts() {
                 </div>
               ))
             ) : (
-              financialData.clientRevenueData.slice(0, 5).map((client, index) => (
-                <div key={client.id || index} className="flex items-center justify-between text-sm">
+              (revenueViewType === 'clients' ? financialData.clientRevenueData : financialData.saasRevenueData)
+                .slice(0, 5).map((item, index) => (
+                <div key={item.id || index} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <div
                       className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: client.color }}
+                      style={{ backgroundColor: item.color }}
                     />
-                    <span className="font-medium truncate">{client.name}</span>
+                    <span className="font-medium truncate">{item.name}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold">€{client.revenue.toLocaleString()}</span>
+                    <span className="font-bold">€{item.revenue.toLocaleString()}</span>
                     <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                      client.percentage > 20
+                      item.percentage > 20
                         ? 'bg-green-500/20 text-green-400'
                         : 'bg-blue-500/20 text-blue-400'
                     }`}>
-                      {client.percentage}%
+                      {item.percentage}%
                     </span>
                   </div>
                 </div>
               ))
             )}
-            {!loading && financialData.clientRevenueData.length === 0 && (
+            {!loading && (revenueViewType === 'clients' ? financialData.clientRevenueData : financialData.saasRevenueData).length === 0 && (
               <div className="text-center py-4 text-muted-foreground text-sm">
-                No client revenue data available
+                {revenueViewType === 'clients' ? 'No client revenue data available' : 'No SaaS revenue data available'}
               </div>
             )}
           </div>

@@ -13,6 +13,7 @@ import { ClientHealthDashboard } from './client-health-dashboard'
 import { CashFlowForecast } from './cash-flow-forecast'
 import { FinancialCharts } from '../financial/charts/financial-charts'
 import { smartRulesEngine, type BusinessData, type SmartAlert } from '@/lib/smart-rules-engine'
+import { healthScoreEngine, type HealthScoreInputs, type HealthScoreOutputs } from '@/lib/health-score-engine'
 import {
   Euro,
   TrendingUp,
@@ -112,6 +113,25 @@ interface TimeStatsResponse {
   }
 }
 
+interface TodayStatsResponse {
+  success: boolean
+  data: Array<{
+    id: string
+    hours: number
+    billable: boolean
+    hourly_rate: number
+    effective_hourly_rate: number
+    description: string
+    project_name: string
+    entry_date: string
+    client: {
+      id: string
+      name: string
+      company_name?: string
+    }
+  }>
+}
+
 // Format helpers
 const formatCurrency = (amount: number) => `€${amount.toLocaleString()}`
 const formatHours = (hours: number) => `${hours}h`
@@ -120,6 +140,7 @@ export function UnifiedFinancialDashboard() {
   const router = useRouter()
   const [dashboardMetrics, setDashboardMetrics] = useState<DashboardMetricsResponse['data'] | null>(null)
   const [timeStats, setTimeStats] = useState<TimeStatsResponse['data'] | null>(null)
+  const [todayStats, setTodayStats] = useState<{ totalHours: number; billableHours: number; entries: number; revenue: number } | null>(null)
   const [revenueTrend, setRevenueTrend] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -127,60 +148,7 @@ export function UnifiedFinancialDashboard() {
   const [healthScoreOpen, setHealthScoreOpen] = useState(false)
   const [showExplanation, setShowExplanation] = useState<string | null>(null)
   const [showHealthReport, setShowHealthReport] = useState(false)
-
-  // Official Cash Flow Scoring Function (Based on Accounting Standards)
-  const calculateAdvancedCashFlowScore = (metrics: any) => {
-    if (!metrics || metrics.totale_registratie === 0) return 25
-
-    const totalRevenue = metrics.totale_registratie
-    const overdueAmount = metrics.achterstallig
-    const overdueCount = metrics.achterstallig_count
-    const paidAmount = totalRevenue - overdueAmount
-
-    // 1. Operating Cash Flow Ratio (10 points) - Industry Standard
-    // Formula: (Revenue - Overdue) ÷ Revenue = Collection Rate
-    const operatingCashFlowRatio = paidAmount / totalRevenue
-    let ocfScore = 0
-    if (operatingCashFlowRatio >= 0.90) ocfScore = 10      // Excellent >90%
-    else if (operatingCashFlowRatio >= 0.75) ocfScore = 7  // Good 75-90%
-    else if (operatingCashFlowRatio >= 0.60) ocfScore = 5  // Fair 60-75%
-    else if (operatingCashFlowRatio >= 0.40) ocfScore = 3  // Poor 40-60%
-    else ocfScore = 1                                      // Critical <40%
-
-    // 2. Current Liability Coverage (8 points) - Accounting Standard
-    // Formula: Operating Cash Flow ÷ Current Liabilities
-    // Approximating with: Cash Flow ÷ Monthly Revenue (as liability proxy)
-    const monthlyRevenue = totalRevenue // Assuming monthly data
-    const currentLiabilityCoverage = paidAmount / monthlyRevenue
-    let clcScore = 0
-    if (currentLiabilityCoverage >= 1.5) clcScore = 8      // Excellent >1.5x
-    else if (currentLiabilityCoverage >= 1.0) clcScore = 6 // Good 1.0-1.5x
-    else if (currentLiabilityCoverage >= 0.7) clcScore = 4 // Fair 0.7-1.0x
-    else if (currentLiabilityCoverage >= 0.5) clcScore = 2 // Poor 0.5-0.7x
-    else clcScore = 1                                      // Critical <0.5x
-
-    // 3. Collection Efficiency - DSO Equivalent (4 points)
-    // Formula: (Overdue Amount ÷ Monthly Revenue) × 30 days
-    const dsoEquivalent = (overdueAmount / totalRevenue) * 30
-    let dsoScore = 0
-    if (dsoEquivalent <= 15) dsoScore = 4        // Excellent <15 days
-    else if (dsoEquivalent <= 30) dsoScore = 3   // Good 15-30 days (industry standard)
-    else if (dsoEquivalent <= 45) dsoScore = 2   // Fair 30-45 days
-    else if (dsoEquivalent <= 60) dsoScore = 1   // Poor 45-60 days
-    else dsoScore = 0                            // Critical >60 days
-
-    // 4. Risk Factor Adjustment (3 points) - Concentration Risk
-    let riskScore = 0
-    if (overdueCount <= 2) riskScore = 3         // Low risk: 0-2 overdue
-    else if (overdueCount <= 4) riskScore = 2    // Medium risk: 3-4 overdue
-    else if (overdueCount <= 6) riskScore = 1    // High risk: 5-6 overdue
-    else riskScore = 0                           // Critical risk: 7+ overdue
-
-    // Calculate final score (max 25 points)
-    const finalScore = ocfScore + clcScore + dsoScore + riskScore
-
-    return Math.max(0, Math.min(25, finalScore))
-  }
+  const [healthScoreResults, setHealthScoreResults] = useState<HealthScoreOutputs | null>(null)
 
   // Calculate month-to-date (MTD) benchmarks - centralized calculation
   const mtdCalculations = useMemo(() => {
@@ -194,9 +162,42 @@ export function UnifiedFinancialDashboard() {
       daysInMonth,
       monthProgress,
       mtdRevenueTarget: 12000 * monthProgress,
-      mtdHoursTarget: 160 * monthProgress
+      mtdHoursTarget: Math.round(160 * monthProgress)
     }
   }, [])
+
+  // Process health scores using centralized decision tree engine
+  useEffect(() => {
+    if (!dashboardMetrics || !timeStats) {
+      setHealthScoreResults(null)
+      return
+    }
+
+    const inputs: HealthScoreInputs = {
+      dashboardMetrics: {
+        totale_registratie: dashboardMetrics.totale_registratie || 0,
+        achterstallig: dashboardMetrics.achterstallig || 0,
+        achterstallig_count: dashboardMetrics.achterstallig_count || 0,
+        factureerbaar: dashboardMetrics.factureerbaar || 0
+      },
+      timeStats: {
+        thisMonth: {
+          hours: timeStats.thisMonth?.hours || 0,
+          revenue: timeStats.thisMonth?.revenue || 0
+        },
+        unbilled: {
+          hours: timeStats.unbilled?.hours || 0,
+          revenue: timeStats.unbilled?.revenue || 0,
+          value: timeStats.unbilled?.value || 0
+        },
+        subscription: timeStats.subscription
+      },
+      mtdCalculations
+    }
+
+    const results = healthScoreEngine.process(inputs)
+    setHealthScoreResults(results)
+  }, [dashboardMetrics, timeStats, mtdCalculations])
 
   // MTD Comparison calculation using existing monthly data (as per optimization recommendation)
   const mtdComparison = useMemo(() => {
@@ -266,57 +267,24 @@ export function UnifiedFinancialDashboard() {
     }
   }, [revenueTrend, timeStats, dashboardMetrics])
 
-  // Calculate health scores using centralized MTD calculations
+  // Get health scores from decision tree results
   const healthScores = useMemo(() => {
-    if (!dashboardMetrics || !timeStats) return { total: 0, revenue: 0, cashflow: 0, efficiency: 0, risk: 0 }
-
-    const { mtdRevenueTarget, mtdHoursTarget } = mtdCalculations
-
-    // Revenue Health (25 points max) - MTD based on total revenue (registered time + subscriptions)
-    const calculatedSubscriptionRevenue = (timeStats.subscription?.monthlyActiveUsers?.current || 0) * (timeStats.subscription?.averageSubscriptionFee?.current || 0)
-    const totalRevenue = (dashboardMetrics.totale_registratie || 0) + calculatedSubscriptionRevenue
-    const revenueScore = Math.min(Math.round((totalRevenue / mtdRevenueTarget) * 25), 25)
-
-    // Cash Flow Health (25 points max) - sophisticated time-weighted scoring
-    const cashflowScore = calculateAdvancedCashFlowScore(dashboardMetrics)
-
-    // Efficiency Health (25 points max) - MTD based
-    const efficiencyScore = Math.min(Math.round((timeStats.thisMonth.hours / mtdHoursTarget) * 25), 25)
-
-    // Risk Management (25 points max) - frequency-aware operational risks
-    // Use factureerbaar (ready-to-bill) instead of total unbilled for risk calculation
-    const readyToBillAmount = dashboardMetrics.factureerbaar || 0
-    const readyToBillRisk = Math.round(Math.min((readyToBillAmount / 3000) * 12, 12)) // Max 12 points penalty at €3k ready-to-bill
-    const clientConcentrationRisk = 3 // Assume moderate risk
-    const workloadRisk = timeStats.thisMonth.hours > 200 ? 5 : timeStats.thisMonth.hours < 80 ? 3 : 0
-    const riskScore = Math.max(0, 25 - readyToBillRisk - workloadRisk - clientConcentrationRisk)
-
-    // Calculate total as exact sum of rounded individual card scores
-    const totalScore = revenueScore + cashflowScore + efficiencyScore + riskScore
-
-    // Use exact total (no separate rounding) to avoid discrepancy with sum of cards
-    const displayTotalScore = totalScore
-
-    return {
-      total: totalScore,
-      totalRounded: displayTotalScore, // Same as total - no separate rounding
-      revenue: revenueScore,
-      cashflow: cashflowScore,
-      efficiency: efficiencyScore,
-      risk: riskScore
+    if (!healthScoreResults) {
+      return { total: 0, revenue: 0, cashflow: 0, efficiency: 0, risk: 0, totalRounded: 0 }
     }
-  }, [dashboardMetrics, timeStats, mtdCalculations])
+    return healthScoreResults.scores
+  }, [healthScoreResults])
 
-  // Fetch all dashboard data
-  useEffect(() => {
-    const fetchAllData = async () => {
+  // Function to fetch all dashboard data
+  const fetchAllData = async () => {
       try {
         setLoading(true)
 
         // Parallel fetch of all required data
-        const [dashboardResponse, timeResponse, revenueTrendResponse] = await Promise.all([
+        const [dashboardResponse, timeResponse, todayResponse, revenueTrendResponse] = await Promise.all([
           fetch('/api/invoices/dashboard-metrics'),
           fetch('/api/time-entries/stats'),
+          fetch('/api/time-entries/today'),
           fetch('/api/financial/revenue-trend')
         ])
 
@@ -379,13 +347,27 @@ export function UnifiedFinancialDashboard() {
       } finally {
         setLoading(false)
       }
-    }
+  }
 
+  // Initial data fetch and periodic refresh
+  useEffect(() => {
     fetchAllData()
 
     // Refresh every 5 minutes
     const interval = setInterval(fetchAllData, 5 * 60 * 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  // Listen for time entry creation events from timer widget
+  useEffect(() => {
+    const handleTimeEntryCreated = () => {
+      console.log('Time entry created, refreshing dashboard...')
+      // Force a page refresh for now - this ensures all components update
+      window.location.reload()
+    }
+
+    window.addEventListener('time-entry-created', handleTimeEntryCreated)
+    return () => window.removeEventListener('time-entry-created', handleTimeEntryCreated)
   }, [])
 
   // Enhanced Action handlers (restored from MetricsCards)
@@ -446,138 +428,59 @@ export function UnifiedFinancialDashboard() {
     }
   }
 
-  // Explanation content for each health score category
+  // Get explanation from decision tree results
   const getExplanation = (category: string) => {
-    if (!dashboardMetrics || !timeStats) return null
+    if (!healthScoreResults?.explanations) return null
 
-    const formatCurrency = (amount: number) => `€${amount.toLocaleString()}`
+    const explanation = healthScoreResults.explanations[category as keyof typeof healthScoreResults.explanations]
+    if (!explanation) return null
 
-    // Use centralized MTD calculations
-    const { currentDay, daysInMonth, monthProgress, mtdRevenueTarget, mtdHoursTarget } = mtdCalculations
+    // Convert structured explanation to legacy format for compatibility
+    const details: string[] = []
 
-    switch (category) {
-      case 'revenue':
-        const calculatedSubscriptionRevenue = (timeStats.subscription?.monthlyActiveUsers?.current || 0) * (timeStats.subscription?.averageSubscriptionFee?.current || 0)
-        const totalRevenue = (dashboardMetrics.totale_registratie || 0) + calculatedSubscriptionRevenue
-        const revenueScore = Math.round((totalRevenue / mtdRevenueTarget) * 25)
-        const revenueProgress = (totalRevenue / mtdRevenueTarget) * 100
-        return {
-          title: 'Revenue Health - MTD (25 points max)',
-          score: Math.min(revenueScore, 25),
-          details: [
-            `Total Revenue (MTD): ${formatCurrency(totalRevenue)}`,
-            `  • Registered Time: ${formatCurrency(dashboardMetrics.totale_registratie)}`,
-            `  • Subscriptions: ${formatCurrency(calculatedSubscriptionRevenue)}`,
-            `MTD Target (Day ${currentDay}/${daysInMonth}): ${formatCurrency(mtdRevenueTarget)}`,
-            `Monthly Target: ${formatCurrency(12000)}`,
-            `Month Progress: ${(monthProgress * 100).toFixed(1)}%`,
-            `Revenue Progress: ${revenueProgress.toFixed(1)}%`,
-            '',
-            'Calculation:',
-            `MTD Target = €12,000 × (${currentDay}/${daysInMonth}) = ${formatCurrency(mtdRevenueTarget)}`,
-            `Score = min(current/mtd_target, 1) × 25`,
-            `Score = min(${totalRevenue}/${mtdRevenueTarget.toFixed(0)}, 1) × 25 = ${Math.min(revenueScore, 25)}`
-          ]
+    explanation.details.forEach(section => {
+      if (section.title) {
+        details.push(section.title)
+      }
+
+      section.items.forEach(item => {
+        switch (item.type) {
+          case 'metric':
+            const metricLine = item.description
+              ? `${item.label}: ${item.value} (${item.description})`
+              : `${item.label}: ${item.value}`
+            details.push(metricLine)
+            break
+
+          case 'calculation':
+            const calcLine = item.description
+              ? `${item.label}: ${item.value} ${item.description}`
+              : `${item.label}: ${item.value}`
+            details.push(calcLine)
+            break
+
+          case 'standard':
+            details.push(`   ${item.value}`)
+            break
+
+          case 'formula':
+            details.push(item.formula || '')
+            break
+
+          case 'text':
+            details.push(item.value || '')
+            break
         }
-      case 'cashflow':
-        const cashflowTotalRevenue = dashboardMetrics.totale_registratie
-        const overdueAmount = dashboardMetrics.achterstallig
-        const paidAmount = cashflowTotalRevenue - overdueAmount
-        const overdueCount = dashboardMetrics.achterstallig_count
+      })
 
-        // Calculate each component
-        const operatingCashFlowRatio = paidAmount / cashflowTotalRevenue
-        const currentLiabilityCoverage = paidAmount / cashflowTotalRevenue
-        const dsoEquivalent = (overdueAmount / cashflowTotalRevenue) * 30
+      // Add empty line between sections
+      details.push('')
+    })
 
-        // Score each component
-        let ocfScore = operatingCashFlowRatio >= 0.90 ? 10 : operatingCashFlowRatio >= 0.75 ? 7 : operatingCashFlowRatio >= 0.60 ? 5 : operatingCashFlowRatio >= 0.40 ? 3 : 1
-        let clcScore = currentLiabilityCoverage >= 1.5 ? 8 : currentLiabilityCoverage >= 1.0 ? 6 : currentLiabilityCoverage >= 0.7 ? 4 : currentLiabilityCoverage >= 0.5 ? 2 : 1
-        let dsoScore = dsoEquivalent <= 15 ? 4 : dsoEquivalent <= 30 ? 3 : dsoEquivalent <= 45 ? 2 : dsoEquivalent <= 60 ? 1 : 0
-        let cashflowRiskScore = overdueCount <= 2 ? 3 : overdueCount <= 4 ? 2 : overdueCount <= 6 ? 1 : 0
-
-        const finalScore = ocfScore + clcScore + dsoScore + cashflowRiskScore
-
-        return {
-          title: 'Official Cash Flow Health - Accounting Standards (25 points)',
-          score: finalScore,
-          details: [
-            `Paid Amount: ${formatCurrency(paidAmount)}`,
-            `Overdue Amount: ${formatCurrency(overdueAmount)}`,
-            `Total Revenue: ${formatCurrency(cashflowTotalRevenue)}`,
-            `Overdue Count: ${overdueCount} invoices`,
-            '',
-            'Official Accounting Ratios:',
-            `1. Operating Cash Flow Ratio: ${(operatingCashFlowRatio * 100).toFixed(1)}% → ${ocfScore}/10 pts`,
-            `   Standard: >90%=Excellent, 75-90%=Good, 60-75%=Fair`,
-            '',
-            `2. Current Liability Coverage: ${currentLiabilityCoverage.toFixed(2)}x → ${clcScore}/8 pts`,
-            `   Standard: >1.5x=Excellent, 1.0-1.5x=Good, 0.7-1.0x=Fair`,
-            '',
-            `3. Collection Efficiency (DSO): ${dsoEquivalent.toFixed(1)} days → ${dsoScore}/4 pts`,
-            `   Industry Standard: <30 days=Good, 30-45=Fair, >60=Critical`,
-            '',
-            `4. Collection Risk: ${overdueCount} overdue → ${cashflowRiskScore}/3 pts`,
-            `   Standard: ≤2=Low Risk, 3-4=Medium, 5+=High Risk`,
-            '',
-            `Total Score: ${ocfScore} + ${clcScore} + ${dsoScore} + ${cashflowRiskScore} = ${finalScore}/25`
-          ]
-        }
-      case 'efficiency':
-        const hoursProgress = (timeStats.thisMonth.hours / mtdHoursTarget) * 100
-        const efficiencyScore = Math.round(Math.min((timeStats.thisMonth.hours / mtdHoursTarget) * 25, 25))
-        return {
-          title: 'Efficiency Health - MTD (25 points max)',
-          score: Math.min(efficiencyScore, 25),
-          details: [
-            `Current Hours (MTD): ${timeStats.thisMonth.hours}h`,
-            `MTD Target (Day ${currentDay}/${daysInMonth}): ${mtdHoursTarget.toFixed(1)}h`,
-            `Monthly Target: 160h`,
-            `Month Progress: ${(monthProgress * 100).toFixed(1)}%`,
-            `Hours Progress: ${hoursProgress.toFixed(1)}%`,
-            `Current Rate: ${timeStats.thisMonth.hours > 0 ? formatCurrency(Math.round(timeStats.thisMonth.revenue / timeStats.thisMonth.hours)) : '€0'}/h`,
-            '',
-            'Calculation:',
-            `MTD Target = 160h × (${currentDay}/${daysInMonth}) = ${mtdHoursTarget.toFixed(1)}h`,
-            `Score = min((${timeStats.thisMonth.hours} / ${mtdHoursTarget.toFixed(1)}) × 25, 25) = ${Math.min(efficiencyScore, 25)}`,
-            '',
-            'Based on monthly billable hours target of 160h, prorated for MTD'
-          ]
-        }
-      case 'risk':
-        // Focus on operational and business continuity risks (frequency-aware)
-        const readyToBillAmount = dashboardMetrics.factureerbaar || 0
-        const readyToBillRisk = Math.round(Math.min((readyToBillAmount / 3000) * 12, 12)) // Max 12 points penalty
-        const clientConcentrationRisk = 3 // Assume moderate risk - could be enhanced with actual client data
-        const workloadRisk = timeStats.thisMonth.hours > 200 ? 5 : timeStats.thisMonth.hours < 80 ? 3 : 0 // Burnout or underutilization risk
-
-        const operationalRiskScore = Math.max(0, 25 - readyToBillRisk - workloadRisk - clientConcentrationRisk)
-
-        return {
-          title: 'Frequency-Aware Risk Management (25 points max)',
-          score: operationalRiskScore,
-          details: [
-            `Ready to Bill: ${formatCurrency(readyToBillAmount)} (respects client frequencies)`,
-            `Total Unbilled: ${formatCurrency(timeStats.unbilled.revenue)} (includes current periods)`,
-            `Monthly Hours: ${timeStats.thisMonth.hours}h`,
-            '',
-            'Frequency-Aware Risk Assessment:',
-            `1. Invoice Processing Risk: -${readyToBillRisk}/12 pts`,
-            `   Formula: round(min((€${Math.round(readyToBillAmount)} / €3,000) × 12, 12))`,
-            `   Risk: >€3k ready-to-bill = delayed invoice processing`,
-            '',
-            `2. Workload Risk: -${workloadRisk}/5 pts`,
-            `   Current: ${timeStats.thisMonth.hours}h/month`,
-            `   Risk: >200h = Burnout, <80h = Underutilization`,
-            '',
-            `3. Business Continuity: -${clientConcentrationRisk}/8 pts`,
-            `   Estimated client concentration risk`,
-            '',
-            `Total Score: 25 - ${readyToBillRisk} - ${workloadRisk} - ${clientConcentrationRisk} = ${operationalRiskScore}`
-          ]
-        }
-      default:
-        return null
+    return {
+      title: explanation.title,
+      score: explanation.score,
+      details: details.slice(0, -1) // Remove last empty line
     }
   }
 
@@ -1413,7 +1316,7 @@ export function UnifiedFinancialDashboard() {
 
         {/* Health Score Explanation Modal */}
         {showExplanation && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
             <div className="bg-card border rounded-xl max-w-md w-full max-h-[80vh] overflow-y-auto p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold">
@@ -1436,20 +1339,107 @@ export function UnifiedFinancialDashboard() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                {getExplanation(showExplanation)?.details.map((detail, index) => (
-                  <p
-                    key={index}
-                    className={`text-sm ${
-                      detail === '' ? 'h-2' :
-                      detail.startsWith('Calculation') || detail.startsWith('Risk Calculations') ? 'font-medium text-foreground mt-3' :
-                      detail.startsWith('Score =') ? 'font-mono text-xs bg-muted p-2 rounded' :
-                      'text-muted-foreground'
-                    }`}
-                  >
-                    {detail}
-                  </p>
-                ))}
+              <div className="space-y-4">
+                {(() => {
+                  const details = getExplanation(showExplanation)?.details || []
+                  const sections = []
+                  let currentSection = []
+
+                  // Group details into logical sections
+                  for (const detail of details) {
+                    if (detail === '') {
+                      if (currentSection.length > 0) {
+                        sections.push(currentSection)
+                        currentSection = []
+                      }
+                    } else {
+                      currentSection.push(detail)
+                    }
+                  }
+                  if (currentSection.length > 0) {
+                    sections.push(currentSection)
+                  }
+
+                  return sections.map((section, sectionIndex) => {
+                    const isCalculationSection = section.some(detail =>
+                      detail.startsWith('Calculation') ||
+                      detail.startsWith('Official Accounting') ||
+                      detail.includes('Official Revenue Metrics') ||
+                      detail.includes('Efficiency Analysis') ||
+                      detail.includes('Risk Assessment Analysis') ||
+                      detail.startsWith('Frequency-Aware Risk')
+                    )
+
+                    if (isCalculationSection) {
+                      return (
+                        <div key={sectionIndex} className="bg-muted/50 rounded-lg p-4 border">
+                          <h5 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                            {section[0].startsWith('📊') ? section[0] : `📊 ${section[0]}`}
+                          </h5>
+                          <div className="space-y-2">
+                            {section.slice(1).map((detail, index) => (
+                              <div key={index} className="flex items-start gap-3">
+                                {detail.match(/^\d+\./) ? (
+                                  <>
+                                    <span className="flex-shrink-0 w-6 h-6 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-semibold mt-0.5">
+                                      {detail.charAt(0)}
+                                    </span>
+                                    <div className="flex-1">
+                                      <div className="font-medium text-sm">{detail.split('→')[0]}</div>
+                                      {detail.includes('→') && (
+                                        <div className="text-primary font-semibold text-sm">→ {detail.split('→')[1]}</div>
+                                      )}
+                                      {detail.includes('Standard:') && (
+                                        <div className="text-xs text-muted-foreground mt-1">
+                                          {detail.split('Standard: ')[1]}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : detail.startsWith('Score =') || detail.includes('=') ? (
+                                  <div className="w-full font-mono text-xs bg-background p-2 rounded border">
+                                    {detail}
+                                  </div>
+                                ) : detail.startsWith('   ') ? (
+                                  <div className="ml-9 text-xs text-muted-foreground">
+                                    {detail.trim()}
+                                  </div>
+                                ) : (
+                                  <div className="w-full text-sm text-muted-foreground">
+                                    {detail}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    } else {
+                      // Data section - show key metrics in cards
+                      return (
+                        <div key={sectionIndex} className="grid grid-cols-2 gap-3">
+                          {section.map((detail, index) => {
+                            if (detail.includes(':')) {
+                              const [label, value] = detail.split(':').map(s => s.trim())
+                              return (
+                                <div key={index} className="bg-background rounded-lg p-3 border">
+                                  <div className="text-xs text-muted-foreground mb-1">{label}</div>
+                                  <div className="font-semibold text-sm">{value}</div>
+                                </div>
+                              )
+                            } else {
+                              return (
+                                <div key={index} className="col-span-2 text-sm text-muted-foreground">
+                                  {detail}
+                                </div>
+                              )
+                            }
+                          })}
+                        </div>
+                      )
+                    }
+                  })
+                })()}
               </div>
 
               <div className="mt-6 flex justify-end">
@@ -1466,7 +1456,7 @@ export function UnifiedFinancialDashboard() {
 
         {/* Comprehensive Health Report Modal */}
         {showHealthReport && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
             <div className="bg-card border rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -1541,7 +1531,10 @@ export function UnifiedFinancialDashboard() {
               {/* Detailed Score Breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 {/* Revenue Health */}
-                <div className="p-4 border rounded-lg">
+                <button
+                  onClick={() => setShowExplanation('revenue')}
+                  className="p-4 border rounded-lg hover:shadow-md hover:border-primary/40 transition-all duration-200 text-left w-full"
+                >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <DollarSign className="h-5 w-5 text-primary" />
@@ -1560,10 +1553,13 @@ export function UnifiedFinancialDashboard() {
                      healthScores.revenue >= 15 ? 'Strong revenue growth' :
                      healthScores.revenue >= 10 ? 'Steady progress, room to improve' : 'Revenue needs immediate attention'}
                   </p>
-                </div>
+                </button>
 
                 {/* Cash Flow Health */}
-                <div className="p-4 border rounded-lg">
+                <button
+                  onClick={() => setShowExplanation('cashflow')}
+                  className="p-4 border rounded-lg hover:shadow-md hover:border-green-500/40 transition-all duration-200 text-left w-full"
+                >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Activity className="h-5 w-5 text-green-500" />
@@ -1582,10 +1578,13 @@ export function UnifiedFinancialDashboard() {
                      healthScores.cashflow >= 15 ? 'Healthy cash flow patterns' :
                      healthScores.cashflow >= 10 ? 'Some collection delays' : 'Cash flow requires urgent attention'}
                   </p>
-                </div>
+                </button>
 
                 {/* Efficiency Health */}
-                <div className="p-4 border rounded-lg">
+                <button
+                  onClick={() => setShowExplanation('efficiency')}
+                  className="p-4 border rounded-lg hover:shadow-md hover:border-blue-500/40 transition-all duration-200 text-left w-full"
+                >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Clock className="h-5 w-5 text-blue-500" />
@@ -1604,10 +1603,13 @@ export function UnifiedFinancialDashboard() {
                      healthScores.efficiency >= 15 ? 'Strong efficiency levels' :
                      healthScores.efficiency >= 10 ? 'Building momentum' : 'Efficiency needs improvement'}
                   </p>
-                </div>
+                </button>
 
                 {/* Risk Management */}
-                <div className="p-4 border rounded-lg">
+                <button
+                  onClick={() => setShowExplanation('risk')}
+                  className="p-4 border rounded-lg hover:shadow-md hover:border-purple-500/40 transition-all duration-200 text-left w-full"
+                >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Users className="h-5 w-5 text-purple-500" />
@@ -1626,7 +1628,7 @@ export function UnifiedFinancialDashboard() {
                      healthScores.risk >= 15 ? 'Manageable risk levels' :
                      healthScores.risk >= 10 ? 'Some risk concerns' : 'High-risk areas need attention'}
                   </p>
-                </div>
+                </button>
               </div>
 
               {/* Recommended Actions */}
@@ -1784,35 +1786,64 @@ export function UnifiedFinancialDashboard() {
                       <div className="space-y-3 mb-4">
                         {(() => {
                           const recommendations = []
-                          const currentRevenue = (dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))
+                          const registeredRevenue = dashboardMetrics?.totale_registratie || 0
+                          const subscriptionRevenue = (timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0)
+                          const currentRevenue = registeredRevenue + subscriptionRevenue
                           const mtdTarget = mtdCalculations.mtdRevenueTarget
                           const progressPercentage = mtdTarget > 0 ? (currentRevenue / mtdTarget) * 100 : 0
                           const shortfall = Math.max(0, mtdTarget - currentRevenue)
 
-                          if (shortfall > 1000) {
-                            recommendations.push(`Close €${Math.round(shortfall)} revenue gap to meet MTD target (${Math.round(progressPercentage)}% achieved)`)
-                          } else if (progressPercentage < 80) {
-                            recommendations.push(`Increase activity to reach ${Math.round(progressPercentage)}% → 100% of MTD target`)
+                          // Current score calculation: (currentRevenue / mtdTarget) * 25
+                          const currentScore = Math.min(Math.round((currentRevenue / mtdTarget) * 25), 25)
+                          const maxScore = 25
+
+                          // Rank recommendations by revenue impact and point potential
+
+                          // 1. Direct revenue gap closure (highest impact)
+                          if (shortfall > 0) {
+                            const pointsToGain = Math.min(Math.round((shortfall / mtdTarget) * 25), maxScore - currentScore)
+                            recommendations.push(`💰 Generate €${Math.round(shortfall)} more revenue to hit MTD target (+${pointsToGain} pts to ${Math.min(currentScore + pointsToGain, 25)}/25)`)
                           }
 
-                          // Revenue recommendations focus on business growth and value optimization
-                          if (progressPercentage < 80) {
-                            const currentRate = timeStats?.thisMonth.hours > 0 ? Math.round(currentRevenue / timeStats.thisMonth.hours) : 0
-                            if (currentRate < 100) {
-                              recommendations.push(`Increase hourly rates from €${currentRate} to €100+ for better revenue`)
+                          // 2. Focus on highest-leverage revenue source
+                          if (progressPercentage < 100) {
+                            const currentRate = timeStats?.thisMonth.hours > 0 ? Math.round(registeredRevenue / timeStats.thisMonth.hours) : 0
+                            const hoursNeeded = shortfall > 0 && currentRate > 0 ? Math.round(shortfall / currentRate) : 0
+
+                            if (currentRate > 0 && hoursNeeded > 0 && hoursNeeded <= 40) {
+                              recommendations.push(`⏱️ Log ${hoursNeeded}h more billable time at €${currentRate}/h to close revenue gap`)
+                            } else if (currentRate < 75) {
+                              const rateIncrease = 75 - currentRate
+                              const additionalRevenue = timeStats?.thisMonth.hours ? timeStats.thisMonth.hours * rateIncrease : 0
+                              recommendations.push(`📈 Increase rates by €${rateIncrease}/h to generate €${Math.round(additionalRevenue)} additional MTD revenue`)
                             } else {
-                              recommendations.push(`Target higher-value clients to close €${Math.round(shortfall)} revenue gap`)
+                              recommendations.push(`🎯 Focus on high-value client work to maximize revenue per hour`)
                             }
                           }
 
-                          if (progressPercentage >= 100) {
-                            recommendations.push(`Excellent revenue performance - consider expanding service offerings`)
-                          } else if (progressPercentage < 50) {
-                            recommendations.push(`Focus on client acquisition - revenue significantly below target`)
+                          // 3. Subscription revenue optimization (if applicable)
+                          if (subscriptionRevenue < 1000 && timeStats?.subscription?.monthlyActiveUsers?.current) {
+                            const targetUsers = 15
+                            const targetFee = 75
+                            const targetTotal = targetUsers * targetFee
+                            const currentUsers = timeStats.subscription.monthlyActiveUsers.current
+                            const currentFee = timeStats.subscription.averageSubscriptionFee?.current || 0
+                            const currentTotal = currentUsers * currentFee
+                            const additionalPotential = targetTotal - currentTotal
+                            recommendations.push(`📊 Optimize subscription pricing: €${Math.round(additionalPotential)} additional potential (target ${targetUsers} users × €${targetFee} vs current ${currentUsers} users × €${Math.round(currentFee)})`)
                           }
 
+                          // 4. Excellence maintenance
+                          if (progressPercentage >= 100) {
+                            recommendations.push(`🎉 Exceeding MTD target by ${Math.round(progressPercentage - 100)}% - maintain momentum`)
+                            if (currentScore === maxScore) {
+                              recommendations.push(`🚀 Perfect revenue score! Consider raising monthly targets for growth`)
+                            }
+                          }
+
+                          // Ensure we have actionable recommendations
                           if (recommendations.length === 0) {
-                            recommendations.push('Focus on maintaining current revenue momentum')
+                            recommendations.push('🔄 Monitor revenue streams and optimize high-performing channels')
                           }
 
                           return recommendations.slice(0, 3).map((rec, i) => (
@@ -1830,26 +1861,6 @@ export function UnifiedFinancialDashboard() {
                             </div>
                           ))
                         })()}
-                      </div>
-                      <div className="flex justify-center">
-                        <button
-                          onClick={() => {
-                            setShowHealthReport(false)
-                            const params = new URLSearchParams(window.location.search)
-                            params.set('tab', 'klanten')
-                            window.history.pushState({}, '', `${window.location.pathname}?${params}`)
-                          }}
-                          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
-                            healthScores.revenue < 15
-                              ? 'bg-red-500 hover:bg-red-600'
-                              : healthScores.revenue < 20
-                                ? 'bg-yellow-500 hover:bg-yellow-600'
-                                : 'bg-green-500 hover:bg-green-600'
-                          }`}
-                        >
-                          <Users className="h-4 w-4" />
-                          Manage Clients
-                        </button>
                       </div>
                     </div>
 
@@ -1883,37 +1894,50 @@ export function UnifiedFinancialDashboard() {
                       <div className="space-y-3 mb-4">
                         {(() => {
                           const recommendations = []
-                          // Use frequency-aware data from client_invoicing_summary view
-                          const readyToBillValue = dashboardMetrics?.factureerbaar || 0 // Already frequency-aware
-                          const totalUnbilledValue = timeStats?.unbilled?.value || 0
-                          const overdueAmount = dashboardMetrics?.achterstallig || 0
-                          const totalRevenue = (dashboardMetrics?.totale_registratie || 0) + overdueAmount
+                          // Calculate exact score components from Risk Management scoring: 25 - readyToBillRisk - workloadRisk - clientConcentrationRisk
+                          const readyToBillAmount = dashboardMetrics?.factureerbaar || 0
+                          const currentHours = timeStats?.thisMonth.hours || 0
 
-                          if (readyToBillValue > 2000) {
-                            recommendations.push(`Invoice €${Math.round(readyToBillValue)} in frequency-ready work (past due periods)`)
-                          } else if (readyToBillValue > 500) {
-                            recommendations.push(`Process €${Math.round(readyToBillValue)} ready for invoicing per client schedules`)
-                          } else if (totalUnbilledValue > 4000) {
-                            recommendations.push(`Monitor €${Math.round(totalUnbilledValue)} total work (includes current periods)`)
+                          // Score calculation components (rank by point penalty impact)
+                          const readyToBillRisk = Math.round(Math.min((readyToBillAmount / 3000) * 12, 12)) // Max 12 points penalty
+                          const workloadRisk = currentHours > 200 ? 5 : currentHours < 80 ? 3 : 0 // Max 5 points penalty
+                          const clientConcentrationRisk = 3 // Fixed 3 points (moderate risk assumption)
+
+                          const currentScore = Math.max(0, 25 - readyToBillRisk - workloadRisk - clientConcentrationRisk)
+
+                          // Rank by potential point recovery (highest impact first)
+
+                          // 1. Ready-to-Bill Risk (up to 12 points) - HIGHEST IMPACT
+                          if (readyToBillRisk > 0) {
+                            const targetReduction = Math.min(readyToBillAmount - 3000, readyToBillAmount)
+                            const pointsToGain = Math.min(readyToBillRisk, 12)
+                            recommendations.push(`📋 Invoice €${Math.round(Math.max(targetReduction, 0))} ready-to-bill to reduce invoice processing risk (+${pointsToGain} pts)`)
                           }
 
-                          // Risk Management focuses on billing processes, not collections (that's Cash Flow's role)
-                          if (timeStats?.thisMonth.hours && timeStats.thisMonth.hours > mtdCalculations.mtdHoursTarget * 1.5) {
-                            recommendations.push(`Consider work-life balance - ${Math.round(timeStats.thisMonth.hours)} hours tracked this month`)
+                          // 2. Workload Risk (up to 5 points) - MEDIUM IMPACT
+                          if (workloadRisk > 0) {
+                            // Workload recommendations now handled by centralized decision tree engine
                           }
 
-                          if (readyToBillValue === 0 && totalUnbilledValue > 3000) {
-                            recommendations.push(`Review client billing schedules for optimization opportunities`)
-                          } else if (readyToBillValue < 500) {
-                            recommendations.push(`Excellent billing discipline - maintain current invoicing schedule`)
+                          // 3. Client Concentration Risk (3 points) - FIXED RISK
+                          recommendations.push(`🎯 Diversify client portfolio to reduce concentration risk (currently -3 pts fixed)`)
+
+                          // 4. Excellence maintenance
+                          if (currentScore >= 22) {
+                            recommendations.push(`✅ Excellent risk management - maintain billing discipline and workload balance`)
                           }
 
-                          if (totalRevenue > 0) {
-                            recommendations.push(`Monitor client concentration risk and diversify revenue sources`)
+                          // Specific thresholds with point impact
+                          if (readyToBillAmount > 6000) {
+                            recommendations.push(`🚨 Critical: €${Math.round(readyToBillAmount)} ready-to-bill creates maximum risk penalty (-12 pts)`)
+                          } else if (readyToBillAmount > 3000) {
+                            const riskPenalty = Math.round((readyToBillAmount / 3000) * 12)
+                            recommendations.push(`⚠️ High billing backlog creating ${riskPenalty} point penalty`)
                           }
 
+                          // Ensure we have actionable recommendations
                           if (recommendations.length === 0) {
-                            recommendations.push('Maintain current risk management practices')
+                            recommendations.push('🔄 Monitor billing cycles and maintain operational balance')
                           }
 
                           return recommendations.slice(0, 3).map((rec, i) => (
@@ -2004,31 +2028,50 @@ export function UnifiedFinancialDashboard() {
                           const hoursProgressPercentage = mtdHoursTarget > 0 ? (currentHours / mtdHoursTarget) * 100 : 0
                           const hoursShortfall = Math.max(0, mtdHoursTarget - currentHours)
 
-                          if (hoursShortfall > 20) {
-                            recommendations.push(`Log ${Math.round(hoursShortfall)} more hours to meet MTD target (${Math.round(hoursProgressPercentage)}% achieved)`)
-                          } else if (hoursProgressPercentage < 80) {
-                            recommendations.push(`Increase daily productivity to reach ${Math.round(hoursProgressPercentage)}% → 100% of hour target`)
+                          // Current score calculation: (currentHours / mtdHoursTarget) * 25
+                          const currentScore = Math.min(Math.round((currentHours / mtdHoursTarget) * 25), 25)
+                          const maxScore = 25
+
+                          // Rank recommendations by direct hours impact on score
+
+                          // 1. Direct hours gap closure (highest impact)
+                          if (hoursShortfall > 0) {
+                            const pointsToGain = Math.min(Math.round((hoursShortfall / mtdHoursTarget) * 25), maxScore - currentScore)
+                            const daysRemaining = mtdCalculations.daysInMonth - mtdCalculations.currentDay
+                            const dailyHoursNeeded = daysRemaining > 0 ? hoursShortfall / daysRemaining : hoursShortfall
+
+                            recommendations.push(`⏱️ Log ${Math.round(hoursShortfall)}h more to hit MTD target (+${pointsToGain} pts to ${Math.min(currentScore + pointsToGain, 25)}/25)`)
+
+                            if (daysRemaining > 0) {
+                              recommendations.push(`📅 Need ${dailyHoursNeeded.toFixed(1)}h/day for remaining ${daysRemaining} days to reach target`)
+                            }
                           }
 
+                          // 2. Daily productivity optimization
                           const avgHoursPerDay = currentHours / mtdCalculations.currentDay
                           const targetHoursPerDay = mtdHoursTarget / mtdCalculations.currentDay
-                          if (avgHoursPerDay < targetHoursPerDay * 0.8) {
-                            recommendations.push(`Increase daily average from ${avgHoursPerDay.toFixed(1)} to ${targetHoursPerDay.toFixed(1)} hours/day`)
+
+                          if (avgHoursPerDay < targetHoursPerDay) {
+                            const dailyGap = targetHoursPerDay - avgHoursPerDay
+                            recommendations.push(`📈 Increase daily average by ${dailyGap.toFixed(1)}h (from ${avgHoursPerDay.toFixed(1)} to ${targetHoursPerDay.toFixed(1)}h/day)`)
                           }
 
-                          // Efficiency focuses on productivity and time tracking, not invoicing
-                          const totalUnbilledHours = timeStats?.unbilled?.hours || 0
-                          const avgDailyHours = currentHours / mtdCalculations.currentDay
-                          if (avgDailyHours < 4) {
-                            recommendations.push(`Increase daily productivity - currently averaging ${avgDailyHours.toFixed(1)}h/day`)
-                          } else if (timeStats?.thisMonth.hours && timeStats.thisMonth.hours >= mtdCalculations.mtdHoursTarget * 1.2) {
-                            recommendations.push(`Excellent productivity - ${Math.round(timeStats.thisMonth.hours)} hours tracked`)
-                          } else if (totalUnbilledHours > 50) {
-                            recommendations.push(`Monitor ${Math.round(totalUnbilledHours)} hours of tracked time (includes all periods)`)
+                          // 3. Performance status and targets
+                          if (hoursProgressPercentage >= 100) {
+                            const excessPercentage = hoursProgressPercentage - 100
+                            recommendations.push(`🎉 Exceeding MTD target by ${Math.round(excessPercentage)}% - excellent productivity!`)
+                            if (currentScore === maxScore) {
+                              recommendations.push(`🚀 Perfect efficiency score! Consider raising monthly targets for growth`)
+                            }
+                          } else if (hoursProgressPercentage >= 80) {
+                            recommendations.push(`✅ Strong progress at ${Math.round(hoursProgressPercentage)}% - maintain current pace`)
+                          } else if (hoursProgressPercentage < 50) {
+                            recommendations.push(`🚨 Critical: Only ${Math.round(hoursProgressPercentage)}% of target - significant effort needed`)
                           }
 
+                          // Ensure we have actionable recommendations
                           if (recommendations.length === 0) {
-                            recommendations.push('Focus on maintaining consistent daily productivity')
+                            recommendations.push('🔄 Monitor daily productivity and maintain consistent time tracking')
                           }
 
                           return recommendations.slice(0, 3).map((rec, i) => (
@@ -2046,26 +2089,6 @@ export function UnifiedFinancialDashboard() {
                             </div>
                           ))
                         })()}
-                      </div>
-                      <div className="flex justify-center">
-                        <button
-                          onClick={() => {
-                            setShowHealthReport(false)
-                            const params = new URLSearchParams(window.location.search)
-                            params.set('tab', 'tijd')
-                            window.history.pushState({}, '', `${window.location.pathname}?${params}`)
-                          }}
-                          className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
-                            healthScores.efficiency < 15
-                              ? 'bg-red-500 hover:bg-red-600'
-                              : healthScores.efficiency < 20
-                                ? 'bg-yellow-500 hover:bg-yellow-600'
-                                : 'bg-green-500 hover:bg-green-600'
-                          }`}
-                        >
-                          <Clock className="h-4 w-4" />
-                          Track Time
-                        </button>
                       </div>
                     </div>
 
@@ -2214,7 +2237,7 @@ export function UnifiedFinancialDashboard() {
                       const currentRevenue = (dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))
                       const mtdProgress = mtdCalculations.mtdRevenueTarget > 0 ? (currentRevenue / mtdCalculations.mtdRevenueTarget) * 100 : 0
                       const overdueRatio = dashboardMetrics?.achterstallig / ((dashboardMetrics?.totale_registratie || 1) + (dashboardMetrics?.achterstallig || 0))
-                      const overallScore = (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.riskManagement) / 4
+                      const overallScore = (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.risk) / 4
 
                       if (overallScore >= 20) {
                         recommendations.push(`🎉 Excellent overall performance! Average score: ${Math.round(overallScore)}/20`)
@@ -2257,9 +2280,9 @@ export function UnifiedFinancialDashboard() {
                       onClick={() => {
                         setShowHealthReport(false)
                         const params = new URLSearchParams(window.location.search)
-                        const overallScore = (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.riskManagement) / 4
+                        const overallScore = (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.risk) / 4
                         // Navigate to most relevant section based on lowest score
-                        const lowestScore = Math.min(healthScores.revenue, healthScores.cashflow, healthScores.efficiency, healthScores.riskManagement)
+                        const lowestScore = Math.min(healthScores.revenue, healthScores.cashflow, healthScores.efficiency, healthScores.risk)
                         if (lowestScore === healthScores.revenue) {
                           params.set('tab', 'klanten')
                         } else if (lowestScore === healthScores.cashflow) {
@@ -2270,9 +2293,9 @@ export function UnifiedFinancialDashboard() {
                         window.history.pushState({}, '', `${window.location.pathname}?${params}`)
                       }}
                       className={`flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg transition-colors ${
-                        (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.riskManagement) / 4 >= 20
+                        (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.risk) / 4 >= 20
                           ? 'bg-green-500 hover:bg-green-600'
-                          : (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.riskManagement) / 4 >= 15
+                          : (healthScores.revenue + healthScores.cashflow + healthScores.efficiency + healthScores.risk) / 4 >= 15
                           ? 'bg-yellow-500 hover:bg-yellow-600'
                           : 'bg-red-500 hover:bg-red-600'
                       }`}

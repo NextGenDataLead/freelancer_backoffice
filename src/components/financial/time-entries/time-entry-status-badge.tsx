@@ -2,7 +2,7 @@
 
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { CheckCircle, Clock, XCircle, Info } from 'lucide-react'
+import { CheckCircle, Clock, XCircle, Info, Lock } from 'lucide-react'
 import type { TimeEntryStatusInfo } from '@/lib/utils/time-entry-status'
 
 interface TimeEntryStatusBadgeProps {
@@ -21,7 +21,7 @@ export function TimeEntryStatusBadge({
   
   const getStatusIcon = () => {
     if (!showIcon) return null
-    
+
     switch (statusInfo.status) {
       case 'gefactureerd':
         return <CheckCircle className="h-3 w-3 mr-1" />
@@ -29,6 +29,8 @@ export function TimeEntryStatusBadge({
         return <Clock className="h-3 w-3 mr-1" />
       case 'niet-factureerbaar':
         return <XCircle className="h-3 w-3 mr-1" />
+      case 'vergrendeld':
+        return <Lock className="h-3 w-3 mr-1" />
       default:
         return <Info className="h-3 w-3 mr-1" />
     }

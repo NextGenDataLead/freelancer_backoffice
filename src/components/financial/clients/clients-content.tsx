@@ -1,6 +1,6 @@
 'use client'
 
-// Enhanced clients tab with health insights integration
+// Enhanced clients component with health insights integration
 // Combines client management with comprehensive health analytics
 
 import { useState, useEffect, useMemo } from 'react'
@@ -15,7 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Users, Plus, FolderOpen, Euro, Loader2, Filter, Search, LayoutGrid, List } from 'lucide-react'
+import { Users, Plus, FolderOpen, Euro, Loader2, Filter, Search, LayoutGrid, List, ArrowLeft } from 'lucide-react'
+import Link from 'next/link'
 
 interface ClientHealthData {
   id: string
@@ -64,7 +65,12 @@ interface ClientStats {
   totalProjects: number
 }
 
-export function ClientsTabContent() {
+interface ClientsContentProps {
+  showHeader?: boolean
+  className?: string
+}
+
+export function ClientsContent({ showHeader = true, className = '' }: ClientsContentProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingClient, setEditingClient] = useState<any>(null)
   const [clientStats, setClientStats] = useState<ClientStats | null>(null)
@@ -112,28 +118,65 @@ export function ClientsTabContent() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Klantenbeheer</h3>
-          <p className="text-muted-foreground text-sm">
-            Beheer je klanten en leveranciers
-          </p>
-        </div>
+    <div className={`space-y-6 ${className}`}>
+      {/* Header - conditional rendering based on showHeader prop */}
+      {showHeader ? (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Link href="/dashboard/financieel">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Terug naar Dashboard
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Klantenbeheer</h1>
+              <p className="text-muted-foreground mt-1">
+                Beheer je klanten en leveranciers
+              </p>
+            </div>
+          </div>
 
-        <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Nieuwe Klant Toevoegen</DialogTitle>
-            </DialogHeader>
-            <ClientForm
-              onSuccess={handleClientCreated}
-              onCancel={() => setShowCreateForm(false)}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+          <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Nieuwe Klant
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Nieuwe Klant Toevoegen</DialogTitle>
+              </DialogHeader>
+              <ClientForm
+                onSuccess={handleClientCreated}
+                onCancel={() => setShowCreateForm(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Klantenbeheer</h3>
+            <p className="text-muted-foreground text-sm">
+              Beheer je klanten en leveranciers
+            </p>
+          </div>
+
+          <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Nieuwe Klant Toevoegen</DialogTitle>
+              </DialogHeader>
+              <ClientForm
+                onSuccess={handleClientCreated}
+                onCancel={() => setShowCreateForm(false)}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">

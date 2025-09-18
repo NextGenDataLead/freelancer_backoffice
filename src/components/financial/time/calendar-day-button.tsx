@@ -88,6 +88,7 @@ export const CalendarDayButton = forwardRef<HTMLButtonElement, CalendarDayButton
                   </div>
                 )}
               </div>
+
             </div>
           ) : (
             /* Empty Day - Show Add Button on Hover */

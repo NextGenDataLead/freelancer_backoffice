@@ -66,25 +66,25 @@ export function isReadyForInvoicing(
 
 /**
  * Determines the status of a time entry based on business rules
- * 
+ *
  * Three mutually exclusive statuses:
  * 1. Niet-factureerbaar (red) - Cannot be invoiced (billable=false)
- * 2. Factureerbaar (orange/green) - Ready to be invoiced based on frequency rules  
- * 3. Gefactureerd (purple) - Already invoiced
+ * 2. Factureerbaar (orange/green) - Ready to be invoiced based on frequency rules
+ * 3. Gefactureerd (purple) - Already invoiced (edit prevention applies)
  */
 export function getTimeEntryStatus(
-  timeEntry: TimeEntry, 
+  timeEntry: TimeEntry,
   client: Client,
   currentDate: Date = new Date()
 ): TimeEntryStatusInfo {
-  
-  // Status 3: Already invoiced (purple)
+
+  // Status 3: Already invoiced (purple) - prevents editing
   if (timeEntry.invoiced || timeEntry.invoice_id) {
     return {
       status: 'gefactureerd',
       label: 'Gefactureerd',
       color: 'purple',
-      reason: timeEntry.invoice_id 
+      reason: timeEntry.invoice_id
         ? `Gefactureerd op factuur ${timeEntry.invoice_id}`
         : 'Reeds gefactureerd'
     }
@@ -159,9 +159,9 @@ export function getTimeEntryStatusSummary(
   timeEntries: TimeEntry[],
   client: Client,
   currentDate: Date = new Date()
-): { 
+): {
   nietFactureerbaar: number
-  factureerbaar: number  
+  factureerbaar: number
   gefactureerd: number
   totaal: number
 } {
@@ -171,7 +171,7 @@ export function getTimeEntryStatusSummary(
     gefactureerd: 0,
     totaal: timeEntries.length
   }
-  
+
   timeEntries.forEach(entry => {
     const statusInfo = getTimeEntryStatus(entry, client, currentDate)
     switch (statusInfo.status) {
@@ -186,6 +186,6 @@ export function getTimeEntryStatusSummary(
         break
     }
   })
-  
+
   return summary
 }

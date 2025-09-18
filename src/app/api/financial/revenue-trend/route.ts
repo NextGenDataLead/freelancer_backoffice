@@ -110,12 +110,12 @@ export async function GET() {
       .select(`
         total_amount,
         status,
-        issue_date,
+        invoice_date,
         due_date
       `)
       .eq('tenant_id', profile.tenant_id)
-      .gte('issue_date', yearStart.toISOString().split('T')[0])
-      .lte('issue_date', referenceDate.toISOString().split('T')[0])
+      .gte('invoice_date', yearStart.toISOString().split('T')[0])
+      .lte('invoice_date', referenceDate.toISOString().split('T')[0])
 
     if (invoiceError) {
       console.error('Error fetching invoices for revenue trend:', invoiceError)

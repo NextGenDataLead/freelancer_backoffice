@@ -3,8 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { TimeTabContent } from '@/components/financial/tabs/time-tab-content'
-import { ClientsTabContent } from '@/components/financial/tabs/clients-tab-content'
+import { TijdContent } from '@/components/financial/time/tijd-content'
+import { ClientsContent } from '@/components/financial/clients/clients-content'
+import { InvoicesContent } from '@/components/financial/invoices/invoices-content'
+import { ExpensesContent } from '@/components/financial/expenses/expenses-content'
+import { TaxContent } from '@/components/financial/tax/tax-content'
 import { FinancialOverview } from '@/components/dashboard/financial-overview'
 import { ActiveTimerWidget } from '@/components/dashboard/active-timer-widget'
 import { ClientHealthDashboard } from '@/components/dashboard/client-health-dashboard'
@@ -179,60 +182,6 @@ const OverviewTabContent = ({
   </div>
 )
 
-const ExpensesTabContent = () => (
-  <div className="space-y-6">
-    <div className="mobile-card-glass">
-      <h3 className="text-lg font-semibold mb-4">Expenses Management</h3>
-      <p className="text-muted-foreground mb-4">
-        Track and categorize business expenses, upload receipts, and manage expense reports.
-      </p>
-      <div className="text-center py-8">
-        <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <p className="text-sm text-muted-foreground">Coming Soon</p>
-        <p className="text-xs text-muted-foreground mt-2">
-          Expense tracking and management features will be available here
-        </p>
-      </div>
-    </div>
-  </div>
-)
-
-const InvoicesTabContent = () => (
-  <div className="space-y-6">
-    <div className="mobile-card-glass">
-      <h3 className="text-lg font-semibold mb-4">Invoice Management</h3>
-      <p className="text-muted-foreground mb-4">
-        Create, send, and track invoices. Monitor payment status and manage billing cycles.
-      </p>
-      <div className="text-center py-8">
-        <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <p className="text-sm text-muted-foreground">Coming Soon</p>
-        <p className="text-xs text-muted-foreground mt-2">
-          Invoice creation and management features will be available here
-        </p>
-      </div>
-    </div>
-  </div>
-)
-
-
-const TaxTabContent = () => (
-  <div className="space-y-6">
-    <div className="mobile-card-glass">
-      <h3 className="text-lg font-semibold mb-4">Tax Management</h3>
-      <p className="text-muted-foreground mb-4">
-        Manage tax calculations, VAT reports, and compliance documentation.
-      </p>
-      <div className="text-center py-8">
-        <Calculator className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <p className="text-sm text-muted-foreground">Coming Soon</p>
-        <p className="text-xs text-muted-foreground mt-2">
-          Tax management and VAT reporting features will be available here
-        </p>
-      </div>
-    </div>
-  </div>
-)
 
 export function FinancialTabs({ className }: FinancialTabsProps) {
   const router = useRouter()
@@ -265,34 +214,31 @@ export function FinancialTabs({ className }: FinancialTabsProps) {
       id: 'tijd',
       label: 'Time Tracking',
       icon: <Clock className="h-4 w-4" />,
-      content: <TimeTabContent />
+      content: <TijdContent showHeader={false} />
     },
     {
       id: 'uitgaven',
       label: 'Expenses',
       icon: <Receipt className="h-4 w-4" />,
-      content: <ExpensesTabContent />,
-      disabled: true
+      content: <ExpensesContent showHeader={false} />
     },
     {
       id: 'facturen',
       label: 'Invoices',
       icon: <FileText className="h-4 w-4" />,
-      content: <InvoicesTabContent />,
-      disabled: true
+      content: <InvoicesContent showHeader={false} />
     },
     {
       id: 'klanten',
       label: 'Clients',
       icon: <Users className="h-4 w-4" />,
-      content: <ClientsTabContent />
+      content: <ClientsContent showHeader={false} />
     },
     {
       id: 'belasting',
       label: 'Tax',
       icon: <Calculator className="h-4 w-4" />,
-      content: <TaxTabContent />,
-      disabled: true
+      content: <TaxContent showHeader={false} />
     }
   ]
 

@@ -71,14 +71,12 @@ export function CalendarTimeEntryView({
   // Handle date selection
   const handleDateSelect = (date: Date | undefined) => {
     if (!date) return
-    
+
     setSelectedDate(date)
     onDateSelect(date)
-    
-    // If the selected date has no entries, immediately open create dialog
-    if (!hasTimeEntries(date)) {
-      onCreateTimeEntry(date)
-    }
+
+    // Always open timer dialog when any date is clicked
+    onCreateTimeEntry(date)
   }
 
   // Sync prop changes with hook state
@@ -233,134 +231,6 @@ export function CalendarTimeEntryView({
         </CardContent>
       </Card>
 
-      {/* Selected Date Details */}
-      {selectedDate && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>
-                {format(selectedDate, 'EEEE, d MMMM yyyy')}
-                {isToday(selectedDate) && (
-                  <Badge variant="outline" className="ml-2">Vandaag</Badge>
-                )}
-              </span>
-              <Button
-                size="sm"
-                onClick={() => onCreateTimeEntry(selectedDate)}
-                className="flex items-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Nieuwe registratie
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const dayData = getDayData(selectedDate)
-              const entries = getTimeEntriesForDate(selectedDate)
-              
-              if (!dayData.hasEntries) {
-                return (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>Geen tijdregistraties voor deze dag</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => onCreateTimeEntry(selectedDate)}
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      Registratie toevoegen
-                    </Button>
-                  </div>
-                )
-              }
-
-              return (
-                <div className="space-y-4">
-                  {/* Day Summary */}
-                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                    <div className="flex items-center gap-6">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{formatHours(dayData.totalHours)}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Euro className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{formatCurrency(dayData.totalValue)}</span>
-                      </div>
-                    </div>
-                    <Badge variant="outline">
-                      {dayData.entryCount} {dayData.entryCount === 1 ? 'registratie' : 'registraties'}
-                    </Badge>
-                  </div>
-
-                  {/* Time Entries List */}
-                  <div className="space-y-3">
-                    {entries.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/30 transition-colors cursor-pointer"
-                        onClick={() => {
-                          // TODO: Open edit dialog
-                          console.log('Edit entry:', entry.id)
-                        }}
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm">
-                              {entry.clientName}
-                            </span>
-                            <span className="text-muted-foreground">•</span>
-                            <span className="text-sm text-muted-foreground">
-                              {entry.projectName}
-                            </span>
-                          </div>
-                          {entry.description && (
-                            <p className="text-sm text-muted-foreground">
-                              {entry.description}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-4 mt-1">
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                {formatHours(entry.hours)}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Euro className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                €{entry.hourlyRate}/uur
-                              </span>
-                            </div>
-                            {entry.billable && (
-                              <Badge variant="outline" className="text-xs">
-                                Factureerbaar
-                              </Badge>
-                            )}
-                            {entry.invoiced && (
-                              <Badge variant="secondary" className="text-xs">
-                                Gefactureerd
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-medium">
-                            {formatCurrency(entry.hours * entry.hourlyRate)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })()}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Loading Overlay */}
       {loading && (

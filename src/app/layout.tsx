@@ -9,6 +9,7 @@ import { CookieConsent } from '@/components/cookie-consent'
 import { ConsentAwareAnalytics } from '@/components/analytics/consent-aware-analytics'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from 'sonner'
+import { NotificationToastContainer } from '@/components/notifications/notification-toast'
 // LiveChat and HelpSystem components not yet implemented
 import './globals.css'
 
@@ -96,6 +97,7 @@ export default function RootLayout({
                 debug={process.env.NODE_ENV === 'development'}
               />
               <Toaster position="top-right" />
+              <NotificationToastContainer />
               {/* LiveChat and HelpSystem components not yet implemented */}
             </QueryProvider>
           </ThemeProvider>

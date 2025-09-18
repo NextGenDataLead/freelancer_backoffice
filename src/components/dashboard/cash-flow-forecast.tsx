@@ -3,6 +3,15 @@
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import {
   TrendingUp,
   TrendingDown,
@@ -11,7 +20,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Info,
-  BarChart3
+  BarChart3,
+  HelpCircle
 } from 'lucide-react'
 
 // Cash flow prediction interfaces
@@ -51,6 +61,135 @@ interface CashFlowAnalysis {
     amount: number
     description: string
   }[]
+}
+
+// Help Modal Component
+function CashFlowHelpModal() {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+          <HelpCircle className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm sm:max-w-2xl lg:max-w-4xl xl:max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle>Cash Flow Forecast Explained</DialogTitle>
+          <DialogDescription>
+            Understanding your financial runway and minimum balance projections
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+          {/* Key Metrics Section */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Key Metrics</h3>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="border-l-4 border-blue-500 pl-4">
+                <h4 className="font-medium text-blue-700">Minimum Balance</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The lowest amount your account balance will reach during the forecast period. This helps you:
+                </p>
+                <ul className="text-sm text-muted-foreground mt-2 ml-4 list-disc space-y-1">
+                  <li>Plan for potential cash shortfalls</li>
+                  <li>Ensure you maintain minimum operating capital</li>
+                  <li>Avoid overdraft fees or payment delays</li>
+                </ul>
+              </div>
+
+              <div className="border-l-4 border-green-500 pl-4">
+                <h4 className="font-medium text-green-700">Runway (Days)</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  How many days your business can operate before running out of money. This shows:
+                </p>
+                <ul className="text-sm text-muted-foreground mt-2 ml-4 list-disc space-y-1">
+                  <li>Time available to secure new revenue</li>
+                  <li>When urgent action might be needed</li>
+                  <li>Your financial safety buffer</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Scenarios Section */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Forecast Scenarios</h3>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <h4 className="font-medium text-green-700 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Optimistic (+20%)
+                </h4>
+                <p className="text-sm text-green-600 mt-1">
+                  Best-case scenario where payments arrive early, collections improve, and expenses stay low.
+                  Applies a 20% positive adjustment to your projected balance.
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <h4 className="font-medium text-blue-700 flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Realistic (Base Case)
+                </h4>
+                <p className="text-sm text-blue-600 mt-1">
+                  Most likely scenario based on your historical data, current invoices, and typical payment patterns.
+                  Uses actual amounts and standard collection rates.
+                </p>
+              </div>
+
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 md:col-span-2 lg:col-span-1">
+                <h4 className="font-medium text-orange-700 flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4" />
+                  Pessimistic (-30%)
+                </h4>
+                <p className="text-sm text-orange-600 mt-1">
+                  Conservative scenario accounting for delayed payments, collection issues, and unexpected expenses.
+                  Applies a 30% negative adjustment for cautious planning.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Data Sources Section */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Data Sources</h3>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <p className="text-sm text-muted-foreground">
+                Your forecast is calculated using real business data:
+              </p>
+              <ul className="text-sm text-muted-foreground mt-2 ml-4 list-disc space-y-1">
+                <li><strong>Outstanding Invoices:</strong> Due dates and amounts from your actual invoices</li>
+                <li><strong>Unbilled Time:</strong> Hours logged but not yet invoiced</li>
+                <li><strong>Payment History:</strong> Your typical collection patterns and payment timing</li>
+                <li><strong>Recurring Expenses:</strong> Monthly operational costs and tax obligations</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Action Tips */}
+          <div>
+            <h3 className="text-lg font-semibold mb-3">Taking Action</h3>
+            <div className="space-y-2">
+              <div className="flex items-start gap-2 text-sm">
+                <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
+                <span><strong>Green metrics:</strong> You're in good financial health</span>
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5" />
+                <span><strong>Orange metrics:</strong> Monitor closely and consider follow-ups</span>
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5" />
+                <span><strong>Red metrics:</strong> Take immediate action to improve cash flow</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 // Generate mock cash flow data - replace with real API
@@ -314,21 +453,24 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
               <p className="text-xs text-muted-foreground">Next 90 days</p>
             </div>
           </div>
-          <div className="flex gap-1">
-            {(['optimistic', 'realistic', 'pessimistic'] as const).map((scenarioType) => (
-              <button
-                key={scenarioType}
-                onClick={() => setSelectedScenario(scenarioType)}
-                className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                  selectedScenario === scenarioType
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                {scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)}
-              </button>
-            ))}
-          </div>
+          <CashFlowHelpModal />
+        </div>
+
+        {/* Scenario Selection */}
+        <div className="flex gap-1">
+          {(['optimistic', 'realistic', 'pessimistic'] as const).map((scenarioType) => (
+            <button
+              key={scenarioType}
+              onClick={() => setSelectedScenario(scenarioType)}
+              className={`px-3 py-2 text-xs rounded-md transition-colors flex-1 ${
+                selectedScenario === scenarioType
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+              }`}
+            >
+              {scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)}
+            </button>
+          ))}
         </div>
 
         {/* Key Metrics */}
