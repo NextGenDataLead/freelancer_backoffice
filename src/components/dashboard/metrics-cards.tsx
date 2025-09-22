@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { FinancialHealthScore } from './financial-health-score'
 import { smartRulesEngine, type BusinessData, type SmartAlert } from '@/lib/smart-rules-engine'
+import { useProfitTargets } from '@/hooks/use-profit-targets'
 import {
   Euro,
   TrendingUp,
@@ -112,6 +113,7 @@ const formatHours = (hours: number) => `${hours}h`
 
 export function MetricsCards() {
   const router = useRouter()
+  const { targets: profitTargets } = useProfitTargets()
   const [dashboardMetrics, setDashboardMetrics] = useState<DashboardMetricsResponse['data'] | null>(null)
   const [timeStats, setTimeStats] = useState<TimeStatsResponse['data'] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -610,7 +612,7 @@ export function MetricsCards() {
               <span className="text-2xl font-bold metric-number text-blue-400">
                 €{timeStats.thisMonth.hours > 0 ? Math.round(timeStats.thisMonth.revenue / timeStats.thisMonth.hours) : 0}
               </span>
-              <span className="text-sm text-muted-foreground">/ €100 target</span>
+              <span className="text-sm text-muted-foreground">/ €{profitTargets?.target_hourly_rate || 100} target</span>
             </div>
             <div className="flex items-center gap-2 h-8 flex-col justify-center">
               <div className="flex items-center gap-2">
@@ -679,7 +681,7 @@ export function MetricsCards() {
               <span className="text-2xl font-bold metric-number text-purple-400">
                 {timeStats.subscription.monthlyActiveUsers.current}
               </span>
-              <span className="text-sm text-muted-foreground">/ 100 target</span>
+              <span className="text-sm text-muted-foreground">/ {profitTargets?.target_monthly_active_users || 100} target</span>
             </div>
             <div className="flex items-center gap-2 h-8 flex-col justify-center">
               <div className="flex items-center gap-2">

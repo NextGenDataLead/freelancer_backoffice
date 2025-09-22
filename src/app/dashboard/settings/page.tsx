@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ProfileForm } from '@/components/profile/profile-form'
 import { BusinessForm } from '@/components/business/business-form'
+import { ProfitTargetSettings } from '@/components/financial/profit-targets/profit-target-settings-v2'
 import { PasswordSection } from '@/components/settings/password-section'
 import { SecuritySection } from '@/components/settings/security-section'
 import { SessionsSection } from '@/components/settings/sessions-section'
@@ -129,6 +130,9 @@ export default function SettingsPage() {
           <TabsContent value="business" className="space-y-4 sm:space-y-6">
             <div className="mobile-card-glass">
               <BusinessForm />
+            </div>
+            <div className="mobile-card-glass">
+              <ProfitTargetSettings />
             </div>
           </TabsContent>
 

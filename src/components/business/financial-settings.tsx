@@ -4,6 +4,7 @@ import { Controller } from 'react-hook-form'
 import { BusinessProfileData } from '@/lib/validations/business'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Euro, Calendar, TrendingUp } from 'lucide-react'
 
@@ -15,12 +16,12 @@ interface FinancialSettingsSectionProps {
   disabled?: boolean
 }
 
-export function FinancialSettingsSection({ 
-  register, 
-  errors, 
+export function FinancialSettingsSection({
+  register,
+  errors,
   control,
   watch,
-  disabled = false 
+  disabled = false
 }: FinancialSettingsSectionProps) {
   const korEnabled = watch('kor_enabled')
   
@@ -140,6 +141,7 @@ export function FinancialSettingsSection({
           </p>
         </div>
 
+
         {/* KOR Regulation */}
         <div className="md:col-span-2">
           <div className="flex items-center justify-between p-4 border border-slate-200 rounded-lg">
@@ -200,6 +202,7 @@ export function FinancialSettingsSection({
           </div>
         </div>
       )}
+
     </div>
   )
 }

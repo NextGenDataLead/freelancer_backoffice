@@ -2,9 +2,11 @@
 
 import { UnifiedFinancialDashboard } from '@/components/dashboard/unified-financial-dashboard'
 import { FinancialTabs } from '@/components/financial/financial-tabs'
+import { ProfitTargetSetupModalV2 } from '@/components/financial/profit-targets/profit-target-setup-modal-v2'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useProfitTargets } from '@/hooks/use-profit-targets'
 import {
   LayoutDashboard,
   Clock,
@@ -18,6 +20,8 @@ export default function FinancialDashboard() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [showProfitTargetSetup, setShowProfitTargetSetup] = useState(false)
+  const { targets, needsSetup, isLoading, refetch } = useProfitTargets()
 
   // Handle tab changes with URL updates
   const handleTabChange = (tabId: string) => {
@@ -44,6 +48,25 @@ export default function FinancialDashboard() {
       setActiveTab(tabParam)
     }
   }, [searchParams])
+
+  // Show profit target setup modal if needed
+  useEffect(() => {
+    if (!isLoading && needsSetup) {
+      // Small delay to let the page load first
+      const timer = setTimeout(() => {
+        setShowProfitTargetSetup(true)
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [isLoading, needsSetup])
+
+  const handleProfitTargetComplete = async () => {
+    console.log('Profit target setup completed, refreshing data...')
+    setShowProfitTargetSetup(false)
+    // Refresh the targets data and reload the page
+    await refetch()
+    window.location.reload()
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -106,7 +129,7 @@ export default function FinancialDashboard() {
 
         {/* Tab Content */}
         <TabsContent value="dashboard" className="mt-0 focus-visible:outline-none">
-          <UnifiedFinancialDashboard />
+          <UnifiedFinancialDashboard onTabChange={handleTabChange} />
         </TabsContent>
 
         <TabsContent value="tijd" className="mt-0 focus-visible:outline-none">
@@ -129,6 +152,15 @@ export default function FinancialDashboard() {
           <FinancialTabs />
         </TabsContent>
       </Tabs>
+
+      {/* Profit Target Setup Modal - Required Setup */}
+      {showProfitTargetSetup && (
+        <ProfitTargetSetupModalV2
+          onComplete={handleProfitTargetComplete}
+          onClose={() => {}} // Non-dismissible modal
+          isModal={true}
+        />
+      )}
     </div>
   )
 }
