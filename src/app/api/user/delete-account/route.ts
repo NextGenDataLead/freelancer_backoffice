@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth, currentUser, clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * POST /api/user/delete-account
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Calculate deletion date (30 days from now)
-    const deletionDate = new Date()
+    const deletionDate = getCurrentDate()
     deletionDate.setDate(deletionDate.getDate() + 30)
 
     // Initialize Supabase client
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
         .from('deletion_requests')
         .insert({
           user_id: dbUserId,
-          requested_at: new Date().toISOString(),
+          requested_at: getCurrentDate().toISOString(),
           scheduled_for: deletionDate.toISOString(),
           status: 'pending',
           metadata: {
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
         .insert({
           user_id: dbUserId,
           action: 'deletion_requested',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentDate().toISOString(),
           ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip'),
           user_agent: req.headers.get('user-agent'),
           metadata: {
@@ -124,7 +125,7 @@ export async function POST(req: NextRequest) {
         privateMetadata: {
           ...user.privateMetadata,
           accountDeletionRequested: true,
-          deletionRequestedAt: new Date().toISOString(),
+          deletionRequestedAt: getCurrentDate().toISOString(),
           scheduledDeletionAt: deletionDate.toISOString(),
           deletionReason: reason || 'No reason provided',
         },
@@ -135,7 +136,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create console audit log
-    console.log(`Account deletion requested by user ${userId} at ${new Date().toISOString()}`, {
+    console.log(`Account deletion requested by user ${userId} at ${getCurrentDate().toISOString()}`, {
       reason,
       scheduledDeletion: deletionDate.toISOString(),
       gracePeriodDays: 30,
@@ -226,10 +227,10 @@ export async function DELETE() {
         .from('deletion_requests')
         .update({
           status: 'cancelled',
-          completed_at: new Date().toISOString(),
+          completed_at: getCurrentDate().toISOString(),
           metadata: {
             ...deletionRequest.metadata,
-            cancelled_at: new Date().toISOString(),
+            cancelled_at: getCurrentDate().toISOString(),
             cancelled_via: 'privacy_dashboard',
           },
         })
@@ -255,12 +256,12 @@ export async function DELETE() {
         .insert({
           user_id: dbUserId,
           action: 'deletion_cancelled',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentDate().toISOString(),
           metadata: {
             original_scheduled_for: deletionRequest.scheduled_for,
-            cancelled_at: new Date().toISOString(),
+            cancelled_at: getCurrentDate().toISOString(),
             days_remaining: Math.ceil(
-              (new Date(deletionRequest.scheduled_for).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+              (new Date(deletionRequest.scheduled_for).getTime() - getCurrentDate().getTime()) / (1000 * 60 * 60 * 24)
             ),
           },
         })
@@ -288,7 +289,7 @@ export async function DELETE() {
           deletionRequestedAt: null,
           scheduledDeletionAt: null,
           deletionReason: null,
-          deletionCancelledAt: new Date().toISOString(),
+          deletionCancelledAt: getCurrentDate().toISOString(),
         },
       })
     } catch (clerkError) {
@@ -297,7 +298,7 @@ export async function DELETE() {
     }
 
     // Create audit log
-    console.log(`Account deletion cancelled by user ${userId} at ${new Date().toISOString()}`)
+    console.log(`Account deletion cancelled by user ${userId} at ${getCurrentDate().toISOString()}`)
 
     return NextResponse.json({
       success: true,
@@ -381,7 +382,7 @@ export async function GET() {
 
       // Calculate days remaining
       const scheduledAt = new Date(deletionRequest.scheduled_for)
-      const daysRemaining = Math.ceil((scheduledAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+      const daysRemaining = Math.ceil((scheduledAt.getTime() - getCurrentDate().getTime()) / (1000 * 60 * 60 * 24))
       
       return NextResponse.json({
         hasPendingDeletion: true,
@@ -398,7 +399,7 @@ export async function GET() {
       const privateMetadata = user.privateMetadata as any
       if (privateMetadata?.accountDeletionRequested) {
         const scheduledAt = new Date(privateMetadata.scheduledDeletionAt)
-        const daysRemaining = Math.ceil((scheduledAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        const daysRemaining = Math.ceil((scheduledAt.getTime() - getCurrentDate().getTime()) / (1000 * 60 * 60 * 24))
         
         return NextResponse.json({
           hasPendingDeletion: true,

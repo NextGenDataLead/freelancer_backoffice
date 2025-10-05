@@ -7,6 +7,7 @@ import {
   createTransactionLog
 } from '@/lib/supabase/financial-client'
 import type { CorrectedICPDeclaration, ICPBTWValidation } from '@/lib/types/btw-corrected'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * GET /api/reports/icp-corrected
@@ -23,8 +24,8 @@ export async function GET(request: Request) {
 
     // Parse query parameters
     const { searchParams } = new URL(request.url)
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString())
-    const quarter = parseInt(searchParams.get('quarter') || Math.ceil((new Date().getMonth() + 1) / 3).toString())
+    const year = parseInt(searchParams.get('year') || getCurrentDate().getFullYear().toString())
+    const quarter = parseInt(searchParams.get('quarter') || Math.ceil((getCurrentDate().getMonth() + 1) / 3).toString())
 
     // Validate parameters
     if (year < 2020 || year > 2099 || quarter < 1 || quarter > 4) {
@@ -83,7 +84,7 @@ export async function GET(request: Request) {
     const response = {
       tenant_id: profile.tenant_id,
       period: { year, quarter },
-      generated_at: new Date(),
+      generated_at: getCurrentDate(),
       
       // ICP declaration data
       declarations: icpDeclarations || [],
@@ -202,7 +203,7 @@ export async function POST(request: Request) {
     // Generate detailed validation report
     const validationReport = {
       period: { year, quarter },
-      validated_at: new Date(),
+      validated_at: getCurrentDate(),
       
       // Validation results
       amounts_match: validationResult.amounts_match,

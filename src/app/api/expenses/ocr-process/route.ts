@@ -9,6 +9,7 @@ import {
   createApiResponse
 } from '@/lib/supabase/financial-client'
 import { validateSupplierForExpense } from '@/lib/utils/supplier-validation'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface VATValidationResult {
   vat_number: string
@@ -287,7 +288,7 @@ async function enhanceExtractedData(data: any) {
   const finalSuggestedVATType = reverseChargeDetected ? 'reverse_charge' : supplierValidation.suggestedVATType
 
   // Format date for HTML date input (YYYY-MM-DD)
-  let formattedDate = new Date().toISOString().split('T')[0] // Default to today
+  let formattedDate = getCurrentDate().toISOString().split('T')[0] // Default to today
   if (data.expense_date) {
     try {
       const dateObj = new Date(data.expense_date)

@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Clock, Plus, Play, Pause, Square, Euro, Users, Keyboard, List, Calendar as CalendarIcon } from 'lucide-react'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface TijdContentProps {
   showHeader?: boolean
@@ -43,7 +44,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   const [timeStats, setTimeStats] = useState<any>(null)
   const [statsLoading, setStatsLoading] = useState(true)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(undefined)
-  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date())
+  const [selectedMonth, setSelectedMonth] = useState<Date>(getCurrentDate())
   const [calendarMode, setCalendarMode] = useState(false)
   const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0)
   const [showTimerDialog, setShowTimerDialog] = useState(false)
@@ -94,7 +95,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
       try {
         const sessionData = JSON.parse(timerSession)
         const sessionStartTime = new Date(sessionData.startTime)
-        const now = new Date()
+        const now = getCurrentDate()
 
         // Only restore if session is less than 24 hours old
         const hoursSinceStart = (now.getTime() - sessionStartTime.getTime()) / (1000 * 60 * 60)
@@ -169,7 +170,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   useEffect(() => {
     if (timerRunning && startTime) {
       intervalRef.current = setInterval(() => {
-        const now = new Date()
+        const now = getCurrentDate()
         const currentSessionElapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000)
         const totalElapsed = currentSessionElapsed + pausedTime
 
@@ -227,7 +228,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
     console.log('Target date:', targetDate)
 
     // Check if we should start a timer (for today) or save a time entry (for other dates)
-    const today = new Date()
+    const today = getCurrentDate()
     const isToday = !targetDate ||
       (targetDate.toDateString() === today.toDateString())
 
@@ -284,13 +285,13 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
 
     const timerSession = {
       ...timerData,
-      startTime: new Date().toISOString(),
+      startTime: getCurrentDate().toISOString(),
       pausedTime: 0,
       isPaused: false
     }
     localStorage.setItem('activeTimerSession', JSON.stringify(timerSession))
 
-    setStartTime(new Date())
+    setStartTime(getCurrentDate())
     setTimerRunning(true)
     setTimerPaused(false)
     setPausedTime(0)
@@ -303,7 +304,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   const pauseTimer = () => {
     if (!startTime) return
 
-    const now = new Date()
+    const now = getCurrentDate()
     const currentSessionElapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000)
     setPausedTime(prev => prev + currentSessionElapsed)
 
@@ -328,7 +329,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   }
 
   const resumeTimer = () => {
-    setStartTime(new Date())
+    setStartTime(getCurrentDate())
     setTimerPaused(false)
     setTimerRunning(true)
 
@@ -336,7 +337,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
     if (timerSession) {
       try {
         const sessionData = JSON.parse(timerSession)
-        sessionData.startTime = new Date().toISOString()
+        sessionData.startTime = getCurrentDate().toISOString()
         sessionData.isPaused = false
         localStorage.setItem('activeTimerSession', JSON.stringify(sessionData))
       } catch (e) {
@@ -348,7 +349,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   const stopAndSaveTimer = async () => {
     if (!startTime) return
 
-    const currentSessionElapsed = Math.floor((new Date().getTime() - startTime.getTime()) / 1000)
+    const currentSessionElapsed = Math.floor((getCurrentDate().getTime() - startTime.getTime()) / 1000)
     const totalElapsedSeconds = currentSessionElapsed + pausedTime
     const elapsed = totalElapsedSeconds / 3600
 
@@ -376,7 +377,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
           project_id: selectedProjectId,
           project_name: selectedProject || '',
           description: selectedDescription || '',
-          entry_date: new Date().toISOString().split('T')[0],
+          entry_date: getCurrentDate().toISOString().split('T')[0],
           hours: hours,
           hourly_rate: sessionData?.hourlyRate || 0,
           billable: sessionData?.billable ?? true,

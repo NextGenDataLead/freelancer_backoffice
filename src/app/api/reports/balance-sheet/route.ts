@@ -8,6 +8,7 @@ import {
   createApiResponse,
   createTransactionLog
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Schema for Balance Sheet report parameters
 const BalanceSheetQuerySchema = z.object({
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
     const validatedQuery = BalanceSheetQuerySchema.parse(queryParams)
     const asOfDate = validatedQuery.as_of_date 
       ? new Date(validatedQuery.as_of_date).toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0]
+      : getCurrentDate().toISOString().split('T')[0]
 
     // Get all invoices up to the date (assets: accounts receivable)
     const { data: invoices, error: invoicesError } = await supabaseAdmin
@@ -216,7 +217,7 @@ function calculateBalanceSheet(
 
   return {
     as_of_date: asOfDate,
-    generated_at: new Date().toISOString(),
+    generated_at: getCurrentDate().toISOString(),
     assets: {
       current_assets: {
         accounts_receivable: Math.round(accountsReceivable * 100) / 100,

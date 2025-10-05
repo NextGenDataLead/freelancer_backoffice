@@ -18,6 +18,7 @@ import {
   createTransactionLog,
   calculateInvoiceTotals
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * GET /api/invoices
@@ -157,7 +158,7 @@ export async function POST(request: Request) {
       .limit(1)
       .single()
 
-    const currentYear = new Date().getFullYear()
+    const currentYear = getCurrentDate().getFullYear()
     let nextNumber = 1
 
     if (lastInvoice?.invoice_number) {

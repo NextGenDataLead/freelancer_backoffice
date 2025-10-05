@@ -8,6 +8,7 @@ import {
   createTransactionLog,
   isValidUUID
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface RouteParams {
   params: {
@@ -74,7 +75,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // Prepare update data
     const updateData = {
       status: newStatus,
-      updated_at: new Date().toISOString()
+      updated_at: getCurrentDate().toISOString()
     }
 
     // Update expense approval status

@@ -5,6 +5,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * GET /api/time-entries/today
@@ -20,7 +21,7 @@ export async function GET() {
     }
 
     // Get today's date range
-    const today = new Date()
+    const today = getCurrentDate()
     const todayStart = new Date(today)
     todayStart.setHours(0, 0, 0, 0)
 

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { TimerDialog } from '@/components/financial/time/timer-dialog'
 import { useNotificationsStore } from '@/store/notifications-store'
+import { getCurrentDate } from '@/lib/current-date'
 import {
   Play,
   Pause,
@@ -112,7 +113,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
           project_name: entry.project || 'General',
           description: entry.description || '',
           hours: entry.hours || 0,
-          entry_date: entry.date || new Date().toISOString().split('T')[0]
+          entry_date: entry.date || getCurrentDate().toISOString().split('T')[0]
         }))
 
         setRecentEntries(formattedEntries)
@@ -132,7 +133,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
         const timerData = localStorage.getItem('activeTimerSession')
         if (timerData) {
           const timer = JSON.parse(timerData)
-          const now = new Date()
+          const now = getCurrentDate()
           const sessionStartTime = new Date(timer.startTime)
 
           // Only restore if session is less than 24 hours old
@@ -181,7 +182,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
   useEffect(() => {
     if (activeTimer?.isRunning) {
       intervalRef.current = setInterval(() => {
-        const now = new Date()
+        const now = getCurrentDate()
         const sessionStartTime = new Date(activeTimer.startTime)
         const currentSessionElapsed = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
         const totalElapsed = currentSessionElapsed + (activeTimer.pausedTime || 0)
@@ -232,7 +233,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
   }) => {
     const timerSession = {
       ...timerData,
-      startTime: new Date().toISOString(),
+      startTime: getCurrentDate().toISOString(),
       pausedTime: 0,
       isPaused: false
     }
@@ -250,7 +251,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
   const handlePauseTimer = () => {
     if (!activeTimer) return
 
-    const now = new Date()
+    const now = getCurrentDate()
     const sessionStartTime = new Date(activeTimer.startTime)
     const currentSessionElapsed = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
     const newPausedTime = (activeTimer.pausedTime || 0) + currentSessionElapsed
@@ -288,7 +289,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
 
     const updatedTimer = {
       ...activeTimer,
-      startTime: new Date().toISOString(),
+      startTime: getCurrentDate().toISOString(),
       isRunning: true,
       isPaused: false
     }
@@ -300,7 +301,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
     if (timerSession) {
       try {
         const sessionData = JSON.parse(timerSession)
-        sessionData.startTime = new Date().toISOString()
+        sessionData.startTime = getCurrentDate().toISOString()
         sessionData.isPaused = false
         localStorage.setItem('activeTimerSession', JSON.stringify(sessionData))
       } catch (e) {
@@ -312,7 +313,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
   const handleStopTimer = async () => {
     if (!activeTimer) return
 
-    const now = new Date()
+    const now = getCurrentDate()
     const sessionStartTime = new Date(activeTimer.startTime)
     const currentSessionElapsed = activeTimer.isRunning
       ? Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
@@ -329,7 +330,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
           project_id: activeTimer.projectId,
           project_name: activeTimer.project || '',
           description: activeTimer.description || '',
-          entry_date: new Date().toISOString().split('T')[0],
+          entry_date: getCurrentDate().toISOString().split('T')[0],
           hours: hours,
           hourly_rate: activeTimer.hourlyRate || 0,
           billable: activeTimer.billable ?? true,

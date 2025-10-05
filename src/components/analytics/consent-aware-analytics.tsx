@@ -8,6 +8,7 @@
 import { useEffect } from 'react'
 import { useAnalyticsConsent, useConsentAwareTracking } from '@/hooks/use-cookie-consent'
 import Script from 'next/script'
+import { getCurrentDate } from '../../lib/current-date'
 
 interface ConsentAwareAnalyticsProps {
   googleAnalyticsId?: string
@@ -93,7 +94,7 @@ export function ConsentAwareAnalytics({
               __html: `
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
+                gtag('js', getCurrentDate());
                 
                 // Set default consent to denied
                 gtag('consent', 'default', {

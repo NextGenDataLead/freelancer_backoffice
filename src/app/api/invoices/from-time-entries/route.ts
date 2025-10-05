@@ -6,6 +6,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Schema for creating invoice from time entries
 const CreateInvoiceFromTimeEntriesSchema = z.object({
@@ -251,7 +252,7 @@ export async function POST(request: Request) {
       .update({
         invoiced: true,
         invoice_id: invoice.id,
-        updated_at: new Date().toISOString()
+        updated_at: getCurrentDate().toISOString()
       })
       .in('id', validatedData.time_entry_ids)
 
@@ -293,7 +294,7 @@ export async function POST(request: Request) {
  * Format: YYYY-NNNN (e.g., 2025-0001)
  */
 async function generateInvoiceNumber(tenantId: string): Promise<string> {
-  const currentYear = new Date().getFullYear()
+  const currentYear = getCurrentDate().getFullYear()
   
   // Get the count of invoices for this tenant in the current year
   const { data: invoices, error } = await supabaseAdmin
@@ -307,7 +308,7 @@ async function generateInvoiceNumber(tenantId: string): Promise<string> {
   if (error) {
     console.error('Error fetching invoice count:', error)
     // Fallback to timestamp-based number
-    return `${currentYear}-${Date.now().toString().slice(-4)}`
+    return `${currentYear}-${getCurrentDate().getTime().toString().slice(-4)}`
   }
 
   let nextNumber = 1

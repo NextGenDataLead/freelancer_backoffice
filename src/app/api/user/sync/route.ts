@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { getCurrentDate } from '@/lib/current-date'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -79,7 +80,7 @@ export async function POST() {
       return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
 
-    const now = new Date().toISOString()
+    const now = getCurrentDate().toISOString()
 
     if (existingProfile) {
       // Update existing profile

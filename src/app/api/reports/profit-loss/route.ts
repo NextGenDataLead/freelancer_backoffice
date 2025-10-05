@@ -8,6 +8,7 @@ import {
   createApiResponse,
   createTransactionLog
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Schema for P&L report parameters
 const ProfitLossQuerySchema = z.object({
@@ -216,7 +217,7 @@ function calculateProfitLoss(
     period: {
       date_from: dateFrom,
       date_to: dateTo,
-      generated_at: new Date().toISOString()
+      generated_at: getCurrentDate().toISOString()
     },
     revenue: {
       total_invoiced: Math.round(totalRevenue * 100) / 100,

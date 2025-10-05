@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * Test endpoint to verify basic API functionality
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
       data: {
         year: parseInt(year),
         quarter: parseInt(quarter),
-        timestamp: new Date().toISOString()
+        timestamp: getCurrentDate().toISOString()
       }
     })
   } catch (error) {

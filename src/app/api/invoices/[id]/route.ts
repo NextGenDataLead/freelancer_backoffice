@@ -11,6 +11,7 @@ import {
   isValidUUID,
   calculateInvoiceTotals
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface RouteParams {
   params: {
@@ -213,7 +214,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       .from('invoices')
       .update({
         ...updateData,
-        updated_at: new Date().toISOString()
+        updated_at: getCurrentDate().toISOString()
       })
       .eq('id', invoiceId)
       .eq('tenant_id', profile.tenant_id)
@@ -313,7 +314,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       .update({
         invoiced: false,
         invoice_id: null,
-        updated_at: new Date().toISOString()
+        updated_at: getCurrentDate().toISOString()
       })
       .eq('invoice_id', invoiceId)
       .eq('tenant_id', profile.tenant_id)

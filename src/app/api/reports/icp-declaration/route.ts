@@ -6,6 +6,7 @@ import {
   ApiErrors, 
   createApiResponse 
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Validation schema for ICP declaration request
 const ICPDeclarationSchema = z.object({
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest) {
         quarter,
         date_from: quarterStart.toISOString().split('T')[0],
         date_to: quarterEnd.toISOString().split('T')[0],
-        generated_at: new Date().toISOString()
+        generated_at: getCurrentDate().toISOString()
       },
       goods_deliveries: [],
       services_provided: [],

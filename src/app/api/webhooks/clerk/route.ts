@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { WebhookEvent } from '@clerk/nextjs/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { webhookRateLimiter } from '@/lib/rate-limiter'
+import { getCurrentDate } from '@/lib/current-date'
 
 export async function POST(req: Request) {
   // Rate limiting
@@ -87,8 +88,8 @@ export async function POST(req: Request) {
           last_name,
           avatar_url: image_url,
           role: 'member', // Default role
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          created_at: getCurrentDate().toISOString(),
+          updated_at: getCurrentDate().toISOString()
           // Note: tenant_id will be set later when user joins/creates organization
         })
         .select()
@@ -137,7 +138,7 @@ export async function POST(req: Request) {
           first_name,
           last_name,
           avatar_url: image_url,
-          updated_at: new Date().toISOString(),
+          updated_at: getCurrentDate().toISOString(),
         })
         .eq('clerk_user_id', id)
 
@@ -166,7 +167,7 @@ export async function POST(req: Request) {
           first_name: 'Deleted',
           last_name: 'User',
           avatar_url: null,
-          updated_at: new Date().toISOString(),
+          updated_at: getCurrentDate().toISOString(),
         })
         .eq('clerk_user_id', id)
 

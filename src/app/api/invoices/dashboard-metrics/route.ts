@@ -5,6 +5,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * GET /api/invoices/dashboard-metrics
@@ -14,13 +15,15 @@ export async function GET(request: Request) {
   try {
     // Get authenticated user profile
     const profile = await getCurrentUserProfile()
-    
+
     if (!profile) {
       return NextResponse.json(ApiErrors.Unauthorized, { status: ApiErrors.Unauthorized.status })
     }
 
+    // Authentication verified - user profile loaded successfully
+
     // Get current date and calculate periods
-    const now = new Date()
+    const now = getCurrentDate()
     const currentYear = now.getFullYear()
     const currentMonth = now.getMonth() + 1 // 1-12
     
@@ -87,14 +90,30 @@ export async function GET(request: Request) {
       return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
     }
 
+    // Derive tenant-wide payment term baseline (default 30 days)
+    const tenantPaymentTermsBaseline = (() => {
+      const clientTerms = (clients || [])
+        .map(client => client?.default_payment_terms)
+        .filter((term): term is number => typeof term === 'number' && !Number.isNaN(term))
+
+      if (clientTerms.length === 0) {
+        return 30
+      }
+
+      return Math.max(30, ...clientTerms)
+    })()
+
     // 4. Calculate metrics
     const metrics = calculateDashboardMetrics(clients, timeEntries, invoices, {
       prevMonthStart,
       prevMonthEnd,
       prevWeekStart,
       prevWeekEnd,
-      today: now.toISOString().split('T')[0]
+      today: now.toISOString().split('T')[0],
+      tenantPaymentTermsBaseline
     })
+
+    // Dashboard metrics calculated successfully
 
     const response = createApiResponse(metrics, 'Dashboard metrics retrieved successfully')
     return NextResponse.json(response)
@@ -118,6 +137,7 @@ function calculateDashboardMetrics(
     prevWeekStart: string
     prevWeekEnd: string
     today: string
+    tenantPaymentTermsBaseline?: number
   }
 ) {
   // Create client lookup map
@@ -160,32 +180,49 @@ function calculateDashboardMetrics(
 
   // 1. FACTUREERBAAR - Time entries ready for invoicing based on frequency
   let factureerbaar = 0
-  
+  const readyToInvoiceEntries: Array<{ entryDate: string; readyDate: string; amount: number }> = []
+  const readyToInvoiceClients = new Set<string>()
+
   timeEntries.forEach(entry => {
     const client = clientMap.get(entry.client_id)
     if (!client) return
-    
+
     const entryDate = entry.entry_date
     const entryAmount = (entry.hours || 0) * (entry.hourly_rate || 0)
     let shouldInclude = false
-    
+    let readyDate = entryDate // When this entry became ready to invoice
+
     switch (client.invoicing_frequency) {
       case 'monthly':
         // Include everything up to and including the last day of previous month
         shouldInclude = entryDate <= periods.prevMonthEnd
+        // Ready date is the last day of the month the entry was made
+        if (shouldInclude) {
+          const entryDateObj = new Date(entryDate)
+          const lastDayOfMonth = new Date(entryDateObj.getFullYear(), entryDateObj.getMonth() + 1, 0)
+          readyDate = lastDayOfMonth.toISOString().split('T')[0]
+        }
         break
-      case 'weekly':  
+      case 'weekly':
         // Include if entry is from previous complete week
         shouldInclude = entryDate >= periods.prevWeekStart && entryDate <= periods.prevWeekEnd
+        // Ready date is the last day of that week
+        if (shouldInclude) {
+          readyDate = periods.prevWeekEnd
+        }
         break
       case 'on_demand':
         // Include all unbilled entries for on-demand
         shouldInclude = true
+        // Ready date is the entry date itself (can be invoiced immediately)
+        readyDate = entryDate
         break
     }
-    
+
     if (shouldInclude) {
       factureerbaar += entryAmount
+      readyToInvoiceEntries.push({ entryDate, readyDate, amount: entryAmount })
+      readyToInvoiceClients.add(entry.client_id)
     }
   })
 
@@ -210,29 +247,85 @@ function calculateDashboardMetrics(
 
   processedInvoices
     .filter(inv =>
-      inv.payment_status !== 'paid' &&
-      inv.status !== 'draft' &&
-      inv.status !== 'cancelled'
+      inv.status === 'overdue'  // FIXED: Only count invoices explicitly marked as overdue
     )
     .forEach(invoice => {
       const client = clientMap.get(invoice.client_id)
       if (!client) return
 
-      const dueDate = new Date(invoice.due_date)
-      const today = new Date(periods.today)
-
-      if (dueDate < today) {
-        achterstallig += invoice.outstanding_amount
-        achterstalligCount++
-      }
+      achterstallig += invoice.outstanding_amount
+      achterstalligCount++
     })
+
+  // 4. ACTUAL DSO CALCULATION - Average days from invoice to payment
+  let totalDSO = 0
+  let dsoInvoiceCount = 0
+  let totalPaymentTerms = 0
+  let paymentTermsCount = 0
+
+  processedInvoices.forEach(invoice => {
+    const invoiceDate = new Date(invoice.invoice_date)
+    const dueDate = new Date(invoice.due_date)
+
+    // Calculate payment terms for this invoice
+    const paymentTerms = Math.round((dueDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24))
+    if (paymentTerms > 0) {
+      totalPaymentTerms += paymentTerms
+      paymentTermsCount++
+    }
+
+    // Calculate actual DSO (days to payment or current date if unpaid)
+    let actualDays = 0
+
+    if (invoice.payment_status === 'paid' && invoice.invoice_payments && invoice.invoice_payments.length > 0) {
+      // For paid invoices, use the payment date
+      const paymentDate = new Date(invoice.invoice_payments[0].payment_date)
+      actualDays = Math.round((paymentDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24))
+    } else if (invoice.status === 'sent' || invoice.status === 'overdue' || invoice.status === 'partial') {
+      // For unpaid/partially paid invoices, use current date
+      const currentDate = new Date(periods.today)
+      actualDays = Math.round((currentDate.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24))
+    }
+    // Skip draft and cancelled invoices
+
+    if (actualDays > 0) {
+      totalDSO += actualDays
+      dsoInvoiceCount++
+    }
+  })
+
+  const averageDSO = dsoInvoiceCount > 0 ? Math.round((totalDSO / dsoInvoiceCount) * 10) / 10 : 0
+  const rawAveragePaymentTerms = paymentTermsCount > 0 ? Math.round(totalPaymentTerms / paymentTermsCount) : 30
+  const baselinePaymentTerms = periods.tenantPaymentTermsBaseline ?? 30
+  const averagePaymentTerms = Math.max(baselinePaymentTerms, rawAveragePaymentTerms)
+
+  // 5. DRI (Days Ready to Invoice) - Average days since work became ready to invoice
+  let totalDRI = 0
+  let driCount = 0
+  const currentDate = new Date(periods.today)
+
+  readyToInvoiceEntries.forEach(entry => {
+    const readyDateObj = new Date(entry.readyDate)
+    const daysReady = Math.round((currentDate.getTime() - readyDateObj.getTime()) / (1000 * 60 * 60 * 24))
+
+    if (daysReady >= 0) {
+      totalDRI += daysReady
+      driCount++
+    }
+  })
+
+  const averageDRI = driCount > 0 ? Math.round((totalDRI / driCount) * 10) / 10 : 0
 
   // Round up to 2 decimals as requested
   return {
     factureerbaar: Math.ceil(factureerbaar * 100) / 100,
+    factureerbaar_count: readyToInvoiceClients.size,
     totale_registratie: Math.ceil(totaleRegistratie * 100) / 100,
     achterstallig: Math.ceil(achterstallig * 100) / 100,
     achterstallig_count: achterstalligCount,
+    actual_dso: averageDSO,
+    average_payment_terms: averagePaymentTerms,
+    average_dri: averageDRI,
     period_info: {
       current_date: periods.today,
       previous_month: `${periods.prevMonthStart} to ${periods.prevMonthEnd}`,

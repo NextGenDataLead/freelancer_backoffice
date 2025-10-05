@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { getCookieConsent } from '@/lib/gdpr/cookie-manager'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * POST /api/user/export-data
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     // Generate comprehensive data export combining both systems
     const exportData = {
       meta: {
-        exportedAt: new Date().toISOString(),
+        exportedAt: getCurrentDate().toISOString(),
         exportVersion: '2.0', // Updated for revised data architecture
         userId: user.id,
         gdprCompliance: true,
@@ -136,13 +137,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log(`Data export completed for user ${userId} at ${new Date().toISOString()}`)
+    console.log(`Data export completed for user ${userId} at ${getCurrentDate().toISOString()}`)
 
     // Return the export data
     return NextResponse.json(exportData, {
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="user-data-export-${userId}-${new Date().toISOString().split('T')[0]}.json"`,
+        'Content-Disposition': `attachment; filename="user-data-export-${userId}-${getCurrentDate().toISOString().split('T')[0]}.json"`,
       },
     })
   } catch (error) {

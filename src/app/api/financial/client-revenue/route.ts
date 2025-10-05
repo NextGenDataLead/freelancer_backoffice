@@ -49,6 +49,50 @@ export async function GET() {
       throw timeError
     }
 
+    // Query rolling 30-day periods for health score metrics
+    // Current 30 days (last 30 days)
+    const last30DaysStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const { data: current30DaysEntries, error: current30Error } = await supabaseAdmin
+      .from('time_entries')
+      .select(`
+        hours,
+        hourly_rate,
+        effective_hourly_rate,
+        client_id,
+        client:clients(
+          id,
+          name,
+          company_name
+        )
+      `)
+      .eq('tenant_id', profile.tenant_id)
+      .gte('entry_date', last30DaysStart.toISOString().split('T')[0])
+      .lte('entry_date', now.toISOString().split('T')[0])
+
+    if (current30Error) throw current30Error
+
+    // Previous 30 days (days 31-60)
+    const previous30DaysStart = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
+    const previous30DaysEnd = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const { data: previous30DaysEntries, error: previous30Error } = await supabaseAdmin
+      .from('time_entries')
+      .select(`
+        hours,
+        hourly_rate,
+        effective_hourly_rate,
+        client_id,
+        client:clients(
+          id,
+          name,
+          company_name
+        )
+      `)
+      .eq('tenant_id', profile.tenant_id)
+      .gte('entry_date', previous30DaysStart.toISOString().split('T')[0])
+      .lt('entry_date', previous30DaysEnd.toISOString().split('T')[0])
+
+    if (previous30Error) throw previous30Error
+
     // Query clients for additional information
     const { data: clients, error: clientError } = await supabaseAdmin
       .from('clients')
@@ -229,11 +273,59 @@ export async function GET() {
       } : null
     }
 
+    // Calculate rolling 30-day client concentration metrics
+    // Helper function to calculate client revenue from entries
+    const calculateClientRevenue = (entries: any[]) => {
+      const clientMap = new Map()
+      let total = 0
+
+      entries?.forEach(entry => {
+        const clientId = entry.client_id
+        const effectiveRate = entry.effective_hourly_rate || entry.hourly_rate || 0
+        const revenue = entry.hours * effectiveRate
+        total += revenue
+
+        if (clientId) {
+          clientMap.set(clientId, (clientMap.get(clientId) || 0) + revenue)
+        }
+      })
+
+      return { clientMap, total }
+    }
+
+    // Current 30-day period
+    const current30Days = calculateClientRevenue(current30DaysEntries)
+    const current30DaysSorted = Array.from(current30Days.clientMap.entries())
+      .sort((a, b) => b[1] - a[1])
+    const current30DaysTopClientShare = current30Days.total > 0 && current30DaysSorted.length > 0
+      ? Math.round((current30DaysSorted[0][1] / current30Days.total) * 100 * 100) / 100
+      : 0
+
+    // Previous 30-day period
+    const previous30Days = calculateClientRevenue(previous30DaysEntries)
+    const previous30DaysSorted = Array.from(previous30Days.clientMap.entries())
+      .sort((a, b) => b[1] - a[1])
+    const previous30DaysTopClientShare = previous30Days.total > 0 && previous30DaysSorted.length > 0
+      ? Math.round((previous30DaysSorted[0][1] / previous30Days.total) * 100 * 100) / 100
+      : 0
+
+    const rolling30DaysComparison = {
+      current: {
+        topClientShare: current30DaysTopClientShare,
+        totalRevenue: Math.round(current30Days.total * 100) / 100
+      },
+      previous: {
+        topClientShare: previous30DaysTopClientShare,
+        totalRevenue: Math.round(previous30Days.total * 100) / 100
+      }
+    }
+
     const response = createApiResponse({
       clients: rankedData,
       saasRevenue: saasRevenueData,
       summary,
-      saasSummary
+      saasSummary,
+      rolling30DaysComparison
     }, 'Client and SaaS revenue distribution retrieved successfully')
 
     return NextResponse.json(response)

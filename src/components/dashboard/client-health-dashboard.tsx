@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
+import { 
   Dialog,
   DialogContent,
   DialogDescription,
@@ -12,8 +12,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import {
-  Users,
+import { getCurrentDate } from '../../../lib/current-date'
+import {  Users,
   TrendingUp,
   TrendingDown,
   AlertTriangle,
@@ -300,7 +300,7 @@ const calculateClientHealth = (client: ClientHealthData): ClientHealthScore => {
 
   // Engagement analysis (20 points max)
   const daysSinceActivity = Math.floor(
-    (Date.now() - new Date(client.engagement.lastActivity).getTime()) / (1000 * 60 * 60 * 24)
+    (getCurrentDate().getTime() - new Date(client.engagement.lastActivity).getTime()) / (1000 * 60 * 60 * 24)
   )
 
   let engagementTrend: 'up' | 'down' | 'stable' = 'stable'
@@ -431,8 +431,8 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
             const invoices = invoicesResult.data || []
 
             // Calculate this month's hours and revenue
-            const thisMonth = new Date().getMonth()
-            const thisYear = new Date().getFullYear()
+            const thisMonth = getCurrentDate().getMonth()
+            const thisYear = getCurrentDate().getFullYear()
             const thisMonthEntries = timeEntries.filter((entry: any) => {
               const entryDate = new Date(entry.entry_date)
               return entryDate.getMonth() === thisMonth && entryDate.getFullYear() === thisYear
@@ -456,7 +456,7 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
             const inactiveProjects = projects.filter((p: any) => p.active === false).length
 
             // Calculate overdue amounts from invoices (exclude cancelled invoices)
-            const currentDate = new Date()
+            const currentDate = getCurrentDate()
             const overdueInvoices = invoices.filter((invoice: any) => {
               const dueDate = new Date(invoice.due_date)
               const isPastDue = dueDate < currentDate
@@ -472,7 +472,7 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
 
             // Get last payment date from invoices
             const paidInvoices = invoices.filter((inv: any) => inv.paid_at).sort((a: any, b: any) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
-            const lastPaymentDate = paidInvoices.length > 0 ? paidInvoices[0].paid_at.split('T')[0] : new Date().toISOString().split('T')[0]
+            const lastPaymentDate = paidInvoices.length > 0 ? paidInvoices[0].paid_at.split('T')[0] : getCurrentDate().toISOString().split('T')[0]
 
             // Calculate average payment days from paid invoices
             const averagePaymentDays = paidInvoices.length > 0
@@ -504,7 +504,7 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
                 onHold: 0 // Not tracked in current schema
               },
               engagement: {
-                lastActivity: thisMonthEntries.length > 0 ? thisMonthEntries[thisMonthEntries.length - 1].entry_date : new Date().toISOString().split('T')[0],
+                lastActivity: thisMonthEntries.length > 0 ? thisMonthEntries[thisMonthEntries.length - 1].entry_date : getCurrentDate().toISOString().split('T')[0],
                 hoursThisMonth: thisMonthHours,
                 communicationScore: thisMonthHours > 10 ? 8 : thisMonthHours > 5 ? 6 : 4 // Simple scoring based on hours
               }

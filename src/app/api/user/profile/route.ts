@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { getCurrentDate } from '@/lib/current-date'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -92,7 +93,7 @@ export async function PUT(request: Request) {
     const updateData = {
       first_name: firstName,
       last_name: lastName,
-      updated_at: new Date().toISOString()
+      updated_at: getCurrentDate().toISOString()
     }
     console.log('Profile update - updating with data:', updateData)
 

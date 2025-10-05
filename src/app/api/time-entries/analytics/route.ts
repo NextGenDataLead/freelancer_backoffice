@@ -5,6 +5,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface WeeklyTimeData {
   week: string
@@ -46,7 +47,7 @@ export async function GET() {
     // Use latest entry date as "current" date, or fall back to today
     const referenceDate = latestEntry && latestEntry.length > 0
       ? new Date(latestEntry[0].entry_date)
-      : new Date()
+      : getCurrentDate()
 
     // Find Monday of the week containing the reference date
     const currentWeekMonday = new Date(referenceDate)
@@ -107,7 +108,7 @@ export async function GET() {
       const target = 35 // Weekly target hours
 
       // Use calendar week number
-      const weekLabel = week.year === new Date().getFullYear() ?
+      const weekLabel = week.year === getCurrentDate().getFullYear() ?
         `W${week.weekNumber}` :
         `W${week.weekNumber}'${week.year.toString().slice(-2)}`
 

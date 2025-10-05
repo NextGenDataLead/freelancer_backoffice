@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Calendar, ChevronDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { getCurrentDate } from '../../lib/current-date'
 
 interface DateRange {
   from: Date
@@ -20,28 +21,28 @@ interface DateRangePickerProps {
 
 const predefinedRanges: DateRange[] = [
   {
-    from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-    to: new Date(),
+    from: new Date(getCurrentDate().getTime() - 7 * 24 * 60 * 60 * 1000),
+    to: getCurrentDate(),
     label: 'Last 7 days'
   },
   {
-    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-    to: new Date(),
+    from: new Date(getCurrentDate().getTime() - 30 * 24 * 60 * 60 * 1000),
+    to: getCurrentDate(),
     label: 'Last 30 days'
   },
   {
-    from: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
-    to: new Date(),
+    from: new Date(getCurrentDate().getTime() - 90 * 24 * 60 * 60 * 1000),
+    to: getCurrentDate(),
     label: 'Last 3 months'
   },
   {
-    from: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
-    to: new Date(),
+    from: new Date(getCurrentDate().getTime() - 180 * 24 * 60 * 60 * 1000),
+    to: getCurrentDate(),
     label: 'Last 6 months'
   },
   {
-    from: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
-    to: new Date(),
+    from: new Date(getCurrentDate().getTime() - 365 * 24 * 60 * 60 * 1000),
+    to: getCurrentDate(),
     label: 'Last year'
   }
 ]

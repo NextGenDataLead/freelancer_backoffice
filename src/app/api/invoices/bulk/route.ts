@@ -7,6 +7,7 @@ import {
   createApiResponse
 } from '@/lib/supabase/financial-client'
 import type { InvoiceItem } from '@/lib/types/financial'
+import { getCurrentDate } from '@/lib/current-date'
 
 const BulkInvoiceCreationSchema = z.object({
   invoices: z.array(z.object({
@@ -214,8 +215,8 @@ export async function POST(request: Request) {
             client_id: invoiceData.client_id,
             invoice_number: invoiceNumber,
             status: 'draft',
-            invoice_date: new Date().toISOString().split('T')[0],
-            due_date: invoiceData.due_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            invoice_date: getCurrentDate().toISOString().split('T')[0],
+            due_date: invoiceData.due_date || new Date(getCurrentDate().getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             subtotal,
             vat_type: vatType,
             vat_rate: vatRate,
@@ -261,7 +262,7 @@ export async function POST(request: Request) {
             .update({
               invoiced: true,
               invoice_id: newInvoice.id,
-              updated_at: new Date().toISOString()
+              updated_at: getCurrentDate().toISOString()
             })
             .in('id', invoiceData.time_entry_ids)
 

@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { executeAccountDeletion, validateUserForDeletion, executeModernAccountDeletion } from '@/lib/deletion/account-cleanup'
+import { getCurrentDate } from '@/lib/current-date'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,7 +32,7 @@ const supabase = createClient(
  * Process all expired account deletion requests
  */
 export async function GET(req: NextRequest) {
-  const startTime = new Date()
+  const startTime = getCurrentDate()
   const results = {
     processed: 0,
     successful: 0,
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
     console.log('🤖 Starting automated deletion processing...')
 
     // Find all deletion requests where grace period has expired
-    const now = new Date()
+    const now = getCurrentDate()
     const { data: expiredDeletions, error: fetchError } = await supabase
       .from('deletion_requests')
       .select(`
@@ -101,7 +102,7 @@ export async function GET(req: NextRequest) {
       }
 
       results.processed++
-      const deletionStartTime = new Date()
+      const deletionStartTime = getCurrentDate()
 
       try {
         console.log(`Processing deletion ${deletionId} for user ${clerkUserId}`)
@@ -123,7 +124,7 @@ export async function GET(req: NextRequest) {
             deletionId,
             clerkUserId,
             status: 'success',
-            duration: new Date().getTime() - deletionStartTime.getTime()
+            duration: getCurrentDate().getTime() - deletionStartTime.getTime()
           })
         } else {
           console.error(`❌ Failed to delete user ${clerkUserId}:`, deletionResult.error)
@@ -135,7 +136,7 @@ export async function GET(req: NextRequest) {
             status: 'failed',
             error: deletionResult.error,
             details: deletionResult.details,
-            duration: new Date().getTime() - deletionStartTime.getTime()
+            duration: getCurrentDate().getTime() - deletionStartTime.getTime()
           })
         }
 
@@ -148,7 +149,7 @@ export async function GET(req: NextRequest) {
           clerkUserId,
           status: 'error',
           error: error instanceof Error ? error.message : 'Unknown error',
-          duration: new Date().getTime() - deletionStartTime.getTime()
+          duration: getCurrentDate().getTime() - deletionStartTime.getTime()
         })
       }
 
@@ -157,7 +158,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Create summary audit log
-    const totalDuration = new Date().getTime() - startTime.getTime()
+    const totalDuration = getCurrentDate().getTime() - startTime.getTime()
     
     try {
       await supabase
@@ -165,7 +166,7 @@ export async function GET(req: NextRequest) {
         .insert({
           user_id: null, // System-wide operation
           action: 'batch_deletion_processed',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentDate().toISOString(),
           metadata: {
             batch_id: `batch_${startTime.getTime()}`,
             processed: results.processed,
@@ -174,7 +175,7 @@ export async function GET(req: NextRequest) {
             skipped: results.skipped,
             total_duration_ms: totalDuration,
             started_at: startTime.toISOString(),
-            completed_at: new Date().toISOString(),
+            completed_at: getCurrentDate().toISOString(),
           },
         })
     } catch (auditError) {
@@ -202,7 +203,7 @@ export async function GET(req: NextRequest) {
         skipped: results.skipped,
         duration: totalDuration,
         startTime: startTime.toISOString(),
-        endTime: new Date().toISOString()
+        endTime: getCurrentDate().toISOString()
       },
       errors: results.errors.length > 0 ? results.errors : undefined,
       details: results.details
@@ -218,11 +219,11 @@ export async function GET(req: NextRequest) {
         .insert({
           user_id: null,
           action: 'batch_deletion_error',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentDate().toISOString(),
           metadata: {
             error: error instanceof Error ? error.message : 'Unknown critical error',
             started_at: startTime.toISOString(),
-            failed_at: new Date().toISOString(),
+            failed_at: getCurrentDate().toISOString(),
           },
         })
     } catch (auditError) {
@@ -249,7 +250,7 @@ export async function POST(req: NextRequest) {
 
     if (dryRun) {
       // Dry run mode - just show what would be deleted
-      const now = new Date()
+      const now = getCurrentDate()
       const { data: expiredDeletions, error } = await supabase
         .from('deletion_requests')
         .select(`

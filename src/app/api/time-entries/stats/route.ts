@@ -5,6 +5,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * GET /api/time-entries/stats
@@ -20,7 +21,7 @@ export async function GET() {
     }
 
     // Get current week date range (Monday to Sunday)
-    const now = new Date()
+    const now = getCurrentDate()
     const currentWeekStart = new Date(now)
     const dayOfWeek = now.getDay() // 0 = Sunday, 1 = Monday, etc.
     const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek // Sunday should go back 6 days
@@ -65,22 +66,48 @@ export async function GET() {
     // Query this month's hours and revenue
     const { data: thisMonthEntries, error: thisMonthError } = await supabaseAdmin
       .from('time_entries')
-      .select('hours, hourly_rate, effective_hourly_rate')
+      .select('hours, hourly_rate, effective_hourly_rate, billable')
       .eq('tenant_id', profile.tenant_id)
       .gte('entry_date', currentMonthStart.toISOString().split('T')[0])
       .lte('entry_date', currentMonthEnd.toISOString().split('T')[0])
 
     if (thisMonthError) throw thisMonthError
 
-    // Query unbilled hours (billable but not invoiced)
+    // Query unbilled hours (billable but not invoiced) - filtered to current month
     const { data: unbilledEntries, error: unbilledError } = await supabaseAdmin
       .from('time_entries')
       .select('hours, hourly_rate, effective_hourly_rate')
       .eq('tenant_id', profile.tenant_id)
       .eq('billable', true)
       .eq('invoiced', false)
+      .gte('entry_date', currentMonthStart.toISOString().split('T')[0])
+      .lte('entry_date', currentMonthEnd.toISOString().split('T')[0])
 
     if (unbilledError) throw unbilledError
+
+    // Query rolling 30-day periods for health score metrics
+    // Current 30 days (last 30 days)
+    const last30DaysStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const { data: current30DaysEntries, error: current30Error } = await supabaseAdmin
+      .from('time_entries')
+      .select('hours, hourly_rate, effective_hourly_rate, billable, entry_date')
+      .eq('tenant_id', profile.tenant_id)
+      .gte('entry_date', last30DaysStart.toISOString().split('T')[0])
+      .lte('entry_date', now.toISOString().split('T')[0])
+
+    if (current30Error) throw current30Error
+
+    // Previous 30 days (days 31-60)
+    const previous30DaysStart = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
+    const previous30DaysEnd = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const { data: previous30DaysEntries, error: previous30Error } = await supabaseAdmin
+      .from('time_entries')
+      .select('hours, hourly_rate, effective_hourly_rate, billable, entry_date')
+      .eq('tenant_id', profile.tenant_id)
+      .gte('entry_date', previous30DaysStart.toISOString().split('T')[0])
+      .lt('entry_date', previous30DaysEnd.toISOString().split('T')[0])
+
+    if (previous30Error) throw previous30Error
 
     // Query active projects and clients
     const { data: projectStats, error: projectError } = await supabaseAdmin
@@ -114,6 +141,13 @@ export async function GET() {
       return sum + (entry.hours * effectiveRate)
     }, 0) || 0
 
+    // Calculate billable hours for this month (includes both billed and unbilled)
+    // billable = true or null (default is billable), non-billable = false
+    const thisMonthBillableHours = thisMonthEntries?.filter(entry => entry.billable === true || entry.billable === null)
+      .reduce((sum, entry) => sum + entry.hours, 0) || 0
+    const thisMonthNonBillableHours = thisMonthEntries?.filter(entry => entry.billable === false)
+      .reduce((sum, entry) => sum + entry.hours, 0) || 0
+
     // Calculate unique projects and clients
     const uniqueProjects = new Set()
     const uniqueClients = new Set(projectStats?.filter(p => p.client_id).map(p => p.client_id))
@@ -127,6 +161,40 @@ export async function GET() {
       }
     })
 
+    // Calculate distinct working days this month
+    const distinctWorkingDays = new Set(
+      thisMonthEntries?.map(entry => entry.entry_date) || []
+    ).size
+
+    // Calculate rolling 30-day metrics for health score
+    // Current period (last 30 days)
+    const current30DaysBillableRevenue = current30DaysEntries
+      ?.filter(e => e.billable !== false)
+      .reduce((sum, e) => sum + (e.hours * (e.effective_hourly_rate || e.hourly_rate || 0)), 0) || 0
+
+    const current30DaysDistinctWorkingDays = new Set(
+      current30DaysEntries?.map(e => e.entry_date) || []
+    ).size
+
+    const current30DaysHours = current30DaysEntries?.reduce((sum, e) => sum + e.hours, 0) || 0
+    const current30DaysDailyHours = current30DaysDistinctWorkingDays > 0
+      ? current30DaysHours / current30DaysDistinctWorkingDays
+      : 0
+
+    // Previous period (days 31-60)
+    const previous30DaysBillableRevenue = previous30DaysEntries
+      ?.filter(e => e.billable !== false)
+      .reduce((sum, e) => sum + (e.hours * (e.effective_hourly_rate || e.hourly_rate || 0)), 0) || 0
+
+    const previous30DaysDistinctWorkingDays = new Set(
+      previous30DaysEntries?.map(e => e.entry_date) || []
+    ).size
+
+    const previous30DaysHours = previous30DaysEntries?.reduce((sum, e) => sum + e.hours, 0) || 0
+    const previous30DaysDailyHours = previous30DaysDistinctWorkingDays > 0
+      ? previous30DaysHours / previous30DaysDistinctWorkingDays
+      : 0
+
     // Get subscription metrics for SaaS dashboard cards
     const subscriptionMetrics = await calculateSubscriptionMetrics(profile.tenant_id, currentMonthStart, currentMonthEnd)
 
@@ -138,7 +206,10 @@ export async function GET() {
       },
       thisMonth: {
         hours: Math.round(thisMonthHours * 10) / 10,
-        revenue: Math.round(thisMonthRevenue * 100) / 100 // Round to 2 decimals
+        revenue: Math.round(thisMonthRevenue * 100) / 100, // Round to 2 decimals
+        billableHours: Math.round(thisMonthBillableHours * 10) / 10,
+        nonBillableHours: Math.round(thisMonthNonBillableHours * 10) / 10,
+        distinctWorkingDays // Add distinct working days count
       },
       unbilled: {
         hours: Math.round(unbilledHours * 10) / 10,
@@ -148,7 +219,21 @@ export async function GET() {
         count: uniqueProjects.size,
         clients: uniqueClients.size
       },
-      subscription: subscriptionMetrics
+      subscription: subscriptionMetrics,
+      rolling30Days: {
+        current: {
+          billableRevenue: Math.round(current30DaysBillableRevenue * 100) / 100,
+          distinctWorkingDays: current30DaysDistinctWorkingDays,
+          totalHours: Math.round(current30DaysHours * 10) / 10,
+          dailyHours: Math.round(current30DaysDailyHours * 10) / 10
+        },
+        previous: {
+          billableRevenue: Math.round(previous30DaysBillableRevenue * 100) / 100,
+          distinctWorkingDays: previous30DaysDistinctWorkingDays,
+          totalHours: Math.round(previous30DaysHours * 10) / 10,
+          dailyHours: Math.round(previous30DaysDailyHours * 10) / 10
+        }
+      }
     }
 
     const response = createApiResponse(stats, 'Time tracking statistics retrieved successfully')

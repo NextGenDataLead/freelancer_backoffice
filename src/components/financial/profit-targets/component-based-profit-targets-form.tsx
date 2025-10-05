@@ -25,13 +25,15 @@ export function ComponentBasedProfitTargetsForm({
   const [formData, setFormData] = useState({
     monthly_hours_target: 0, // 0 = not configured
     target_hourly_rate: 0,
+    target_billable_ratio: 90, // Target percentage of hours that should be billable (0-100)
+    target_working_days_per_week: [1, 2, 3, 4, 5], // Monday-Friday by default
     target_monthly_active_users: 0,
     target_avg_subscription_fee: 0,
     monthly_cost_target: 750
   })
 
-  // Track which revenue streams are enabled
-  const [timeBasedEnabled, setTimeBasedEnabled] = useState(false)
+  // Track which revenue streams are enabled - time-based always enabled
+  const [timeBasedEnabled, setTimeBasedEnabled] = useState(true) // Always enabled for freelancers
   const [subscriptionEnabled, setSubscriptionEnabled] = useState(false)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -39,19 +41,29 @@ export function ComponentBasedProfitTargetsForm({
   // Load existing targets when component mounts
   useEffect(() => {
     if (targets) {
-      const hasTimeBased = (targets.monthly_hours_target || 0) > 0 && (targets.target_hourly_rate || 0) > 0
       const hasSubscription = (targets.target_monthly_active_users || 0) > 0 && (targets.target_avg_subscription_fee || 0) > 0
 
       setFormData({
-        monthly_hours_target: targets.monthly_hours_target || 0,
-        target_hourly_rate: targets.target_hourly_rate || 0,
+        monthly_hours_target: targets.monthly_hours_target || 160, // Default to 160h for time-based
+        target_hourly_rate: targets.target_hourly_rate || 75, // Default to €75/h
+        target_billable_ratio: targets.target_billable_ratio || 90, // Default to 90%
+        target_working_days_per_week: targets.target_working_days_per_week || [1, 2, 3, 4, 5], // Default Mon-Fri
         target_monthly_active_users: targets.target_monthly_active_users || 0,
         target_avg_subscription_fee: targets.target_avg_subscription_fee || 0,
         monthly_cost_target: targets.monthly_cost_target || 750
       })
 
-      setTimeBasedEnabled(hasTimeBased)
+      // Time-based is always enabled, only check subscription status
       setSubscriptionEnabled(hasSubscription)
+    } else {
+      // Set defaults for new users - time-based enabled by default
+      setFormData(prev => ({
+        ...prev,
+        monthly_hours_target: 160,
+        target_hourly_rate: 75,
+        target_billable_ratio: 90,
+        target_working_days_per_week: [1, 2, 3, 4, 5]
+      }))
     }
   }, [targets])
 
@@ -68,23 +80,45 @@ export function ComponentBasedProfitTargetsForm({
     }))
   }
 
+  const toggleWorkingDay = (day: number) => {
+    setFormData(prev => {
+      const currentDays = prev.target_working_days_per_week
+      const isSelected = currentDays.includes(day)
+
+      // Don't allow deselecting if it's the last day
+      if (isSelected && currentDays.length === 1) {
+        return prev
+      }
+
+      const newDays = isSelected
+        ? currentDays.filter(d => d !== day)
+        : [...currentDays, day].sort((a, b) => a - b)
+
+      return {
+        ...prev,
+        target_working_days_per_week: newDays
+      }
+    })
+  }
+
   const validateForm = (): string[] => {
     const errors: string[] = []
 
-    // Check that at least one revenue stream is enabled
-    if (!timeBasedEnabled && !subscriptionEnabled) {
-      errors.push('At least one revenue stream must be enabled (Time-based or Subscription)')
+    // Time-based validation (always required since always enabled)
+    if (formData.monthly_hours_target < 1 || formData.monthly_hours_target > 300) {
+      errors.push('Monthly hours target must be between 1 and 300')
     }
 
-    // Validate time-based stream if enabled
-    if (timeBasedEnabled) {
-      if (formData.monthly_hours_target < 1 || formData.monthly_hours_target > 300) {
-        errors.push('Monthly hours target must be between 1 and 300')
-      }
+    if (formData.target_hourly_rate < 1 || formData.target_hourly_rate > 500) {
+      errors.push('Target hourly rate must be between €1 and €500')
+    }
 
-      if (formData.target_hourly_rate < 1 || formData.target_hourly_rate > 500) {
-        errors.push('Target hourly rate must be between €1 and €500')
-      }
+    if (formData.target_billable_ratio < 50 || formData.target_billable_ratio > 100) {
+      errors.push('Target billable ratio must be between 50% and 100%')
+    }
+
+    if (!formData.target_working_days_per_week || formData.target_working_days_per_week.length === 0) {
+      errors.push('At least one working day must be selected')
     }
 
     // Validate subscription stream if enabled
@@ -128,6 +162,8 @@ export function ComponentBasedProfitTargetsForm({
         // Send actual values for enabled streams, 0 for disabled streams
         monthly_hours_target: timeBasedEnabled ? formData.monthly_hours_target : 0,
         target_hourly_rate_cents: timeBasedEnabled ? formData.target_hourly_rate * 100 : 0,
+        target_billable_ratio: timeBasedEnabled ? formData.target_billable_ratio : 90,
+        target_working_days_per_week: timeBasedEnabled ? formData.target_working_days_per_week : [1, 2, 3, 4, 5],
         target_monthly_active_users: subscriptionEnabled ? formData.target_monthly_active_users : 0,
         target_avg_subscription_fee_cents: subscriptionEnabled ? formData.target_avg_subscription_fee * 100 : 0,
         setup_step_completed: 3
@@ -169,86 +205,121 @@ export function ComponentBasedProfitTargetsForm({
             <h3 className="text-lg font-semibold">Time-Based Revenue Targets</h3>
           </div>
           <div className="flex items-center gap-2">
-            <Label htmlFor="time-based-toggle" className="text-sm font-medium">
-              Enable
-            </Label>
-            <Switch
-              id="time-based-toggle"
-              checked={timeBasedEnabled}
-              onCheckedChange={(checked) => {
-                setTimeBasedEnabled(checked)
-                if (!checked) {
-                  // Clear values when disabled
-                  setFormData(prev => ({
-                    ...prev,
-                    monthly_hours_target: 0,
-                    target_hourly_rate: 0
-                  }))
-                } else {
-                  // Set default values when enabled
-                  setFormData(prev => ({
-                    ...prev,
-                    monthly_hours_target: prev.monthly_hours_target || 160,
-                    target_hourly_rate: prev.target_hourly_rate || 75
-                  }))
-                }
-              }}
-            />
+            <div className="inline-flex items-center px-2 py-1 rounded-md bg-green-100 text-green-700 border border-green-200 text-xs font-medium">
+              Always Enabled
+            </div>
           </div>
         </div>
 
-        {timeBasedEnabled ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="monthly_hours_target" className="text-sm font-medium">
-                  Monthly Hours Target
-                </Label>
-                <Input
-                  id="monthly_hours_target"
-                  type="number"
-                  min="1"
-                  max="300"
-                  value={formData.monthly_hours_target || ''}
-                  onChange={(e) => handleInputChange('monthly_hours_target', parseInt(e.target.value) || 0)}
-                  className="mt-1"
-                  placeholder="160"
-                />
-                <p className="text-xs text-muted-foreground mt-1">Target billable hours per month (1-300)</p>
-              </div>
-              <div>
-                <Label htmlFor="target_hourly_rate" className="text-sm font-medium">
-                  Target Hourly Rate (€)
-                </Label>
-                <Input
-                  id="target_hourly_rate"
-                  type="number"
-                  min="1"
-                  max="500"
-                  value={formData.target_hourly_rate || ''}
-                  onChange={(e) => handleInputChange('target_hourly_rate', parseInt(e.target.value) || 0)}
-                  className="mt-1"
-                  placeholder="75"
-                />
-                <p className="text-xs text-muted-foreground mt-1">Average rate per billable hour (€1-€500)</p>
-              </div>
-            </div>
-            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-blue-600" />
-                <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                  Time-based Revenue: €{timeBasedRevenue.toLocaleString()}/month
-                </p>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="p-4 bg-gray-50 dark:bg-gray-900/20 rounded-lg text-center">
-            <p className="text-sm text-muted-foreground">
-              Time-based revenue stream is disabled. Enable it to set hourly targets.
+        <p className="text-sm text-muted-foreground mb-4">
+          Core revenue stream for freelancers and consultants. Set your target billable hours and desired hourly rate.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <Label htmlFor="monthly_hours_target" className="text-sm font-medium">
+              Monthly Hours Target
+            </Label>
+            <Input
+              id="monthly_hours_target"
+              type="number"
+              min="1"
+              max="300"
+              value={formData.monthly_hours_target || ''}
+              onChange={(e) => handleInputChange('monthly_hours_target', parseInt(e.target.value) || 0)}
+              className="mt-1"
+              placeholder="160"
+              required
+            />
+            <p className="text-xs text-muted-foreground mt-1">Target billable hours per month (1-300)</p>
+          </div>
+          <div>
+            <Label htmlFor="target_hourly_rate" className="text-sm font-medium">
+              Target Hourly Rate (€)
+            </Label>
+            <Input
+              id="target_hourly_rate"
+              type="number"
+              min="1"
+              max="500"
+              value={formData.target_hourly_rate || ''}
+              onChange={(e) => handleInputChange('target_hourly_rate', parseInt(e.target.value) || 0)}
+              className="mt-1"
+              placeholder="75"
+              required
+            />
+            <p className="text-xs text-muted-foreground mt-1">Average rate per billable hour (€1-€500)</p>
+          </div>
+          <div>
+            <Label htmlFor="target_billable_ratio" className="text-sm font-medium">
+              Target Billable Ratio (%)
+            </Label>
+            <Input
+              id="target_billable_ratio"
+              type="number"
+              min="50"
+              max="100"
+              value={formData.target_billable_ratio || ''}
+              onChange={(e) => handleInputChange('target_billable_ratio', parseInt(e.target.value) || 0)}
+              className="mt-1"
+              placeholder="90"
+              required
+            />
+            <p className="text-xs text-muted-foreground mt-1">Target percentage of tracked hours that should be billable (50-100%)</p>
+          </div>
+        </div>
+
+        {/* Working Days Selector */}
+        <div className="mt-4">
+          <Label className="text-sm font-medium mb-2 block">
+            Working Days per Week
+          </Label>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { day: 1, label: 'Mon' },
+              { day: 2, label: 'Tue' },
+              { day: 3, label: 'Wed' },
+              { day: 4, label: 'Thu' },
+              { day: 5, label: 'Fri' },
+              { day: 6, label: 'Sat' },
+              { day: 7, label: 'Sun' }
+            ].map(({ day, label }) => {
+              const isSelected = formData.target_working_days_per_week.includes(day)
+              const isOnlySelected = isSelected && formData.target_working_days_per_week.length === 1
+
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleWorkingDay(day)}
+                  disabled={isOnlySelected}
+                  className={`
+                    px-4 py-2 rounded-md text-sm font-medium transition-colors
+                    ${isSelected
+                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }
+                    ${isOnlySelected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                  `}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Select your typical working days (at least one required)
+          </p>
+        </div>
+
+        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-blue-600" />
+            <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+              Time-based Revenue: €{timeBasedRevenue.toLocaleString()}/month
             </p>
           </div>
-        )}
+        </div>
       </Card>
 
       {/* Subscription Revenue Section */}
@@ -256,11 +327,14 @@ export function ComponentBasedProfitTargetsForm({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            <h3 className="text-lg font-semibold">Subscription Revenue Targets</h3>
+            <h3 className="text-lg font-semibold">SaaS Revenue Targets</h3>
+            <div className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-700 border border-blue-200 text-xs font-medium">
+              Optional
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="subscription-toggle" className="text-sm font-medium">
-              Enable
+              Enable SaaS Revenue
             </Label>
             <Switch
               id="subscription-toggle"
@@ -286,6 +360,10 @@ export function ComponentBasedProfitTargetsForm({
             />
           </div>
         </div>
+
+        <p className="text-sm text-muted-foreground mb-4">
+          Only enable this if you have SaaS products, subscriptions, or recurring revenue streams alongside your time-based work.
+        </p>
 
         {subscriptionEnabled ? (
           <>
@@ -335,7 +413,7 @@ export function ComponentBasedProfitTargetsForm({
         ) : (
           <div className="p-4 bg-gray-50 dark:bg-gray-900/20 rounded-lg text-center">
             <p className="text-sm text-muted-foreground">
-              Subscription revenue stream is disabled. Enable it to set subscriber targets.
+              SaaS revenue stream is disabled. Most freelancers only need time-based revenue tracking. Enable SaaS revenue only if you have subscription products or recurring revenue streams.
             </p>
           </div>
         )}

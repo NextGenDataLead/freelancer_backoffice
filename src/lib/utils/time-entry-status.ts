@@ -1,4 +1,5 @@
 import type { TimeEntry, Client } from '@/lib/types/financial'
+import { getCurrentDate } from '@/lib/current-date'
 
 export type TimeEntryStatus = 'niet-factureerbaar' | 'factureerbaar' | 'gefactureerd'
 
@@ -15,7 +16,7 @@ export interface TimeEntryStatusInfo {
 export function isReadyForInvoicing(
   entryDate: Date,
   client: Client,
-  currentDate: Date = new Date()
+  currentDate: Date = getCurrentDate()
 ): { ready: boolean; reason: string } {
   const frequency = client.invoicing_frequency || 'on_demand'
   
@@ -75,7 +76,7 @@ export function isReadyForInvoicing(
 export function getTimeEntryStatus(
   timeEntry: TimeEntry,
   client: Client,
-  currentDate: Date = new Date()
+  currentDate: Date = getCurrentDate()
 ): TimeEntryStatusInfo {
 
   // Status 3: Already invoiced (purple) - prevents editing
@@ -139,7 +140,7 @@ function getMonthName(month: number): string {
 export function getTimeEntriesStatus(
   timeEntries: TimeEntry[],
   client: Client,
-  currentDate: Date = new Date()
+  currentDate: Date = getCurrentDate()
 ): Map<string, TimeEntryStatusInfo> {
   const statusMap = new Map<string, TimeEntryStatusInfo>()
   
@@ -158,7 +159,7 @@ export function getTimeEntriesStatus(
 export function getTimeEntryStatusSummary(
   timeEntries: TimeEntry[],
   client: Client,
-  currentDate: Date = new Date()
+  currentDate: Date = getCurrentDate()
 ): {
   nietFactureerbaar: number
   factureerbaar: number

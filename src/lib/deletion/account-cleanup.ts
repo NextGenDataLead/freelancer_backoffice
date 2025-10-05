@@ -12,6 +12,7 @@
 import { clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
 import { performSoftDeletion, SoftDeletionResult } from './soft-deletion'
+import { getCurrentDate } from '../current-date'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -316,12 +317,12 @@ export async function executeAccountDeletion(clerkUserId: string): Promise<Delet
         .insert({
           user_id: dbUserId,
           action: 'deletion_executed',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentDate().toISOString(),
           metadata: {
             clerk_user_id: clerkUserId,
             deletion_method: 'automated_grace_period_expired',
             final_deletion: true,
-            initiated_at: new Date().toISOString(),
+            initiated_at: getCurrentDate().toISOString(),
           },
         })
       console.log('✅ Created final GDPR audit log')
@@ -347,12 +348,12 @@ export async function executeAccountDeletion(clerkUserId: string): Promise<Delet
         .from('deletion_requests')
         .update({
           status: newStatus,
-          completed_at: new Date().toISOString(),
+          completed_at: getCurrentDate().toISOString(),
           metadata: {
             clerk_deleted: clerkDeleted,
             supabase_deleted: supabaseResult.success,
             supabase_partial_failures: supabaseResult.partialFailures,
-            final_completion_time: new Date().toISOString(),
+            final_completion_time: getCurrentDate().toISOString(),
           }
         })
         .eq('user_id', dbUserId)
@@ -405,7 +406,7 @@ export async function executeAccountDeletion(clerkUserId: string): Promise<Delet
               error: error instanceof Error ? error.message : 'Unknown critical error',
               clerk_deleted: clerkDeleted,
               supabase_deleted: supabaseResult.success,
-              failed_at: new Date().toISOString(),
+              failed_at: getCurrentDate().toISOString(),
             }
           })
           .eq('user_id', dbUserId)
@@ -534,7 +535,7 @@ export async function executeModernAccountDeletion(
           .from('deletion_requests')
           .update({
             status: 'completed',
-            completed_at: new Date().toISOString(),
+            completed_at: getCurrentDate().toISOString(),
             metadata: {
               ...reason && { reason },
               clerk_user_id: clerkUserId,
@@ -542,7 +543,7 @@ export async function executeModernAccountDeletion(
               deletion_method: 'soft_deletion_with_anonymization',
               clerk_deleted: result.clerkDeleted,
               supabase_anonymized: result.userAnonymized,
-              completed_at: new Date().toISOString()
+              completed_at: getCurrentDate().toISOString()
             }
           })
           .eq('user_id', result.anonymizedUserId)

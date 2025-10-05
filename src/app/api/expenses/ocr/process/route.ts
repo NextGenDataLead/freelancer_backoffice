@@ -9,6 +9,7 @@ import {
   createApiResponse,
   createTransactionLog
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Schema for OCR processing request
 const OCRProcessRequestSchema = z.object({
@@ -161,7 +162,7 @@ async function simulateOCRProcessing(
   // Mock extracted data - in reality this would come from OCR service
   const mockData = {
     supplier_name: supplierHint || 'Office Supplies Store',
-    expense_date: new Date().toISOString().split('T')[0],
+    expense_date: getCurrentDate().toISOString().split('T')[0],
     description: 'Office supplies - printer paper and ink',
     category: (categoryHint as any) || 'office_supplies',
     amount: 45.50,

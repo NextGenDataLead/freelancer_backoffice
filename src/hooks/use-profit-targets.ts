@@ -11,6 +11,8 @@ interface ProfitTarget {
   // Component-based targets
   monthly_hours_target: number
   target_hourly_rate: number
+  target_billable_ratio: number
+  target_working_days_per_week: number[]
   target_monthly_active_users: number
   target_avg_subscription_fee: number
   currency_code?: string
@@ -50,6 +52,8 @@ export function useProfitTargets() {
     monthly_cost_target_cents: number
     monthly_hours_target?: number
     target_hourly_rate_cents?: number
+    target_billable_ratio?: number
+    target_working_days_per_week?: number[]
     target_monthly_active_users?: number
     target_avg_subscription_fee_cents?: number
     setup_step_completed?: number

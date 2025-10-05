@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PaymentProviderFactory } from '@/lib/payments/payment-provider-factory';
 import type { PaymentProviderName, WebhookEvent } from '@/lib/payments/types';
 import { createClient } from '@supabase/supabase-js';
+import { getCurrentDate } from '@/lib/current-date';
 
 // Initialize Supabase client
 const supabase = createClient(
@@ -60,7 +61,7 @@ class WebhookProcessor {
       amount: this.extractAmount(event),
       currency: this.extractCurrency(event) || 'EUR',
       status: 'paid',
-      payment_date: new Date().toISOString(),
+      payment_date: getCurrentDate().toISOString(),
       description: 'Platform subscription payment',
       provider_data: {
         payment_id: providerPaymentId,
@@ -125,10 +126,10 @@ class WebhookProcessor {
         .update({
           provider_data: {
             ...subscription.provider_data,
-            last_webhook_update: new Date().toISOString(),
+            last_webhook_update: getCurrentDate().toISOString(),
             latest_provider_data: event.data
           },
-          updated_at: new Date().toISOString()
+          updated_at: getCurrentDate().toISOString()
         })
         .eq('id', subscription.id);
     }
@@ -236,10 +237,10 @@ class WebhookProcessor {
       .update({
         status,
         provider_data: {
-          last_webhook_update: new Date().toISOString(),
+          last_webhook_update: getCurrentDate().toISOString(),
           webhook_event_id: event.id
         },
-        updated_at: new Date().toISOString()
+        updated_at: getCurrentDate().toISOString()
       })
       .eq(`provider_data->subscription_id`, providerSubscriptionId)
       .eq('payment_provider', event.provider);

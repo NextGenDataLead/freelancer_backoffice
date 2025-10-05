@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ProjectList } from '@/components/financial/projects/project-list'
 import { ProjectForm } from '@/components/financial/projects/project-form'
 import type { ClientWithInvoices } from '@/lib/types/financial'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Health data interface for table insights
 interface ClientHealthInsight {
@@ -138,8 +139,8 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
           }
 
           // Calculate this month's data
-          const thisMonth = new Date().getMonth() // 0-indexed: September = 8
-          const thisYear = new Date().getFullYear()
+          const thisMonth = getCurrentDate().getMonth() // 0-indexed: September = 8
+          const thisYear = getCurrentDate().getFullYear()
 
           // Debug: Log current month calculation
           if (clientIds.indexOf(clientId) === 0) {
@@ -192,7 +193,7 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
           }
 
           // Calculate overdue amount
-          const currentDate = new Date()
+          const currentDate = getCurrentDate()
           const overdueInvoices = invoices.filter((invoice: any) => {
             const dueDate = new Date(invoice.due_date)
             const isPastDue = dueDate < currentDate
@@ -211,7 +212,7 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
             ? thisMonthEntries[thisMonthEntries.length - 1].entry_date
             : timeEntries.length > 0
               ? timeEntries[timeEntries.length - 1].entry_date
-              : new Date().toISOString().split('T')[0]
+              : getCurrentDate().toISOString().split('T')[0]
 
           // Use the same client health algorithm as dashboard
           let healthScore = 100
@@ -235,7 +236,7 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
 
           // Engagement analysis (20 points max) - same as dashboard
           const daysSinceActivity = Math.floor(
-            (Date.now() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24)
+            (getCurrentDate().getTime() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24)
           )
           if (daysSinceActivity > 30) {
             healthScore -= 15
@@ -275,7 +276,7 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
             overdueAmount: 0, // Assume no overdue for fallback
             healthScore: 85, // Good health score for fallback
             trend: 'stable',
-            lastActivity: new Date().toISOString().split('T')[0]
+            lastActivity: getCurrentDate().toISOString().split('T')[0]
           })
 
           console.log(`Using fallback data for client ${clientName} (${clientId})`)
@@ -308,7 +309,7 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
           overdueAmount: 0,
           healthScore: 85,
           trend: 'stable',
-          lastActivity: new Date().toISOString().split('T')[0]
+          lastActivity: getCurrentDate().toISOString().split('T')[0]
         })
       })
 

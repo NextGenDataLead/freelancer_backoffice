@@ -12,6 +12,7 @@ import type {
   ValidateBTWFormRequest,
   RecalculateBTWFormRequest
 } from '@/lib/types/btw-corrected'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * GET /api/reports/btw-corrected
@@ -28,8 +29,8 @@ export async function GET(request: Request) {
 
     // Parse query parameters
     const { searchParams } = new URL(request.url)
-    const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString())
-    const quarter = parseInt(searchParams.get('quarter') || Math.ceil((new Date().getMonth() + 1) / 3).toString())
+    const year = parseInt(searchParams.get('year') || getCurrentDate().getFullYear().toString())
+    const quarter = parseInt(searchParams.get('quarter') || Math.ceil((getCurrentDate().getMonth() + 1) / 3).toString())
 
     // Validate parameters
     if (year < 2020 || year > 2099 || quarter < 1 || quarter > 4) {
@@ -69,7 +70,7 @@ export async function GET(request: Request) {
     const response: GenerateBTWFormResponse = {
       tenant_id: profile.tenant_id,
       period: { year, quarter },
-      generated_at: new Date(),
+      generated_at: getCurrentDate(),
       form_structure: 'corrected_official_btw_form_v2',
       
       // Section 1: Prestaties binnenland (CORRECTED)
@@ -146,7 +147,7 @@ export async function GET(request: Request) {
         issues: ['Unable to validate form'],
         warnings: [],
         info: [],
-        validated_at: new Date(),
+        validated_at: getCurrentDate(),
         period: { year, quarter },
         btw_summary: {
           rubriek_5a_verschuldigde_btw: 0,

@@ -10,6 +10,7 @@ import {
   createApiResponse
 } from '@/lib/supabase/financial-client'
 import { businessProfileSchema } from '@/lib/validations/business'
+import { getCurrentDate } from '@/lib/current-date'
 // import { useGracePeriodGuard } from '@/hooks/use-grace-period' // Cannot use client-side hooks in API routes
 
 // =============================================================================
@@ -94,7 +95,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const updateData = validation.data
-    const now = new Date().toISOString()
+    const now = getCurrentDate().toISOString()
 
     // Update business profile in profiles table
     const { data: updatedProfile, error } = await supabaseAdmin

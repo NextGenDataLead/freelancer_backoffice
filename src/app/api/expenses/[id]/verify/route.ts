@@ -10,6 +10,7 @@ import {
   createTransactionLog,
   isValidUUID
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface RouteParams {
   params: {
@@ -64,9 +65,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // Prepare update data based on verification status
     const updateData = {
       manual_verification_required: !isVerified,
-      verified_at: isVerified ? new Date().toISOString() : null,
+      verified_at: isVerified ? getCurrentDate().toISOString() : null,
       verified_by: isVerified ? profile.id : null,
-      updated_at: new Date().toISOString()
+      updated_at: getCurrentDate().toISOString()
     }
 
     // Update expense verification status

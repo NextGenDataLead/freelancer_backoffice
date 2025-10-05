@@ -40,6 +40,7 @@ import {
 import { CreateTimeEntrySchema } from '@/lib/validations/financial'
 import type { TimeEntryWithClient, Client } from '@/lib/types/financial'
 import { z } from 'zod'
+import { getCurrentDate } from '../../../../lib/current-date'
 
 interface TimeEntryFormProps {
   timeEntry?: TimeEntryWithClient
@@ -80,7 +81,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
     defaultValues: {
       client_id: timeEntry?.client_id || '',
       project_id: timeEntry?.project_id || '',
-      entry_date: timeEntry?.entry_date || new Date().toISOString().split('T')[0],
+      entry_date: timeEntry?.entry_date || getCurrentDate().toISOString().split('T')[0],
       description: timeEntry?.description || '',
       hours: timeEntry?.hours || 0,
       hourly_rate: timeEntry?.hourly_rate || undefined,
@@ -121,7 +122,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
 
     if (isTracking && startTime && entryMode === 'timer') {
       interval = setInterval(() => {
-        const now = new Date()
+        const now = getCurrentDate()
         const elapsedSeconds = (now.getTime() - startTime.getTime()) / 1000
         const elapsedHours = elapsedSeconds / 3600 // Convert to hours
         setElapsedTime(elapsedHours)
@@ -192,7 +193,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
       return
     }
     
-    setStartTime(new Date())
+    setStartTime(getCurrentDate())
     setIsTracking(true)
     setElapsedTime(0)
   }
@@ -201,7 +202,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
     setIsTracking(false)
     // Keep the startTime and elapsedTime for potential resume
     if (startTime) {
-      const now = new Date()
+      const now = getCurrentDate()
       const totalHours = (now.getTime() - startTime.getTime()) / 1000 / 3600
       const finalHours = Math.round(totalHours * 100) / 100
       setElapsedTime(finalHours)
@@ -211,7 +212,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
 
   const resumeTimer = () => {
     // Resume from where we left off
-    const now = new Date()
+    const now = getCurrentDate()
     const currentHours = form.getValues('hours') || 0
     // Set start time accounting for already elapsed time
     setStartTime(new Date(now.getTime() - (currentHours * 3600 * 1000)))

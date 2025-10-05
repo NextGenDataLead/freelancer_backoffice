@@ -33,6 +33,7 @@ A modern, enterprise-grade SaaS template built with Next.js 14, Clerk authentica
 - **Interactive charts** and data visualizations
 - **Real-time notifications** across browser tabs
 - **Performance monitoring** and analytics
+- **Business Health Score** with hierarchical breakdown and detailed explanations
 
 ### ⚖️ **GDPR Compliance Engine**
 - **30-day grace period** for account deletions
@@ -566,6 +567,449 @@ export const testRLS = {
      ]
    }
    ```
+
+## 🏥 Business Health Score System
+
+### 📊 **Comprehensive Business Intelligence Engine**
+
+The Business Health Score system provides real-time, data-driven insights into business performance across four critical categories, adapting automatically to different business models (time-only, SaaS-enabled, or hybrid).
+
+#### 🎯 **Core Health Categories (100 points total)**
+
+```typescript
+interface HealthScoreCategories {
+  profit: 25      // Revenue generation and value creation
+  cashflow: 25    // Payment collection and outstanding management
+  efficiency: 25  // Time utilization and operational effectiveness
+  risk: 25        // Business continuity and threat management
+}
+```
+
+**Category Breakdown:**
+
+| Category | Focus | Key Metrics | Business Model Adaptation |
+|----------|-------|-------------|---------------------------|
+| **Profit Health** | Revenue optimization and value creation | Hourly Rate Value, Time Utilization, Revenue Quality, Rate Target Contribution* | *Rate Target only for SaaS-enabled |
+| **Cash Flow Health** | Payment collection efficiency | Outstanding Amount, Collection Speed, Payment Terms | Universal application |
+| **Efficiency Health** | Operational effectiveness | Time Tracking, Target Achievement, Billing Efficiency | Adapts to business type |
+| **Risk Management** | Business continuity threats | Invoice Backlogs, Client Concentration, Payment Delays | Universal with adaptive thresholds |
+
+### 🏗️ **Intelligent Modal System Architecture**
+
+The health score system implements a sophisticated **three-tier modal architecture** designed for progressive disclosure of information, allowing users to drill down from high-level insights to granular component analysis.
+
+#### 📋 **Modal Hierarchy Structure**
+
+```
+🎯 Tier 1: Category Overview Modal
+    ├── Explanation text (layman's terms)
+    ├── Current inputs and values
+    └── 🎯 Tier 2: Hierarchical Tree Modal
+            ├── Individual metric breakdowns
+            ├── Interactive calculations
+            └── 🎯 Tier 3: Component Detail Modal
+                    ├── Sub-metric breakdowns
+                    ├── Formula explanations
+                    ├── Performance benchmarks
+                    └── Actionable insights
+```
+
+#### 🔄 **Modal Components & Their Purpose**
+
+**1. Category Overview Display (`showExplanation` state)**
+- **Purpose**: First level of interaction when clicking health category cards
+- **Content**: Comprehensive explanation with hierarchical tree breakdown
+- **Location**: `unified-financial-dashboard.tsx` lines ~1580-1620
+- **Trigger**: `onClick={() => setShowExplanation('profit')}`
+
+```typescript
+// Example: Profit Health Category Modal
+{showExplanation === 'profit' && (
+  <div className="comprehensive-modal">
+    <HealthScoreHierarchicalTree
+      category="profit"
+      healthScoreResults={healthScoreResults}
+      onMetricClick={handleMetricClick}
+      onCalculationClick={handleCalculationClick}
+    />
+  </div>
+)}
+```
+
+**2. Hierarchical Tree Component**
+- **Purpose**: Interactive breakdown of category metrics with click handlers
+- **File**: `src/components/dashboard/health-score-hierarchical-tree.tsx`
+- **Features**:
+  - Expandable tree structure with category → metrics → sub-metrics
+  - Real-time score calculations with progress bars
+  - Click handlers for different interaction types
+
+**3. Detailed Metric Explanation Modal**
+- **Purpose**: Layman's terms explanations for business context
+- **File**: `src/components/dashboard/detailed-metric-explanation-modal.tsx`
+- **Content**: What it means, why it matters, easy fixes, red flags, success stories
+
+**4. Calculation Detail Modal**
+- **Purpose**: Technical breakdown with component analysis
+- **File**: `src/components/dashboard/calculation-detail-modal.tsx`
+- **Features**:
+  - Component breakdown with individual scores
+  - Formula displays with actual values
+  - Performance benchmarks and targets
+  - Technical implementation details
+
+#### 🔧 **Modal State Management**
+
+```typescript
+// Modal state declarations
+const [showExplanation, setShowExplanation] = useState<string | null>(null)
+const [detailedMetricModal, setDetailedMetricModal] = useState<{...} | null>(null)
+const [calculationDetailModal, setCalculationDetailModal] = useState<{...} | null>(null)
+const [compactMetricModal, setCompactMetricModal] = useState<{...} | null>(null)
+
+// Click flow: Category → Tree → Detail → Component
+// 1. Category card click: setShowExplanation('profit')
+// 2. Tree metric click: setCompactMetricModal({...})
+// 3. Tree calculation click: setCalculationDetailModal({...})
+```
+
+### ⚙️ **Business Model Adaptation Engine**
+
+#### 🎯 **Dynamic Metric Redistribution**
+
+The system automatically adapts scoring based on business model detection:
+
+```typescript
+// Time-only business (SaaS disabled)
+if (!subscriptionEnabled) {
+  // Remove "Rate Target Contribution"
+  rateOptimizationScore = 0
+
+  // Redistribute 7 points across remaining metrics:
+  // - Hourly Rate Value: 8 points (unchanged)
+  // - Time Utilization: 6 points (+1 redistributed)
+  // - Revenue Quality: 4 points (unchanged)
+  // - Efficiency boost: 7 points (+7 redistributed)
+}
+```
+
+**Redistribution Logic:**
+- **SaaS-Enabled**: All 4 profit metrics active (8+6+4+7=25 points)
+- **Time-Only**: 3 profit metrics active with point redistribution for optimal scoring
+- **Hybrid**: Dynamic adjustment based on SaaS revenue percentage
+
+#### 📈 **Metric Calculation Methods**
+
+**Time Utilization Efficiency (6 points for time-only):**
+```typescript
+generateTimeUtilizationBreakdown() {
+  // Component breakdown:
+  // - Hours Progress: 2.4 points (40% weight)
+  // - Billing Efficiency: 2.1 points (35% weight)
+  // - Daily Consistency: 1.5 points (25% weight)
+
+  return {
+    components: [
+      { name: 'Hours Progress', maxScore: 2.4, formula: 'current_hours / target_hours × 2.4' },
+      { name: 'Billing Efficiency', maxScore: 2.1, formula: 'billed_hours / total_hours × 2.1' },
+      { name: 'Daily Consistency', maxScore: 1.5, formula: 'consistency_rating × 1.5' }
+    ],
+    totalMaxScore: 6
+  }
+}
+```
+
+**Revenue Quality & Collection (4 points for time-only):**
+```typescript
+generateRevenueQualityBreakdown() {
+  // Component breakdown:
+  // - Collection Rate: 1.4 points (35% weight)
+  // - Invoicing Speed: 1.3 points (32.5% weight)
+  // - Payment Quality: 1.3 points (32.5% weight)
+
+  return {
+    components: [
+      { name: 'Collection Rate', maxScore: 1.4, formula: 'collected / (collected + unbilled) × 1.4' },
+      { name: 'Invoicing Speed', maxScore: 1.3, formula: '(1 - unbilled/total) × 1.3' },
+      { name: 'Payment Quality', maxScore: 1.3, formula: '(1 - overdue/total) × 1.3' }
+    ],
+    totalMaxScore: 4
+  }
+}
+```
+
+### 🔍 **Implementation Architecture**
+
+#### 📂 **File Structure & Responsibilities**
+
+```
+src/
+├── lib/
+│   ├── health-score-engine.ts              # Core calculation engine
+│   ├── health-score-metric-definitions.ts  # Metric definitions and explanations
+│   └── health-score-constants.ts           # UI constants and configurations
+└── components/dashboard/
+    ├── unified-financial-dashboard.tsx      # Main dashboard with modal state
+    ├── health-score-hierarchical-tree.tsx  # Interactive tree component
+    ├── detailed-metric-explanation-modal.tsx # Business context explanations
+    ├── calculation-detail-modal.tsx         # Technical breakdown modal
+    └── compact-metric-explanation-modal.tsx # Quick metric insights
+```
+
+#### 🎯 **Key Implementation Details**
+
+**Health Score Engine (`health-score-engine.ts`):**
+- **Lines 1993-1998**: Business model detection and redistribution logic
+- **Lines 2059-2118**: Time Utilization breakdown method with 6-point scale
+- **Lines 2120-2172**: Revenue Quality breakdown method with 4-point scale
+- **Lines 1457, 1487**: DetailedCalculation integration points (currently commented for stability)
+
+**Modal Integration Points:**
+- **Hierarchical Tree**: Handles click events and passes detailed calculation data
+- **Dashboard State**: Manages multiple modal states with proper z-index stacking
+- **Calculation Detail**: Renders component breakdowns with formulas and benchmarks
+
+### 📊 **User Experience Flow**
+
+#### 🎯 **Typical User Journey**
+
+1. **Dashboard View**: User sees overall health score (e.g., "22/25 Profit Health")
+2. **Category Exploration**: Clicks profit card → Opens comprehensive modal with explanation and tree
+3. **Metric Investigation**: Clicks "Time Utilization Efficiency" in tree → Shows current calculation
+4. **Deep Dive Analysis**: Clicks calculation value → Opens component breakdown modal
+5. **Component Understanding**: Sees Hours Progress (2.1/2.4 pts), Billing Efficiency (1.8/2.1 pts), etc.
+
+#### 💡 **Progressive Disclosure Benefits**
+
+| Level | Information Density | User Type | Purpose |
+|-------|-------------------|-----------|---------|
+| **Category Cards** | High-level overview | All users | Quick health assessment |
+| **Tree Modal** | Detailed breakdown | Business owners | Operational insights |
+| **Component Modal** | Technical analysis | Power users | Deep performance analysis |
+
+### 🔧 **Technical Features**
+
+#### ⚡ **Real-time Updates**
+- **Live Calculations**: Health scores update automatically as data changes
+- **WebSocket Integration**: Real-time sync across browser tabs
+- **Optimistic Updates**: UI updates immediately while background sync occurs
+
+#### 🛡️ **Error Handling & Resilience**
+- **Safe Defaults**: Math.max() prevents division by zero errors
+- **Null Safety**: Comprehensive null checks for missing data
+- **Graceful Fallbacks**: System remains functional even with partial data
+
+#### 🎨 **UI/UX Enhancements**
+- **Color-coded Scoring**: Visual indicators for performance levels
+- **Progress Bars**: Intuitive score visualization
+- **Interactive Elements**: Hover states and click feedback
+- **Mobile Responsive**: Optimized for all screen sizes
+
+### 🚀 **Future Enhancements**
+
+#### 🎯 **Planned Features**
+- **Historical Tracking**: Score trends over time with charts
+- **Benchmarking**: Industry comparison and peer analysis
+- **Predictive Analytics**: Forecasting based on current trends
+- **Action Recommendations**: AI-powered improvement suggestions
+
+#### 🔧 **Technical Roadmap**
+- **Component Breakdown Integration**: Enable detailed calculation modals (currently stable but disabled)
+- **Performance Optimization**: Lazy loading of complex calculations
+- **Export Functionality**: PDF reports and data export
+- **API Integration**: External business intelligence tool connections
+
+### 📝 **Maintenance Notes**
+
+#### ⚠️ **Critical Implementation Details**
+- **Point Scale Consistency**: Time Utilization = 6 points, Revenue Quality = 4 points
+- **Business Model Detection**: Based on `subscriptionEnabled` flag from user profile
+- **Modal Z-Index Management**: Proper stacking order for multiple modal layers
+- **Calculation Method Safety**: All breakdown methods include comprehensive error handling
+
+#### 🔧 **Development Guidelines**
+- **Testing**: All calculation methods must include unit tests with edge cases
+- **Documentation**: Component breakdown formulas must be clearly documented
+- **Performance**: Large calculation objects should be memoized for optimization
+- **Accessibility**: All modals must be keyboard navigable with proper ARIA labels
+
+---
+
+## 🛡️ **CRITICAL IMPLEMENTATION SAFEGUARDS**
+
+### ⚠️ **Mandatory Pre-Implementation Checklist**
+
+**BEFORE making ANY changes to the Business Health Score system, you MUST:**
+
+1. **✅ Backup Current State**:
+   - Note current health scores (e.g., "22/25 Profit Health")
+   - Screenshot existing modal functionality
+   - Document current user flow
+
+2. **✅ Identify Potential Breaking Points**:
+   ```typescript
+   // DANGER ZONES - Handle with extreme care:
+   Lines 1457, 1487: detailedCalculation properties (causes 0/0 scores if broken)
+   Modal state management: showExplanation vs DetailedMetricModal routing
+   Data parsing: extractScoreFromDescription functions
+   Business logic: redistribution scoring calculations
+   ```
+
+3. **✅ Test in Isolation First**:
+   - Create test components separately
+   - Verify calculations work without integration
+   - Test with sample data before connecting to real system
+
+### 🚨 **Common Breaking Patterns & Solutions**
+
+#### **Problem 1: All Scores Show 0/0**
+**Cause**: Runtime errors in detailed calculation methods
+**Solution**: Immediately comment out `detailedCalculation` properties:
+```typescript
+// EMERGENCY FIX - Comment these lines:
+// detailedCalculation: this.generateTimeUtilizationBreakdown(...)
+// detailedCalculation: this.generateRevenueQualityBreakdown(...)
+```
+
+#### **Problem 2: Modal Shows Toggle But No Content**
+**Cause**: New component doesn't receive proper data or has rendering errors
+**Solution**: Always provide fallback structure:
+```typescript
+if (!healthScoreResults) {
+  return <LoadingState />
+}
+// Add safety checks for all data access
+```
+
+#### **Problem 3: Lost Extensive Modal Content**
+**Cause**: Replacing existing working modals instead of adding alongside
+**Solution**: Always preserve original:
+```typescript
+// WRONG: Replace existing modal
+{newComponent}
+
+// RIGHT: Add alongside with toggle
+{viewMode === 'new' ? newComponent : originalComponent}
+```
+
+### 🔒 **Development Safety Protocol**
+
+#### **Step 1: Safe Development Approach**
+```bash
+# 1. Create branch for experiments
+git checkout -b feature/health-score-enhancement
+
+# 2. Build new components in isolation
+src/components/experimental/
+
+# 3. Test thoroughly before integration
+npm run test:unit -- health-score
+```
+
+#### **Step 2: Incremental Integration**
+1. **Add New Component**: Place alongside existing (don't replace)
+2. **Add Toggle**: Let users switch between old and new
+3. **Test Extensively**: Verify both modes work
+4. **Gradual Rollout**: Default to old, offer new as option
+
+#### **Step 3: Verification Checklist**
+```typescript
+// Before committing changes, verify:
+✅ Health scores display correctly (not 0/0)
+✅ Original modal functionality preserved
+✅ New features work without breaking existing
+✅ All click handlers work properly
+✅ Console shows no errors
+✅ Mobile responsiveness maintained
+```
+
+### 🛠️ **Emergency Recovery Commands**
+
+If system breaks during implementation:
+
+```bash
+# 1. Immediate revert of dangerous changes
+git checkout -- src/lib/health-score-engine.ts
+
+# 2. Comment out dangerous lines
+# Lines 1457, 1487: // detailedCalculation: ...
+
+# 3. Verify system restoration
+npm run dev
+# Check: Health scores show proper values (not 0/0)
+
+# 4. Restore modal functionality
+# Ensure showExplanation modals still display content
+```
+
+### 📋 **Mandatory Implementation Rules**
+
+#### **Rule 1: Never Break Existing Functionality**
+- ✅ **DO**: Add new features alongside existing
+- ❌ **DON'T**: Replace working components directly
+
+#### **Rule 2: Always Provide Fallbacks**
+- ✅ **DO**: Add loading states, error boundaries, default data
+- ❌ **DON'T**: Assume data will always be available
+
+#### **Rule 3: Test Thoroughly Before Integration**
+- ✅ **DO**: Build and test components in isolation first
+- ❌ **DON'T**: Integrate untested code into critical systems
+
+#### **Rule 4: Preserve User Experience**
+- ✅ **DO**: Maintain original extensive modal content
+- ❌ **DON'T**: Remove or simplify working complex UIs
+
+#### **Rule 5: Document Breaking Points**
+- ✅ **DO**: Update this README with new danger zones
+- ❌ **DON'T**: Leave future developers to discover pitfalls
+
+### 🎯 **Lessons Learned from Previous Attempts**
+
+#### **What Went Wrong (Multiple Times)**:
+1. **Enabled `detailedCalculation` properties → Runtime errors → All scores 0/0**
+2. **Replaced working modal with new component → Lost extensive UI**
+3. **Assumed new component would work → No fallbacks → Blank displays**
+4. **Changed modal routing → Broke existing user flows**
+
+#### **What Works**:
+1. **Keep existing functionality intact while adding new options**
+2. **Build components with comprehensive error handling**
+3. **Test with both real data and fallback scenarios**
+4. **Provide toggles between old and new implementations**
+
+### 🚀 **Safe Path Forward for Organogram Implementation**
+
+```typescript
+// SAFE IMPLEMENTATION PATTERN:
+const [viewMode, setViewMode] = useState<'tree' | 'organogram'>('tree') // Default to working version
+
+// Always keep working version available
+{viewMode === 'organogram' ? (
+  <SafeOrganogramComponent
+    healthScoreResults={healthScoreResults}
+    fallback={<OriginalTreeComponent />}
+  />
+) : (
+  <OriginalTreeComponent />
+)}
+
+// Build organogram with comprehensive safety
+function SafeOrganogramComponent({ healthScoreResults, fallback }) {
+  if (!healthScoreResults?.explanations?.profit) {
+    return fallback
+  }
+
+  try {
+    return <OrganogramContent />
+  } catch (error) {
+    console.error('Organogram error:', error)
+    return fallback
+  }
+}
+```
+
+**This safeguards section serves as a permanent reminder to prevent future breaking changes to critical business functionality.**
 
 ## 🏗️ Financial Module Architecture
 

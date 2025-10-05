@@ -10,6 +10,7 @@ import {
   createTransactionLog,
   isValidUUID
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface RouteParams {
   params: {
@@ -158,7 +159,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       .from('expenses')
       .update({
         ...updateData,
-        updated_at: new Date().toISOString()
+        updated_at: getCurrentDate().toISOString()
       })
       .eq('id', expenseId)
       .eq('tenant_id', profile.tenant_id)

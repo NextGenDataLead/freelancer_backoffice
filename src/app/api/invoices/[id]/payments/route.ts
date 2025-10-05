@@ -8,6 +8,7 @@ import {
   createApiResponse,
   createTransactionLog
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Request schema for payment recording
 const PaymentRecordingSchema = z.object({
@@ -112,8 +113,8 @@ export async function POST(
       .update({
         paid_amount: newPaidAmount,
         status: newStatus,
-        paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString()
+        paid_at: newStatus === 'paid' ? getCurrentDate().toISOString() : null,
+        updated_at: getCurrentDate().toISOString()
       })
       .eq('id', invoiceId)
 

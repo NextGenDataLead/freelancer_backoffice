@@ -7,7 +7,6 @@ import { UserButton } from '@clerk/nextjs'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { FinancialHealthScore } from './financial-health-score'
 import { ActiveTimerWidget } from './active-timer-widget'
 import { ClientHealthDashboard } from './client-health-dashboard'
 import { CashFlowForecast } from './cash-flow-forecast'
@@ -16,6 +15,11 @@ import { useProfitTargets } from '@/hooks/use-profit-targets'
 import { smartRulesEngine, type BusinessData, type SmartAlert } from '@/lib/smart-rules-engine'
 import { healthScoreEngine, type HealthScoreInputs, type HealthScoreOutputs } from '@/lib/health-score-engine'
 import { HEALTH_STATUS_CONFIG, getStatusForScore, HEALTH_ANIMATIONS } from '@/lib/health-score-constants'
+import { getMetricDefinition, type MetricDefinition } from '@/lib/health-score-metric-definitions'
+import { getCurrentDate } from '@/lib/current-date'
+import { HealthScoreHierarchicalTree } from './health-score-hierarchical-tree'
+import { HealthScoreOrganogram } from './organogram/HealthScoreOrganogram'
+import { CalculationDetailModal } from './calculation-detail-modal'
 import {
   Euro,
   TrendingUp,
@@ -35,7 +39,13 @@ import {
   Info,
   LayoutDashboard,
   AlertTriangle,
-  Award
+  Award,
+  HelpCircle,
+  BookOpen,
+  ArrowRight,
+  Lightbulb,
+  Shield,
+  Zap
 } from 'lucide-react'
 
 // Dynamic imports for chart components to avoid SSR issues
@@ -71,9 +81,13 @@ interface DashboardMetricsResponse {
   success: boolean
   data: {
     factureerbaar: number
+    factureerbaar_count: number
     totale_registratie: number
     achterstallig: number
     achterstallig_count: number
+    actual_dso: number
+    average_payment_terms: number
+    average_dri: number
   }
 }
 
@@ -88,6 +102,8 @@ interface TimeStatsResponse {
     thisMonth: {
       hours: number
       revenue: number
+      billableHours: number
+      nonBillableHours: number
     }
     unbilled: {
       hours: number
@@ -148,6 +164,13 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
   const [timeStats, setTimeStats] = useState<TimeStatsResponse['data'] | null>(null)
   const [todayStats, setTodayStats] = useState<{ totalHours: number; billableHours: number; entries: number; revenue: number } | null>(null)
   const [revenueTrend, setRevenueTrend] = useState<any[]>([])
+  const [clientRevenue, setClientRevenue] = useState<{
+    topClient?: { name: string; revenueShare: number }
+    rolling30DaysComparison?: {
+      current: { topClientShare: number; totalRevenue: number }
+      previous: { topClientShare: number; totalRevenue: number }
+    }
+  } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [smartAlerts, setSmartAlerts] = useState<SmartAlert[]>([])
@@ -155,7 +178,78 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
   const [showExplanation, setShowExplanation] = useState<string | null>(null)
   const [showHealthReport, setShowHealthReport] = useState(false)
   const [healthScoreResults, setHealthScoreResults] = useState<HealthScoreOutputs | null>(null)
+  const [viewMode, setViewMode] = useState<'tree' | 'organogram'>('tree')
+  const [calculationDetailModal, setCalculationDetailModal] = useState<{
+    metricId: string;
+    metricName: string;
+    calculationValue?: string;
+    calculationDescription?: string;
+    score: number;
+    maxScore: number;
+    detailedCalculation?: any;
+  } | null>(null)
   const { targets: profitTargets } = useProfitTargets()
+
+  // Helper function to get metric definition based on label
+  const getMetricDefinitionByLabel = (label: string): MetricDefinition | null => {
+    const labelMap: Record<string, string> = {
+      'Outstanding Amount': 'outstanding_amount',
+      'Outstanding Count': 'outstanding_count',
+      'Collection Speed': 'collection_speed',
+      'Current Hours (MTD)': 'current_hours_mtd',
+      'MTD Target': 'mtd_target',
+      'Unbilled Hours': 'unbilled_hours',
+      'Daily Average': 'daily_average',
+      'Billing Efficiency': 'billing_efficiency',
+      'Active Subscribers': 'active_subscribers',
+      'Average Subscription Fee': 'average_subscription_fee',
+      'Monthly Recurring Revenue': 'monthly_recurring_revenue',
+      'Hourly Rate Value': 'hourly_rate_value',
+      'Ready to Bill': 'ready_to_bill',
+      'Payment Risk': 'payment_risk',
+      'Subscription Health': 'subscription_health',
+
+      // Cash Flow calculation metrics
+      '1. Collection Speed': 'collection_speed',
+      '2. Volume Efficiency': 'volume_efficiency',
+      '3. Absolute Amount Control': 'absolute_amount_control',
+
+      // Efficiency calculation metrics
+      '1. Time Utilization Progress': 'hours_progress',
+      '2. Billing Efficiency': 'billing_efficiency',
+      '3. Daily Consistency': 'daily_consistency',
+
+      // Profit calculation metrics (consulting mode)
+      '1. Hourly Rate Value': 'hourly_rate_value',
+      '2. Rate Target Contribution': 'rate_optimization',
+      '3. Time Utilization Efficiency': 'time_utilization_efficiency',
+      '4. Revenue Quality & Collection': 'revenue_quality_collection',
+
+      // Profit calculation metrics (subscription mode)
+      '1. Subscription Growth': 'subscription_growth',
+      '2. Subscription Pricing': 'subscription_pricing',
+      '3. Revenue Diversification': 'revenue_diversification',
+      '4. Hourly Rate Value': 'hourly_rate_value',
+      '5. Rate Target Contribution': 'rate_optimization',
+      '6. Subscription Effectiveness': 'subscription_effectiveness',
+
+      // Risk calculation metrics
+      '1. Invoice Processing Risk': 'invoice_processing_risk',
+      '2. Payment Collection Risk': 'payment_collection_risk',
+      '3. Client Concentration Risk': 'client_concentration_risk',
+      '4. Business Model Risk': 'business_model_risk',
+
+      // Component breakdown metrics
+      'Hours Progress': 'hours_progress',
+      'Collection Rate': 'collection_rate',
+      'Invoicing Speed': 'invoicing_speed',
+      'Payment Quality': 'payment_quality'
+    }
+
+    const metricId = labelMap[label]
+    return metricId ? getMetricDefinition(metricId) : null
+  }
+
 
   // Enhanced navigation helper
   const handleRecommendationAction = (recommendationId: string, targetTab: string) => {
@@ -190,7 +284,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
 
   // Calculate month-to-date (MTD) benchmarks - centralized calculation
   const mtdCalculations = useMemo(() => {
-    const now = new Date()
+    const now = getCurrentDate()
     const currentDay = now.getDate()
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
     const monthProgress = currentDay / daysInMonth
@@ -212,12 +306,56 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
 
     const monthlyHoursTarget = profitTargets?.monthly_hours_target || 160
 
+    // === DYNAMIC HOURS MTD CALCULATION BASED ON WORKING DAYS ===
+    const workingDays = profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
+
+    // Calculate yesterday (we measure progress up to yesterday, not today)
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
+    yesterday.setHours(0, 0, 0, 0)
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    startOfMonth.setHours(0, 0, 0, 0)
+
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    endOfMonth.setHours(23, 59, 59, 999)
+
+    // Expected working days up to yesterday (for MTD assessment)
+    let expectedWorkingDaysUpToYesterday = 0
+    let currentDate = new Date(startOfMonth)
+    while (currentDate <= yesterday) {
+      const dayOfWeek = currentDate.getDay()
+      const isoWeekday = dayOfWeek === 0 ? 7 : dayOfWeek
+      if (workingDays.includes(isoWeekday)) {
+        expectedWorkingDaysUpToYesterday++
+      }
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    // Total expected working days in full month
+    let totalExpectedWorkingDays = 0
+    currentDate = new Date(startOfMonth)
+    while (currentDate <= endOfMonth) {
+      const dayOfWeek = currentDate.getDay()
+      const isoWeekday = dayOfWeek === 0 ? 7 : dayOfWeek
+      if (workingDays.includes(isoWeekday)) {
+        totalExpectedWorkingDays++
+      }
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    const workingDaysProgress = totalExpectedWorkingDays > 0
+      ? expectedWorkingDaysUpToYesterday / totalExpectedWorkingDays
+      : monthProgress // fallback to calendar-based if no working days
+
     return {
       currentDay,
       daysInMonth,
-      monthProgress,
+      monthProgress, // Keep for revenue (calendar-based is appropriate for revenue)
       mtdRevenueTarget: monthlyRevenueTarget * monthProgress,
-      mtdHoursTarget: Math.round(monthlyHoursTarget * monthProgress)
+      mtdHoursTarget: Math.round(monthlyHoursTarget * workingDaysProgress), // Now uses working days!
+      expectedWorkingDaysUpToYesterday,
+      totalExpectedWorkingDays
     }
   }, [profitTargets]) // Add profitTargets dependency
 
@@ -233,19 +371,26 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         totale_registratie: dashboardMetrics.totale_registratie || 0,
         achterstallig: dashboardMetrics.achterstallig || 0,
         achterstallig_count: dashboardMetrics.achterstallig_count || 0,
-        factureerbaar: dashboardMetrics.factureerbaar || 0
+        factureerbaar: dashboardMetrics.factureerbaar || 0,
+        factureerbaar_count: dashboardMetrics.factureerbaar_count || 0,
+        actual_dso: dashboardMetrics.actual_dso,
+        average_payment_terms: dashboardMetrics.average_payment_terms,
+        average_dri: dashboardMetrics.average_dri
       },
       timeStats: {
         thisMonth: {
           hours: timeStats.thisMonth?.hours || 0,
-          revenue: timeStats.thisMonth?.revenue || 0
+          revenue: timeStats.thisMonth?.revenue || 0,
+          billableHours: timeStats.thisMonth?.billableHours || 0,
+          nonBillableHours: timeStats.thisMonth?.nonBillableHours || 0
         },
         unbilled: {
           hours: timeStats.unbilled?.hours || 0,
           revenue: timeStats.unbilled?.revenue || 0,
           value: timeStats.unbilled?.value || 0
         },
-        subscription: timeStats.subscription
+        subscription: timeStats.subscription,
+        rolling30Days: timeStats.rolling30Days
       },
       mtdCalculations,
       profitTargets: profitTargets ? {
@@ -255,21 +400,40 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         // Component-based targets
         monthly_hours_target: profitTargets.monthly_hours_target,
         target_hourly_rate: profitTargets.target_hourly_rate,
+        target_billable_ratio: profitTargets.target_billable_ratio,
+        target_working_days_per_week: profitTargets.target_working_days_per_week,
         target_monthly_active_users: profitTargets.target_monthly_active_users,
         target_avg_subscription_fee: profitTargets.target_avg_subscription_fee,
         setup_completed: profitTargets.setup_completed
-      } : undefined
+      } : undefined,
+      clientRevenue: clientRevenue || undefined
     }
+
+    console.log('🔍 Health Score Inputs:', {
+      hasTimeStats: !!timeStats,
+      hasRolling30Days: !!timeStats.rolling30Days,
+      rolling30DaysData: timeStats.rolling30Days,
+      hasDashboardMetrics: !!dashboardMetrics,
+      hasProfitTargets: !!profitTargets,
+      hasClientRevenue: !!clientRevenue
+    })
 
     try {
       const results = healthScoreEngine.process(inputs)
+      console.log('✅ Health Score Results:', results)
       setHealthScoreResults(results)
     } catch (error) {
-      console.error('Health score calculation failed:', error)
+      console.error('❌ Health score calculation failed:', error)
       // Set null when profit targets are not configured
       setHealthScoreResults(null)
     }
-  }, [dashboardMetrics, timeStats, mtdCalculations, profitTargets])
+  }, [dashboardMetrics, timeStats, mtdCalculations, profitTargets, clientRevenue])
+
+  // Determine if subscription/SaaS features are enabled
+  const subscriptionEnabled = Boolean(
+    profitTargets?.target_monthly_active_users && profitTargets.target_monthly_active_users > 0 &&
+    profitTargets?.target_avg_subscription_fee && profitTargets.target_avg_subscription_fee > 0
+  )
 
   // MTD Comparison calculation using existing monthly data (as per optimization recommendation)
   const mtdComparison = useMemo(() => {
@@ -353,11 +517,12 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         setLoading(true)
 
         // Parallel fetch of all required data
-        const [dashboardResponse, timeResponse, todayResponse, revenueTrendResponse] = await Promise.all([
+        const [dashboardResponse, timeResponse, todayResponse, revenueTrendResponse, clientRevenueResponse] = await Promise.all([
           fetch('/api/invoices/dashboard-metrics'),
           fetch('/api/time-entries/stats'),
           fetch('/api/time-entries/today'),
-          fetch('/api/financial/revenue-trend')
+          fetch('/api/financial/revenue-trend'),
+          fetch('/api/financial/client-revenue')
         ])
 
         if (!dashboardResponse.ok || !timeResponse.ok || !revenueTrendResponse.ok) {
@@ -367,10 +532,43 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         const dashboardData: DashboardMetricsResponse = await dashboardResponse.json()
         const timeData: TimeStatsResponse = await timeResponse.json()
         const revenueTrendData = await revenueTrendResponse.json()
+        const clientRevenueData = clientRevenueResponse.ok ? await clientRevenueResponse.json() : null
+
+        // Dashboard metrics fetched successfully
+
+        // Validate dashboard metrics for data integrity
+        if (dashboardData.data) {
+          const { achterstallig, achterstallig_count } = dashboardData.data
+          if (achterstallig_count > 0 && achterstallig <= 0) {
+            console.warn('⚠️ Dashboard Metrics Warning: Overdue count exists but amount is zero', { achterstallig, achterstallig_count })
+          }
+          if (achterstallig > 0 && achterstallig_count <= 0) {
+            console.warn('⚠️ Dashboard Metrics Warning: Overdue amount exists but count is zero', { achterstallig, achterstallig_count })
+          }
+          if (achterstallig_count > 10) {
+            console.warn('⚠️ Dashboard Metrics Warning: Unusually high overdue count, possible tenant isolation issue', { achterstallig, achterstallig_count })
+          }
+        }
 
         setDashboardMetrics(dashboardData.data)
         setTimeStats(timeData.data)
         setRevenueTrend(revenueTrendData.data || [])
+
+        // Extract and set top client data and rolling 30-day comparison from client revenue response
+        if (clientRevenueData?.data) {
+          const topClient = clientRevenueData.data.summary?.topClient
+          const rolling30DaysComparison = clientRevenueData.data.rolling30DaysComparison
+
+          setClientRevenue({
+            topClient: topClient ? {
+              name: topClient.name,
+              revenueShare: topClient.percentage // API returns percentage
+            } : undefined,
+            rolling30DaysComparison // Add rolling 30-day comparison data
+          })
+        } else {
+          setClientRevenue(null)
+        }
 
         // Generate smart alerts
         if (dashboardData.data && timeData.data) {
@@ -396,9 +594,14 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
               averagePaymentDays: 25
             },
             clients: {
-              total: 10,
-              activeThisMonth: 6,
-              topClient: { name: 'Main Client', revenueShare: 35 }
+              total: clientRevenueData?.data?.summary?.totalClients || 10,
+              activeThisMonth: clientRevenueData?.data?.summary?.totalClients || 6,
+              topClient: clientRevenueData?.data?.summary?.topClient
+                ? {
+                    name: clientRevenueData.data.summary.topClient.name,
+                    revenueShare: clientRevenueData.data.summary.topClient.percentage
+                  }
+                : { name: 'Unknown', revenueShare: 0 }
             },
             rate: {
               current: timeData.data.thisMonth.hours > 0
@@ -915,8 +1118,8 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
               </Card>
             </Collapsible>
 
-            {/* 5-Card Metrics System - Restored from Backup */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
+            {/* Dynamic Card Metrics System - Adapts to Business Model */}
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${subscriptionEnabled ? 'xl:grid-cols-5' : 'xl:grid-cols-3'} gap-4 sm:gap-6`}>
               {/* Card 1: Revenue MTD */}
               <div className="mobile-card-glass space-y-4">
                 <div className="flex items-center justify-between">
@@ -982,19 +1185,21 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
+                <div className={`grid ${subscriptionEnabled ? 'grid-cols-2' : 'grid-cols-1'} gap-3 pt-3 border-t border-border/20`}>
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Time Value</p>
                     <p className="text-sm font-bold text-primary">
                       {formatCurrency(dashboardMetrics?.totale_registratie || 0)}
                     </p>
                   </div>
+                  {subscriptionEnabled && (
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Subscriptions</p>
                     <p className="text-sm font-bold text-emerald-500">
                       {formatCurrency(Math.round((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0)))}
                     </p>
                   </div>
+                  )}
                 </div>
               </div>
 
@@ -1141,7 +1346,8 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                 </div>
               </div>
 
-              {/* Card 4: Monthly Active Users */}
+              {/* Card 4: Monthly Active Users - Only show if subscription enabled */}
+              {subscriptionEnabled && (
               <div className="mobile-card-glass space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -1212,8 +1418,10 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   </div>
                 </div>
               </div>
+              )}
 
-              {/* Card 5: Average Subscription Fee */}
+              {/* Card 5: Average Subscription Fee - Only show if subscription enabled */}
+              {subscriptionEnabled && (
               <div className="mobile-card-glass space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -1284,6 +1492,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   </div>
                 </div>
               </div>
+              )}
             </div>
           </div>
 
@@ -1389,7 +1598,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         {/* Enhanced Health Score Explanation Modal */}
         {showExplanation && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-            <div className="bg-card border rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="bg-card border rounded-xl max-w-[874px] w-full max-h-[90vh] overflow-y-auto">
               <div className="sticky top-0 bg-card border-b p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -1424,133 +1633,123 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                 </div>
               </div>
 
-              <div className="p-4 sm:p-6 space-y-6">
-                {/* 1. Introduction Section */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">1</div>
-                    <h4 className="font-semibold text-base">What This Metric Measures</h4>
-                  </div>
-                  <div className="pl-8">
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {showExplanation === 'profit' &&
-                        'Profit Health measures your business\'s ability to generate sustainable profit through effective revenue streams and value creation. It evaluates subscription business performance, revenue quality, and value-generating activities that directly impact your bottom line.'
-                      }
-                      {showExplanation === 'cashflow' &&
-                        'Cash Flow Health focuses on your payment collection efficiency and outstanding invoices. It measures how quickly you collect payments and how well you manage overdue amounts, which directly affects your business liquidity and operational stability.'
-                      }
-                      {showExplanation === 'efficiency' &&
-                        'Efficiency Health tracks your time utilization patterns and billing effectiveness. It measures how consistently you track time, meet your hourly targets, and convert tracked time into billable revenue.'
-                      }
-                      {showExplanation === 'risk' &&
-                        'Risk Management Health evaluates potential threats to business continuity including invoice processing backlogs, payment risks, and subscription health. It identifies areas where operational delays could impact your revenue flow.'
-                      }
-                    </p>
+              <div className="p-4 sm:p-6">
+                {/* Overview Section */}
+                <div className="mb-6">
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {showExplanation === 'profit' &&
+                      `Profit Health measures your business's ability to generate sustainable profit through effective revenue streams and value creation. It evaluates ${subscriptionEnabled ? 'subscription business performance, ' : ''}revenue quality, and value-generating activities that directly impact your bottom line.`
+                    }
+                    {showExplanation === 'cashflow' &&
+                      'Cash Flow Health focuses on your payment collection efficiency and outstanding invoices. It measures how quickly you collect payments and how well you manage overdue amounts, which directly affects your business liquidity and operational stability.'
+                    }
+                    {showExplanation === 'efficiency' &&
+                      'Efficiency Health tracks your time utilization patterns and billing effectiveness. It measures how consistently you track time, meet your hourly targets, and convert tracked time into billable revenue.'
+                    }
+                    {showExplanation === 'risk' &&
+                      `Risk Management Health evaluates potential threats to business continuity including invoice processing backlogs, payment risks${subscriptionEnabled ? ', and subscription health' : ''}. It identifies areas where operational delays could impact your revenue flow.`
+                    }
+                  </p>
+                </div>
+
+                {/* View Toggle */}
+                <div className="flex justify-center mb-6">
+                  <div className="bg-muted rounded-lg p-1 flex">
+                    <button
+                      onClick={() => setViewMode('organogram')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        viewMode === 'organogram'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      📊 Organogram
+                    </button>
+                    <button
+                      onClick={() => setViewMode('tree')}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                        viewMode === 'tree'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      🌲 Tree View
+                    </button>
                   </div>
                 </div>
 
-                {/* 2. Input Data Section */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center">2</div>
-                    <h4 className="font-semibold text-base">Input Data</h4>
-                  </div>
-                  <div className="pl-8">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {healthScoreResults?.explanations[showExplanation as keyof typeof healthScoreResults.explanations]?.details
-                        .find(section => section.title?.includes('Status') || section.title?.includes('Data'))
-                        ?.items.filter(item => item.type === 'metric')
-                        .map((item, index) => (
-                          <div key={index} className="bg-muted/50 rounded-lg p-3 border">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-medium text-muted-foreground">{item.label}</span>
-                              <div className={`w-2 h-2 rounded-full ${
-                                item.emphasis === 'primary' ? 'bg-green-500' :
-                                item.emphasis === 'secondary' ? 'bg-orange-500' : 'bg-muted-foreground'
-                              }`}></div>
-                            </div>
-                            <div className="font-semibold text-sm mt-1">{item.value}</div>
-                            {item.description && (
-                              <div className="text-xs text-muted-foreground mt-1">{item.description}</div>
-                            )}
-                          </div>
-                        )) || []}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Calculations with Legends */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center">3</div>
-                    <h4 className="font-semibold text-base">Score Calculation</h4>
-                  </div>
-                  <div className="pl-8 space-y-6">
-                    {/* All Calculation Sections */}
-                    {healthScoreResults?.explanations[showExplanation as keyof typeof healthScoreResults.explanations]?.details
-                      .filter(section => section.type === 'calculations')
-                      .map((section, sectionIndex) => (
-                        <div key={sectionIndex} className="space-y-4">
-                          {/* Section Header */}
-                          <div className="border-l-4 border-primary pl-4">
-                            <h5 className="font-semibold text-sm text-primary">{section.title}</h5>
-                          </div>
-
-                          {/* Section Calculations and Legends */}
-                          <div className="space-y-3">
-                            {section.items.map((item, itemIndex) => {
-                              if (item.type === 'calculation') {
-                                return (
-                                  <div key={itemIndex} className="border rounded-lg p-4 bg-gradient-to-r from-muted/30 to-muted/10">
-                                    <div className="flex items-center justify-between mb-2">
-                                      <span className="font-medium text-sm">{item.label}</span>
-                                      <span className="font-mono text-sm bg-muted px-2 py-1 rounded">{item.value}</span>
-                                    </div>
-                                    {item.description && (
-                                      <div className="text-xs text-muted-foreground">{item.description}</div>
-                                    )}
-                                  </div>
-                                )
-                              } else if (item.type === 'standard') {
-                                return (
-                                  <div key={itemIndex} className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                      <span className="text-xs text-blue-700 dark:text-blue-300">{item.value}</span>
-                                    </div>
-                                  </div>
-                                )
-                              } else if (item.type === 'formula') {
-                                return (
-                                  <div key={itemIndex} className="bg-primary/10 border border-primary/20 rounded-lg p-4">
-                                    <h6 className="font-medium text-sm mb-2">Formula</h6>
-                                    <div className="font-mono text-sm bg-primary/20 px-3 py-2 rounded">
-                                      {item.formula}
-                                    </div>
-                                  </div>
-                                )
-                              } else if (item.type === 'text') {
-                                return (
-                                  <div key={itemIndex} className="text-xs text-muted-foreground italic bg-muted/30 p-3 rounded">
-                                    {item.description}
-                                  </div>
-                                )
-                              }
-                              return null
-                            })}
-                          </div>
-                        </div>
-                      )) || []}
-                  </div>
-                </div>
+                {/* Score Breakdown Visualization */}
+                {healthScoreResults && (
+                  <>
+                    {viewMode === 'organogram' ? (
+                      <HealthScoreOrganogram
+                        healthScoreResults={healthScoreResults}
+                        category={showExplanation as 'profit' | 'cashflow' | 'efficiency' | 'risk'}
+                        onMetricClick={(metricId, metricName, score, maxScore, currentValue) => {
+                          // Fallback: if onCalculationClick fails, use calculation modal anyway
+                          setCalculationDetailModal({
+                            metricId,
+                            metricName,
+                            calculationValue: `${score}/${maxScore} points`,
+                            calculationDescription: `Current score: ${score}/${maxScore} points`,
+                            score,
+                            maxScore,
+                            detailedCalculation: undefined
+                          });
+                        }}
+                        onCalculationClick={(metricId, metricName, calculationValue, calculationDescription, score, maxScore, detailedCalculation) => {
+                          setCalculationDetailModal({
+                            metricId,
+                            metricName,
+                            calculationValue,
+                            calculationDescription,
+                            score,
+                            maxScore,
+                            detailedCalculation
+                          });
+                        }}
+                        className="max-w-full"
+                      />
+                    ) : (
+                      <HealthScoreHierarchicalTree
+                        healthScoreResults={healthScoreResults}
+                        category={showExplanation as 'profit' | 'cashflow' | 'efficiency' | 'risk'}
+                        onMetricClick={(metricId, metricName, score, maxScore, currentValue) => {
+                          // Use calculation modal for all metric clicks - no fallback to compact modal
+                          setCalculationDetailModal({
+                            metricId,
+                            metricName,
+                            calculationValue: `${score}/${maxScore} points`,
+                            calculationDescription: `Current score: ${score}/${maxScore} points`,
+                            score,
+                            maxScore,
+                            detailedCalculation: undefined
+                          });
+                        }}
+                        onCalculationClick={(metricId, metricName, calculationValue, calculationDescription, score, maxScore, detailedCalculation) => {
+                          setCalculationDetailModal({
+                            metricId,
+                            metricName,
+                            calculationValue,
+                            calculationDescription,
+                            score,
+                            maxScore,
+                            detailedCalculation
+                          });
+                        }}
+                        className="max-w-full"
+                      />
+                    )}
+                  </>
+                )}
               </div>
+
 
               <div className="sticky bottom-0 bg-card border-t p-4 sm:p-6">
                 <div className="flex justify-end">
                   <button
                     onClick={() => setShowExplanation(null)}
-                    className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
-                  >
+                    className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium">
                     Got it
                   </button>
                 </div>
@@ -1558,6 +1757,23 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
             </div>
           </div>
         )}
+
+
+        {/* Calculation Detail Modal */}
+        {calculationDetailModal && (
+          <CalculationDetailModal
+            metricId={calculationDetailModal.metricId}
+            metricName={calculationDetailModal.metricName}
+            calculationValue={calculationDetailModal.calculationValue}
+            calculationDescription={calculationDetailModal.calculationDescription}
+            currentScore={calculationDetailModal.score}
+            maxScore={calculationDetailModal.maxScore}
+            detailedCalculation={calculationDetailModal.detailedCalculation}
+            isOpen={true}
+            onClose={() => setCalculationDetailModal(null)}
+          />
+        )}
+
 
         {/* Comprehensive Health Report Modal */}
         {showHealthReport && (
@@ -1968,6 +2184,23 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                         {healthScores.profit < 15 ? 'HIGH PRIORITY' : healthScores.profit < 20 ? 'MONITOR' : 'OPTIMIZED'}
                       </span>
                     </h4>
+
+                      {/* Business Model Indicator */}
+                      {healthScoreResults?.explanations.profit.breakdown?.redistribution && (
+                        <div className="mb-3 p-2 rounded-lg bg-blue-50 border border-blue-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-blue-900">
+                              {healthScoreResults.explanations.profit.breakdown.redistribution.businessModel === 'time-only' && '⏰ Time-Based Only'}
+                              {healthScoreResults.explanations.profit.breakdown.redistribution.businessModel === 'saas-only' && '🔄 SaaS-Only'}
+                              {healthScoreResults.explanations.profit.breakdown.redistribution.businessModel === 'hybrid' && '🔀 Hybrid Model'}
+                            </span>
+                            {healthScoreResults.explanations.profit.breakdown.redistribution.pointsRedistributed && (
+                              <Badge variant="outline" className="text-xs bg-white">Fair Scoring</Badge>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="space-y-3 mb-4">
                         {/* Profit Driver Metrics from Engine */}
                         <div className="grid grid-cols-2 gap-3 mb-4">

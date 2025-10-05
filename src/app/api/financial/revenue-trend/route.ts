@@ -5,6 +5,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * Calculate subscription revenue for a specific month
@@ -66,7 +67,7 @@ export async function GET() {
     // Use latest entry date to determine the "current" year, or fall back to today
     const referenceDate = dateRange && dateRange.length > 0
       ? new Date(dateRange[0].entry_date)
-      : new Date()
+      : getCurrentDate()
 
     const currentYear = referenceDate.getFullYear()
     const yearStart = new Date(currentYear, 0, 1) // January 1st of the year with data

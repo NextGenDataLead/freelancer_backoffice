@@ -6,6 +6,7 @@ import {
   ApiErrors, 
   createApiResponse 
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Validation schema for quarterly VAT return request
 const QuarterlyVATReturnSchema = z.object({
@@ -128,7 +129,7 @@ export async function GET(request: NextRequest) {
         quarter,
         date_from: quarterStart.toISOString().split('T')[0],
         date_to: quarterEnd.toISOString().split('T')[0],
-        generated_at: new Date().toISOString()
+        generated_at: getCurrentDate().toISOString()
       },
       revenue: {
         standard_rate: { amount: 0, vat: 0, transaction_count: 0 },

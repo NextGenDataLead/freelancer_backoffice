@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseAdmin } from '@/lib/supabase-server'
+import { getCurrentDate } from '@/lib/current-date'
 
 export async function GET() {
   try {
@@ -52,6 +53,8 @@ export async function POST(request: NextRequest) {
       monthly_cost_target_cents,
       monthly_hours_target,
       target_hourly_rate_cents,
+      target_billable_ratio,
+      target_working_days_per_week,
       target_monthly_active_users,
       target_avg_subscription_fee_cents,
       setup_step_completed = 0
@@ -100,6 +103,20 @@ export async function POST(request: NextRequest) {
       errors.push('Subscription revenue stream requires both Users and Subscription Fee to be configured')
     }
 
+    // Validate billable ratio if provided
+    if (target_billable_ratio !== undefined && (target_billable_ratio < 50 || target_billable_ratio > 100)) {
+      errors.push('Target billable ratio must be between 50 and 100')
+    }
+
+    // Validate working days if provided
+    if (target_working_days_per_week) {
+      if (!Array.isArray(target_working_days_per_week) || target_working_days_per_week.length === 0) {
+        errors.push('At least one working day must be selected')
+      } else if (!target_working_days_per_week.every((day: number) => day >= 1 && day <= 7)) {
+        errors.push('Working days must be valid ISO weekday numbers (1-7)')
+      }
+    }
+
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join(', ') }, { status: 400 })
     }
@@ -140,13 +157,15 @@ export async function POST(request: NextRequest) {
         monthly_revenue_target_cents,
         monthly_cost_target_cents,
         setup_step_completed,
-        setup_completed_at: setup_step_completed >= 3 ? new Date().toISOString() : null,
+        setup_completed_at: setup_step_completed >= 3 ? getCurrentDate().toISOString() : null,
         updated_by: profile.id
       }
 
       // Add component-based fields if provided
       if (monthly_hours_target !== undefined) updateData.monthly_hours_target = monthly_hours_target
       if (target_hourly_rate_cents !== undefined) updateData.target_hourly_rate_cents = target_hourly_rate_cents
+      if (target_billable_ratio !== undefined) updateData.target_billable_ratio = target_billable_ratio
+      if (target_working_days_per_week !== undefined) updateData.target_working_days_per_week = target_working_days_per_week
       if (target_monthly_active_users !== undefined) updateData.target_monthly_active_users = target_monthly_active_users
       if (target_avg_subscription_fee_cents !== undefined) updateData.target_avg_subscription_fee_cents = target_avg_subscription_fee_cents
 
@@ -169,12 +188,14 @@ export async function POST(request: NextRequest) {
         monthly_revenue_target_cents,
         monthly_cost_target_cents,
         setup_step_completed,
-        setup_completed_at: setup_step_completed >= 3 ? new Date().toISOString() : null,
+        setup_completed_at: setup_step_completed >= 3 ? getCurrentDate().toISOString() : null,
         created_by: profile.id,
         updated_by: profile.id,
         // Set component defaults (0 = not configured)
         monthly_hours_target: monthly_hours_target || 0,
         target_hourly_rate_cents: target_hourly_rate_cents || 0,
+        target_billable_ratio: target_billable_ratio || 90,
+        target_working_days_per_week: target_working_days_per_week || [1, 2, 3, 4, 5],
         target_monthly_active_users: target_monthly_active_users || 0,
         target_avg_subscription_fee_cents: target_avg_subscription_fee_cents || 0
       }
@@ -215,6 +236,8 @@ export async function PUT(request: NextRequest) {
       monthly_cost_target_cents,
       monthly_hours_target,
       target_hourly_rate_cents,
+      target_billable_ratio,
+      target_working_days_per_week,
       target_monthly_active_users,
       target_avg_subscription_fee_cents
     } = body
@@ -262,6 +285,20 @@ export async function PUT(request: NextRequest) {
       errors.push('Subscription revenue stream requires both Users and Subscription Fee to be configured')
     }
 
+    // Validate billable ratio if provided
+    if (target_billable_ratio !== undefined && (target_billable_ratio < 50 || target_billable_ratio > 100)) {
+      errors.push('Target billable ratio must be between 50 and 100')
+    }
+
+    // Validate working days if provided
+    if (target_working_days_per_week) {
+      if (!Array.isArray(target_working_days_per_week) || target_working_days_per_week.length === 0) {
+        errors.push('At least one working day must be selected')
+      } else if (!target_working_days_per_week.every((day: number) => day >= 1 && day <= 7)) {
+        errors.push('Working days must be valid ISO weekday numbers (1-7)')
+      }
+    }
+
     if (errors.length > 0) {
       return NextResponse.json({ error: errors.join(', ') }, { status: 400 })
     }
@@ -297,6 +334,8 @@ export async function PUT(request: NextRequest) {
     // Add component-based fields if provided
     if (monthly_hours_target !== undefined) updateData.monthly_hours_target = monthly_hours_target
     if (target_hourly_rate_cents !== undefined) updateData.target_hourly_rate_cents = target_hourly_rate_cents
+    if (target_billable_ratio !== undefined) updateData.target_billable_ratio = target_billable_ratio
+    if (target_working_days_per_week !== undefined) updateData.target_working_days_per_week = target_working_days_per_week
     if (target_monthly_active_users !== undefined) updateData.target_monthly_active_users = target_monthly_active_users
     if (target_avg_subscription_fee_cents !== undefined) updateData.target_avg_subscription_fee_cents = target_avg_subscription_fee_cents
 

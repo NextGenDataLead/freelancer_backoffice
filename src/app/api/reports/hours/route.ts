@@ -6,6 +6,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Query schema for hours report
 const HoursReportQuerySchema = z.object({
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
     // Calculate date range based on period or custom dates
     let dateFrom: string
     let dateTo: string
-    const now = new Date()
+    const now = getCurrentDate()
 
     if (validatedQuery.date_from && validatedQuery.date_to) {
       dateFrom = validatedQuery.date_from

@@ -5,6 +5,14 @@
  * into a clean input → transform → output flow.
  */
 
+import {
+  calculateExpectedWorkingDays,
+  calculateDailyHoursTarget,
+  getStartOfMonth,
+  getEndOfMonth,
+  getYesterday
+} from './utils/working-days-calculator'
+
 // ================== INPUT TYPES ==================
 export interface HealthScoreInputs {
   dashboardMetrics: {
@@ -12,11 +20,18 @@ export interface HealthScoreInputs {
     achterstallig: number
     achterstallig_count: number
     factureerbaar: number
+    factureerbaar_count?: number
+    actual_dso?: number
+    average_payment_terms?: number
+    average_dri?: number
   }
   timeStats: {
     thisMonth: {
       hours: number
       revenue: number
+      billableHours?: number
+      nonBillableHours?: number
+      distinctWorkingDays?: number
     }
     unbilled: {
       hours: number
@@ -26,6 +41,20 @@ export interface HealthScoreInputs {
     subscription?: {
       monthlyActiveUsers?: { current: number }
       averageSubscriptionFee?: { current: number }
+    }
+    rolling30Days?: {
+      current: {
+        billableRevenue: number
+        distinctWorkingDays: number
+        totalHours: number
+        dailyHours: number
+      }
+      previous: {
+        billableRevenue: number
+        distinctWorkingDays: number
+        totalHours: number
+        dailyHours: number
+      }
     }
   }
   mtdCalculations: {
@@ -46,6 +75,22 @@ export interface HealthScoreInputs {
     target_avg_subscription_fee: number
     setup_completed: boolean
   }
+  clientRevenue?: {
+    topClient?: {
+      name: string
+      revenueShare: number
+    }
+    rolling30DaysComparison?: {
+      current: {
+        topClientShare: number
+        totalRevenue: number
+      }
+      previous: {
+        topClientShare: number
+        totalRevenue: number
+      }
+    }
+  }
 }
 
 // ================== OUTPUT TYPES ==================
@@ -57,6 +102,12 @@ export interface HealthScoreOutputs {
     risk: number
     total: number
     totalRounded: number
+  }
+  breakdown: {
+    profit: any
+    cashflow: any
+    efficiency: any
+    risk: any
   }
   explanations: {
     profit: HealthExplanation // Profit health is now the default
@@ -115,46 +166,127 @@ export interface HealthRecommendation {
   }
 }
 
+// ================== REDISTRIBUTION TYPES ==================
+
+export interface ScoreCategories {
+  subscription: {
+    subscriberGrowth: number
+    subscriptionPricing: number
+    revenueMix: number
+    subscriptionEffectiveness: number
+  }
+  timeBased: {
+    pricingEfficiency: number
+    rateOptimization: number
+    timeUtilization: number
+    revenueQuality: number
+  }
+}
+
+export interface RedistributedScores {
+  subscriberScore: number
+  subscriptionPricingScore: number
+  revenueMixScore: number
+  pricingEfficiencyScore: number
+  rateOptimizationScore: number
+  subscriptionEffectivenessScore: number
+  timeUtilizationScore: number
+  revenueQualityScore: number
+  totalPoints: number
+  businessModel: 'time-only' | 'saas-only' | 'hybrid'
+}
+
 // ================== DECISION TREE CALCULATORS ==================
+
+// Helper function to round to one decimal place consistently
+function roundToOneDecimal(value: number): number {
+  return Math.round(value * 10) / 10
+}
 
 
 class CashFlowScoreCalculator {
+  // Helper method to calculate realistic DIO from invoice data patterns
+  calculateRealDIOFromData(overdueAmount: number, overdueCount: number): number {
+    // If no overdue amounts, collection is excellent
+    if (overdueAmount <= 0 || overdueCount <= 0) return 0
+
+    // Estimate days based on real business patterns:
+    // €500-€1000 overdue typically = 15-30 days past due
+    // €1000-€3000 overdue typically = 30-45 days past due
+    // €3000+ overdue typically = 45-60+ days past due
+
+    const avgOverduePerInvoice = overdueAmount / Math.max(overdueCount, 1)
+    let calculatedDIO: number
+
+    if (avgOverduePerInvoice <= 500) {
+      // Small amounts = likely recent overdue
+      calculatedDIO = 15 + (avgOverduePerInvoice / 500) * 15 // 15-30 days
+    } else if (avgOverduePerInvoice <= 1500) {
+      // Medium amounts = moderate overdue period
+      calculatedDIO = 30 + ((avgOverduePerInvoice - 500) / 1000) * 15 // 30-45 days
+    } else {
+      // Large amounts = likely long overdue
+      calculatedDIO = Math.min(45 + ((avgOverduePerInvoice - 1500) / 1000) * 10, 60) // 45-60 days max
+    }
+
+    // Validate data integrity (ensure tenant isolation)
+    if (overdueCount > 0 && overdueAmount <= 0) {
+      console.warn('⚠️ DIO Data Integrity Warning: Overdue count exists but amount is zero')
+    }
+    if (overdueAmount > 0 && overdueCount <= 0) {
+      console.warn('⚠️ DIO Data Integrity Warning: Overdue amount exists but count is zero')
+    }
+
+    return calculatedDIO
+  }
+
   calculate(inputs: HealthScoreInputs): { score: number; breakdown: any } {
     const { dashboardMetrics } = inputs
 
-    // FIXED: Focus purely on payment collection patterns (completely independent)
+    // Use actual DIO (Days Invoice Overdue) from invoice payment timing
     const overdueAmount = dashboardMetrics.achterstallig || 0
     const overdueCount = dashboardMetrics.achterstallig_count || 0
-
-    // Pure collection metrics - no revenue dependency
-    // Collection speed score based purely on overdue days equivalent
-    const dsoEquivalent = overdueAmount > 0 ? Math.min(overdueAmount / 1000 * 15, 60) : 0 // Scale: €1k = 15 days
+    const actualDIO = dashboardMetrics.actual_dso ?? this.calculateRealDIOFromData(overdueAmount, overdueCount)
+    const paymentTerms = dashboardMetrics.average_payment_terms || 30
 
     // Volume efficiency - fewer overdue items = better
     const volumeEfficiency = Math.max(0, 1 - (overdueCount / 10)) // Scale to 0-1 based on count
 
-    // Score components (completely independent of revenue)
-    const dsoScore = (dsoEquivalent <= 7 ? 10 :
-                     dsoEquivalent <= 15 ? 8 :
-                     dsoEquivalent <= 30 ? 5 :
-                     dsoEquivalent <= 45 ? 2 : 0)
+    // Score components - DYNAMIC BASED ON PAYMENT TERMS
+    // Thresholds relative to payment terms:
+    // - Excellent: ≤payment terms (paid on time or early)
+    // - Good: payment terms + 1 to 7 days late
+    // - Fair: payment terms + 8 to 15 days late
+    // - Poor: payment terms + 16 to 30 days late
+    // - Critical: >payment terms + 30 days late
 
-    const volumeScore = Math.round(volumeEfficiency * 10) // 0-10 points based on volume efficiency
+    const excellent = paymentTerms
+    const good = paymentTerms + 7
+    const fair = paymentTerms + 15
+    const poor = paymentTerms + 30
 
-    const absoluteAmountScore = (overdueAmount <= 1000 ? 5 :
-                               overdueAmount <= 3000 ? 3 :
-                               overdueAmount <= 5000 ? 1 : 0)
+    const dioScore = roundToOneDecimal(actualDIO <= excellent ? 15 :
+                                      actualDIO <= good ? 12 :
+                                      actualDIO <= fair ? 8 :
+                                      actualDIO <= poor ? 3 : 0) // 15 points max
 
-    const finalScore = dsoScore + volumeScore + absoluteAmountScore
+    const volumeScore = roundToOneDecimal(volumeEfficiency * 5) // 0-5 points
+
+    const absoluteAmountScore = roundToOneDecimal(overdueAmount <= 1000 ? 5 :
+                                                 overdueAmount <= 3000 ? 3 :
+                                                 overdueAmount <= 5000 ? 1 : 0) // 5 points max
+
+    const finalScore = roundToOneDecimal(dioScore + volumeScore + absoluteAmountScore)
 
     return {
       score: finalScore,
       breakdown: {
         overdueAmount,
         overdueCount,
-        dsoEquivalent,
+        dioEquivalent: actualDIO,
+        paymentTerms,
         volumeEfficiency,
-        scores: { dsoScore, volumeScore, absoluteAmountScore }
+        scores: { dioScore, volumeScore, absoluteAmountScore }
       }
     }
   }
@@ -183,9 +315,9 @@ class CashFlowScoreCalculator {
             },
             {
               type: 'metric',
-              label: 'Collection Speed',
-              value: `${result.breakdown.dsoEquivalent?.toFixed(1) || 0} days equivalent`,
-              emphasis: result.breakdown.dsoEquivalent > 15 ? 'secondary' : 'primary'
+              label: 'DIO (Days Invoice Overdue)',
+              value: `${result.breakdown.dioEquivalent?.toFixed(1) || 0} days`,
+              emphasis: result.breakdown.dioEquivalent > 15 ? 'secondary' : 'primary'
             },
             {
               type: 'text',
@@ -199,20 +331,20 @@ class CashFlowScoreCalculator {
           items: [
             {
               type: 'calculation',
-              label: '1. Collection Speed',
-              value: `${result.breakdown.dsoEquivalent?.toFixed(1) || 0} days equivalent`,
-              description: `→ ${result.breakdown.scores?.dsoScore || 0}/10 pts`,
+              label: '1. Collection Speed (DIO)',
+              value: `${result.breakdown.dioEquivalent?.toFixed(1) || 0} days overdue`,
+              description: `→ ${result.breakdown.scores?.dioScore || 0}/15 pts`,
               emphasis: 'primary'
             },
             {
               type: 'standard',
-              value: 'Speed: <7 days=Excellent, 7-15=Good, 15-30=Fair, 30-45=Poor'
+              value: 'Speed: <7 days=Excellent (15), 7-15=Good (12), 15-30=Fair (8), 30-45=Poor (3)'
             },
             {
               type: 'calculation',
               label: '2. Volume Efficiency',
               value: `${(result.breakdown.volumeEfficiency * 100)?.toFixed(1) || 0}%`,
-              description: `→ ${result.breakdown.scores?.volumeScore || 0}/10 pts`,
+              description: `→ ${result.breakdown.scores?.volumeScore || 0}/5 pts`,
               emphasis: 'primary'
             },
             {
@@ -232,7 +364,7 @@ class CashFlowScoreCalculator {
             },
             {
               type: 'formula',
-              formula: `Total Score: ${result.breakdown.scores?.dsoScore || 0} + ${result.breakdown.scores?.volumeScore || 0} + ${result.breakdown.scores?.absoluteAmountScore || 0} = ${result.score}/25`
+              formula: `Total Score: ${result.breakdown.scores?.dioScore || 0} + ${result.breakdown.scores?.volumeScore || 0} + ${result.breakdown.scores?.absoluteAmountScore || 0} = ${result.score}/25`
             }
           ]
         }
@@ -242,34 +374,36 @@ class CashFlowScoreCalculator {
 
   generateRecommendations(inputs: HealthScoreInputs, breakdown: any): HealthRecommendation[] {
     const recommendations: HealthRecommendation[] = []
-    const { overdueAmount, overdueCount, dsoEquivalent, scores } = breakdown
+    const { overdueAmount, overdueCount, dioEquivalent, scores, paymentTerms } = breakdown
 
-    // 1. COLLECTION SPEED OPTIMIZATION (up to 10 points)
-    const speedGap = Math.max(0, dsoEquivalent - 7)
-    const speedPointsToGain = Math.max(0.1, 10 - (scores?.dsoScore || 0))
+    // 1. COLLECTION SPEED OPTIMIZATION (up to 15 points)
+    const targetDIO = paymentTerms || 30
+    const speedGap = Math.max(0, dioEquivalent - targetDIO)
+    const speedPointsToGain = Math.max(0.1, 15 - (scores?.dioScore || 0))
 
     recommendations.push({
-      id: 'accelerate-collection-speed',
+      id: 'reduce-dio',
       priority: speedPointsToGain >= 5 ? 'high' : speedPointsToGain >= 2 ? 'medium' : 'low',
       impact: Math.round(speedPointsToGain * 10) / 10,
       effort: 'medium',
       timeframe: 'immediate',
-      title: 'Accelerate Collection Speed',
+      title: 'Reduce Days Invoice Overdue (DIO)',
       description: speedGap > 0
-        ? `Reduce collection time from ${dsoEquivalent.toFixed(1)} to under 7 days equivalent`
-        : `Maintain excellent collection speed under 7 days`,
+        ? `Reduce DIO from ${dioEquivalent.toFixed(1)} to ≤${targetDIO} days (payment terms)`
+        : `Maintain excellent DIO at ${dioEquivalent.toFixed(1)} days`,
       actionItems: speedGap > 0 ? [
         'Contact clients with outstanding invoices immediately',
         'Implement daily payment follow-up procedures',
-        'Offer early payment discounts for quick settlement'
+        'Offer early payment discounts for quick settlement',
+        'Send payment reminders before due date'
       ] : [
         'Maintain current efficient collection processes',
         'Monitor payment timing consistency',
         'Implement automated payment reminders'
       ],
       metrics: {
-        current: `${dsoEquivalent.toFixed(1)} days equivalent`,
-        target: '<7 days equivalent',
+        current: `${dioEquivalent.toFixed(1)} days overdue`,
+        target: `≤${targetDIO} days (payment terms)`,
         pointsToGain: Math.round(speedPointsToGain * 10) / 10
       }
     })
@@ -348,134 +482,133 @@ class CashFlowScoreCalculator {
 
 class EfficiencyScoreCalculator {
   calculate(inputs: HealthScoreInputs): { score: number; breakdown: any } {
-    const { timeStats, mtdCalculations, profitTargets } = inputs
+    const { timeStats, dashboardMetrics } = inputs
 
-    // Use component-based hours target instead of hardcoded
-    const targetHours = profitTargets?.monthly_hours_target || 160
-    const mtdHoursTarget = Math.round(targetHours * mtdCalculations.monthProgress)
+    const totalRevenue = dashboardMetrics.totale_registratie || 0
+    const unbilledValue = dashboardMetrics.factureerbaar || 0
+    const unbilledCount = dashboardMetrics.factureerbaar_count || 0
+    const averageDRI = dashboardMetrics.average_dri ?? 0
 
-    const currentHours = timeStats.thisMonth.hours || 0
-    const unbilledHours = timeStats.unbilled?.hours || 0
+    // === EFFICIENCY METRICS (MIRRORING CASHFLOW STRUCTURE) ===
 
-    // Pure time metrics (no revenue calculations)
-    const hoursProgressRatio = mtdHoursTarget > 0 ? currentHours / mtdHoursTarget : 0
-    const billingEfficiency = currentHours > 0 ?
-      (currentHours - unbilledHours) / currentHours : 1
+    // 1. DRI - Days Ready to Invoice (15 pts) - How quickly ready work becomes invoiced
+    // DRI Scoring: Lower is better (faster invoicing)
+    // Excellent: ≤2 days (15 pts), Good: 3-5 days (12 pts), Fair: 6-10 days (8 pts), Poor: 11-20 days (3 pts), Critical: >20 days (0 pts)
+    const driScore = roundToOneDecimal(
+      averageDRI <= 2 ? 15 :
+      averageDRI <= 5 ? 12 :
+      averageDRI <= 10 ? 8 :
+      averageDRI <= 20 ? 3 : 0
+    )
 
-    // Consistency score (daily tracking patterns)
-    const dailyAverage = currentHours / mtdCalculations.currentDay
-    const consistencyScore = dailyAverage >= 5 ? 8 :
-                           dailyAverage >= 3 ? 6 :
-                           dailyAverage >= 2 ? 4 : 2
+    // 2. Volume Efficiency (5 pts) - Fewer ready-to-invoice items = better
+    const volumeEfficiency = Math.max(0, 1 - (unbilledCount / 10)) // Scale to 0-1 based on count
+    const volumeScore = roundToOneDecimal(volumeEfficiency * 5) // 0-5 points
 
-    // Time utilization score
-    const utilizationScore = Math.min(Math.round(hoursProgressRatio * 12), 12)
+    // 3. Absolute Amount Control (5 pts) - Lower ready-to-invoice amounts = better
+    // €0-€1000 = Excellent (5 pts)
+    // €1000-€3000 = Good (3 pts)
+    // €3000-€5000 = Fair (1 pt)
+    // >€5000 = Poor (0 pts)
+    const absoluteAmountScore = roundToOneDecimal(
+      unbilledValue <= 1000 ? 5 :
+      unbilledValue <= 3000 ? 3 :
+      unbilledValue <= 5000 ? 1 : 0
+    )
 
-    // Billing efficiency score
-    const billingScore = (billingEfficiency >= 0.90 ? 5 :
-                         billingEfficiency >= 0.80 ? 4 :
-                         billingEfficiency >= 0.70 ? 3 :
-                         billingEfficiency >= 0.60 ? 2 : 1)
-
-    const finalScore = utilizationScore + billingScore + consistencyScore
+    const finalScore = roundToOneDecimal(driScore + volumeScore + absoluteAmountScore)
 
     return {
       score: finalScore,
       breakdown: {
-        currentHours,
-        mtdTarget: mtdHoursTarget,
-        targetHours,
-        unbilledHours,
-        hoursProgressRatio,
-        billingEfficiency,
-        dailyAverage,
-        scores: { utilizationScore, billingScore, consistencyScore }
+        totalRevenue,
+        unbilledValue,
+        unbilledCount,
+        averageDRI,
+        volumeEfficiency,
+        scores: {
+          driScore,
+          volumeScore,
+          absoluteAmountScore
+        }
       }
     }
   }
 
   generateExplanation(inputs: HealthScoreInputs, result: { score: number; breakdown: any }): HealthExplanation {
-    const { mtdCalculations } = inputs
-
     return {
-      title: 'Efficiency Health - Time Utilization (25 points)',
+      title: 'Efficiency Health - Work-to-Revenue Conversion (25 points)',
       score: result.score,
       maxScore: 25,
       details: [
         {
           type: 'metrics',
-          title: 'Time Utilization Data',
+          title: 'Conversion Efficiency Data',
           items: [
             {
               type: 'metric',
-              label: 'Current Hours (MTD)',
-              value: `${result.breakdown.currentHours}h`,
+              label: 'Total Invoiced Revenue',
+              value: `€${result.breakdown.totalRevenue?.toFixed(0)}`,
               emphasis: 'primary'
             },
             {
               type: 'metric',
-              label: 'MTD Target',
-              value: `${result.breakdown.mtdTarget?.toFixed(1)}h`,
-              description: `Day ${mtdCalculations.currentDay}/${mtdCalculations.daysInMonth}`
+              label: 'Unbilled Work Value',
+              value: `€${result.breakdown.unbilledValue?.toFixed(0)}`,
+              emphasis: result.breakdown.unbilledValue > 0 ? 'secondary' : 'muted'
             },
             {
               type: 'metric',
-              label: 'Unbilled Hours',
-              value: `${result.breakdown.unbilledHours}h`,
-              emphasis: result.breakdown.unbilledHours > 0 ? 'secondary' : 'muted'
-            },
-            {
-              type: 'metric',
-              label: 'Daily Average',
-              value: `${result.breakdown.dailyAverage?.toFixed(1)}h/day`,
-              emphasis: result.breakdown.dailyAverage >= 5 ? 'primary' : 'secondary'
+              label: 'Total Earned Value',
+              value: `€${result.breakdown.totalEarned?.toFixed(0)}`,
+              description: 'Invoiced + Unbilled'
             },
             {
               type: 'text',
-              description: 'Note: This metric focuses purely on time utilization patterns, independent of revenue or profitability.'
+              description: 'Note: This metric focuses on operational effectiveness of converting work to revenue, independent of time tracking.'
             }
           ]
         },
         {
           type: 'calculations',
-          title: 'Independent Time Metrics',
+          title: 'Efficiency Metrics',
           items: [
             {
               type: 'calculation',
-              label: '1. Time Utilization Progress',
-              value: `${(result.breakdown.hoursProgressRatio * 100)?.toFixed(1)}%`,
-              description: `→ ${result.breakdown.scores?.utilizationScore || 0}/12 pts`,
+              label: '1. DRI (Days Ready to Invoice)',
+              value: `${result.breakdown.averageDRI?.toFixed(1)} days`,
+              description: `→ ${result.breakdown.scores?.driScore || 0}/10 pts`,
               emphasis: 'primary'
             },
             {
               type: 'standard',
-              value: 'Progress: 100%=Excellent, 80-100%=Good, 60-80%=Fair, <60%=Poor'
+              value: 'DRI: ≤2 days=Excellent (10), 3-5=Good (7.5), 6-10=Fair (5), 11-20=Poor (2.5), >20=Critical (0)'
             },
             {
               type: 'calculation',
-              label: '2. Billing Efficiency',
-              value: `${(result.breakdown.billingEfficiency * 100)?.toFixed(1)}%`,
-              description: `→ ${result.breakdown.scores?.billingScore || 0}/5 pts`,
+              label: '2. Collection Rate',
+              value: `${(result.breakdown.collectionRate * 100)?.toFixed(1)}%`,
+              description: `→ ${result.breakdown.scores?.collectionRateScore || 0}/10 pts`,
               emphasis: 'primary'
             },
             {
               type: 'standard',
-              value: 'Efficiency: >90%=Excellent, 80-90%=Good, 70-80%=Fair, <60%=Poor'
+              value: 'Collection: >90%=Excellent, 80-90%=Good, 70-80%=Fair, <70%=Poor'
             },
             {
               type: 'calculation',
-              label: '3. Daily Consistency',
-              value: `${result.breakdown.dailyAverage?.toFixed(1)}h/day average`,
-              description: `→ ${result.breakdown.scores?.consistencyScore || 0}/8 pts`,
-              emphasis: 'primary'
+              label: '3. Invoice Quality',
+              value: 'Placeholder (80%)',
+              description: `→ ${result.breakdown.scores?.invoiceQualityScore || 0}/5 pts`,
+              emphasis: 'muted'
             },
             {
               type: 'standard',
-              value: 'Consistency: ≥5h/day=Excellent, 3-5h=Good, 2-3h=Fair, <2h=Poor'
+              value: 'Quality: Future metric for tracking invoice accuracy'
             },
             {
               type: 'formula',
-              formula: `Total Score: ${result.breakdown.scores?.utilizationScore || 0} + ${result.breakdown.scores?.billingScore || 0} + ${result.breakdown.scores?.consistencyScore || 0} = ${result.score}/25`
+              formula: `Total Score: ${result.breakdown.scores?.invoicingSpeedScore || 0} + ${result.breakdown.scores?.collectionRateScore || 0} + ${result.breakdown.scores?.invoiceQualityScore || 0} = ${result.score}/25`
             }
           ]
         }
@@ -485,95 +618,88 @@ class EfficiencyScoreCalculator {
 
   generateRecommendations(inputs: HealthScoreInputs, breakdown: any): HealthRecommendation[] {
     const recommendations: HealthRecommendation[] = []
-    const { hoursProgressRatio, billingEfficiency, dailyAverage, scores, currentHours, mtdTarget, unbilledHours } = breakdown
+    const { averageDRI, collectionRate, scores, unbilledValue, totalEarned } = breakdown
 
-    // 1. TIME UTILIZATION OPTIMIZATION (up to 12 points)
-    const hoursGap = Math.max(0, mtdTarget - currentHours)
-    const utilizationPointsToGain = Math.max(0.1, 12 - (scores?.utilizationScore || 0))
+    // 1. DRI (DAYS READY TO INVOICE) OPTIMIZATION (up to 10 points)
+    const driPointsToGain = Math.max(0.1, 10 - (scores?.driScore || 0))
 
     recommendations.push({
-      id: 'improve-time-utilization',
-      priority: utilizationPointsToGain >= 6 ? 'high' : utilizationPointsToGain >= 3 ? 'medium' : 'low',
-      impact: Math.round(utilizationPointsToGain * 10) / 10,
-      effort: hoursGap > 40 ? 'high' : 'medium',
+      id: 'reduce-dri',
+      priority: driPointsToGain >= 5 ? 'high' : driPointsToGain >= 3 ? 'medium' : 'low',
+      impact: Math.round(driPointsToGain * 10) / 10,
+      effort: unbilledValue > 5000 ? 'high' : 'medium',
       timeframe: 'weekly',
-      title: 'Improve Time Utilization',
-      description: hoursGap > 0
-        ? `Increase tracked hours by ${Math.round(hoursGap)}h to reach MTD target`
-        : `Maintain excellent utilization at ${Math.round(hoursProgressRatio * 100)}%`,
-      actionItems: hoursGap > 0 ? [
-        `Track ${Math.round(hoursGap)} additional hours this month`,
-        'Improve daily time tracking consistency',
-        'Focus on billable work during peak hours'
+      title: 'Reduce Days Ready to Invoice (DRI)',
+      description: averageDRI > 2
+        ? `Reduce DRI from ${averageDRI?.toFixed(1)} days to ≤2 days for maximum efficiency`
+        : `Maintain excellent DRI at ${averageDRI?.toFixed(1)} days`,
+      actionItems: averageDRI > 2 ? [
+        'Invoice ready work within 24-48 hours',
+        'Set up automated invoicing workflows',
+        'Review unbilled work daily',
+        'Create invoicing calendar reminders'
       ] : [
-        'Maintain consistent tracking patterns',
-        'Optimize high-value time allocation',
-        'Document successful productivity habits'
+        'Maintain fast invoicing practices',
+        'Monitor unbilled work daily',
+        'Optimize invoice generation process'
       ],
       metrics: {
-        current: `${Math.round(hoursProgressRatio * 100)}% of MTD target`,
-        target: '80%+ target achievement',
-        pointsToGain: Math.round(utilizationPointsToGain * 10) / 10
+        current: `${averageDRI?.toFixed(1)} days average`,
+        target: '≤2 days (Excellent)',
+        pointsToGain: Math.round(driPointsToGain * 10) / 10
       }
     })
 
-    // 2. BILLING EFFICIENCY OPTIMIZATION (up to 5 points)
-    const efficiencyGap = Math.max(0, 0.80 - billingEfficiency)
-    const billingPointsToGain = Math.max(0.1, 5 - (scores?.billingScore || 0))
+    // 2. COLLECTION RATE OPTIMIZATION (up to 10 points)
+    const collectionGap = Math.max(0, 0.90 - collectionRate)
+    const collectionPointsToGain = Math.max(0.1, 10 - (scores?.collectionRateScore || 0))
 
     recommendations.push({
-      id: 'improve-billing-efficiency',
-      priority: billingPointsToGain >= 3 ? 'medium' : 'low',
-      impact: Math.round(billingPointsToGain * 10) / 10,
+      id: 'improve-collection-rate',
+      priority: collectionPointsToGain >= 5 ? 'high' : collectionPointsToGain >= 3 ? 'medium' : 'low',
+      impact: Math.round(collectionPointsToGain * 10) / 10,
       effort: 'medium',
       timeframe: 'weekly',
-      title: 'Improve Billing Efficiency',
-      description: efficiencyGap > 0
-        ? `Convert ${unbilledHours}h unbilled time to billable hours`
-        : `Maintain excellent billing efficiency at ${Math.round(billingEfficiency * 100)}%`,
-      actionItems: efficiencyGap > 0 ? [
-        'Review and bill all completed unbilled work',
-        'Implement real-time billing tracking',
-        'Streamline client approval processes'
+      title: 'Improve Collection Rate',
+      description: collectionGap > 0
+        ? `Increase collection rate from ${Math.round(collectionRate * 100)}% to 90%+`
+        : `Maintain excellent collection rate at ${Math.round(collectionRate * 100)}%`,
+      actionItems: collectionGap > 0 ? [
+        'Follow up on outstanding invoices',
+        'Implement payment reminders',
+        'Offer multiple payment methods'
       ] : [
-        'Maintain efficient billing practices',
-        'Monitor unbilled hours weekly',
-        'Optimize billing workflow processes'
+        'Maintain efficient collection practices',
+        'Monitor payment patterns weekly',
+        'Optimize client payment terms'
       ],
       metrics: {
-        current: `${Math.round(billingEfficiency * 100)}% billing efficiency`,
-        target: '80%+ billing efficiency',
-        pointsToGain: Math.round(billingPointsToGain * 10) / 10
+        current: `${Math.round(collectionRate * 100)}% collected`,
+        target: '90%+ collection rate',
+        pointsToGain: Math.round(collectionPointsToGain * 10) / 10
       }
     })
 
-    // 3. DAILY CONSISTENCY OPTIMIZATION (up to 8 points)
-    const consistencyGap = Math.max(0, 3 - dailyAverage)
-    const consistencyPointsToGain = Math.max(0.1, 8 - (scores?.consistencyScore || 0))
+    // 3. INVOICE QUALITY OPTIMIZATION (up to 5 points) - Placeholder
+    const qualityPointsToGain = Math.max(0.1, 5 - (scores?.invoiceQualityScore || 0))
 
     recommendations.push({
-      id: 'improve-daily-consistency',
-      priority: consistencyPointsToGain >= 4 ? 'high' : consistencyPointsToGain >= 2 ? 'medium' : 'low',
-      impact: Math.round(consistencyPointsToGain * 10) / 10,
+      id: 'improve-invoice-quality',
+      priority: 'low',
+      impact: Math.round(qualityPointsToGain * 10) / 10,
       effort: 'low',
-      timeframe: 'immediate',
-      title: 'Improve Daily Consistency',
-      description: consistencyGap > 0
-        ? `Increase daily average from ${dailyAverage.toFixed(1)}h to 3h+ per day`
-        : `Maintain consistent daily average of ${dailyAverage.toFixed(1)}h/day`,
-      actionItems: consistencyGap > 0 ? [
-        'Set daily minimum time tracking goals',
-        'Create consistent morning work routines',
-        'Use time blocking for focused work sessions'
-      ] : [
-        'Maintain current daily work patterns',
-        'Monitor consistency weekly',
-        'Optimize peak productivity hours'
+      timeframe: 'ongoing',
+      title: 'Improve Invoice Quality',
+      description: 'Future metric - maintain invoice accuracy and completeness',
+      actionItems: [
+        'Use invoice templates',
+        'Double-check before sending',
+        'Track client feedback'
       ],
       metrics: {
-        current: `${dailyAverage.toFixed(1)}h/day average`,
-        target: '3h+/day consistent tracking',
-        pointsToGain: Math.round(consistencyPointsToGain * 10) / 10
+        current: 'Placeholder (80%)',
+        target: '100% invoice accuracy',
+        pointsToGain: Math.round(qualityPointsToGain * 10) / 10
       }
     })
 
@@ -591,210 +717,297 @@ class EfficiencyScoreCalculator {
 
 class RiskScoreCalculator {
   calculate(inputs: HealthScoreInputs): { score: number; breakdown: any } {
-    const { dashboardMetrics, timeStats } = inputs
+    const { timeStats, profitTargets, mtdCalculations, clientRevenue } = inputs
 
-    const readyToBillAmount = dashboardMetrics.factureerbaar || 0
-    const overdueCount = dashboardMetrics.achterstallig_count || 0
-    const overdueAmount = dashboardMetrics.achterstallig || 0
+    // Redistribute: Client (36%), Business (32%), Consistency (32%)
+    // Client concentration risk - 9 pts max (36% of 25)
+    // Use rolling 30-day data for consistency with other metrics
+    const topClientShare = clientRevenue?.rolling30DaysComparison?.current?.topClientShare || 0
+    let clientRisk = 0
+    if (topClientShare >= 80) {
+      clientRisk = 9 // Very high concentration: >80%
+    } else if (topClientShare >= 60) {
+      clientRisk = 6 // High concentration: 60-80%
+    } else if (topClientShare >= 40) {
+      clientRisk = 3 // Moderate concentration: 40-60%
+    } else {
+      clientRisk = 0 // Diversified: <40%
+    }
+    clientRisk = roundToOneDecimal(clientRisk)
 
-    // FIXED: Remove hours dependency - focus on business continuity risks only
+    // Calculate target values needed for consistency metrics
+    const targetWorkingDays = profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
+    const targetDaysPerWeek = targetWorkingDays.length
+    const targetDailyHours = profitTargets?.monthly_hours_target
+      ? calculateDailyHoursTarget(profitTargets.monthly_hours_target, targetWorkingDays)
+      : 8
 
-    // Invoice processing risk (independent scoring)
-    const invoiceProcessingRisk = Math.min((readyToBillAmount / 5000) * 8, 8)
+    // Business continuity risk - 8 pts max (32% of 25)
+    // Split into 3 sub-metrics: Revenue Stability (3pts), Client Concentration Trend (2.5pts), Consistency Trend (2.5pts)
 
-    // Payment collection risk
-    const paymentRisk = (overdueAmount > 10000 ? 5 :
-                        overdueAmount > 5000 ? 3 :
-                        overdueAmount > 2000 ? 2 : 0)
+    // 1. Revenue Stream Stability (3 points)
+    const current30DaysBillableRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
+    const previous30DaysBillableRevenue = timeStats.rolling30Days?.previous?.billableRevenue || 0
 
-    // Client concentration risk (simplified)
-    const clientRisk = 3 // Fixed risk factor
+    let revenueStabilityRisk = 0
+    if (previous30DaysBillableRevenue > 0) {
+      const revenueGrowth = current30DaysBillableRevenue / previous30DaysBillableRevenue
+      if (revenueGrowth >= 1.0) {
+        revenueStabilityRisk = 0 // No risk - growing
+      } else if (revenueGrowth >= 0.9) {
+        revenueStabilityRisk = 0.5 // Slight decline
+      } else if (revenueGrowth >= 0.8) {
+        revenueStabilityRisk = 1.5 // Moderate decline
+      } else {
+        revenueStabilityRisk = 3 // Significant decline
+      }
+    } else {
+      revenueStabilityRisk = 1.5 // No baseline - moderate risk
+    }
 
-    // Business continuity risk (subscription health if available)
-    const subscriptionRisk = timeStats.subscription ?
-      (timeStats.subscription.monthlyActiveUsers?.current || 0) < 5 ? 3 : 0 : 2
+    // 2. Client Concentration Trend (2.5 points)
+    const current30DaysClientShare = clientRevenue?.rolling30DaysComparison?.current?.topClientShare || 0
+    const previous30DaysClientShare = clientRevenue?.rolling30DaysComparison?.previous?.topClientShare || 0
 
-    const totalRiskPenalty = invoiceProcessingRisk + paymentRisk +
-                           clientRisk + subscriptionRisk
-    const finalScore = Math.round(Math.max(0, 25 - totalRiskPenalty))
+    let clientConcentrationTrendRisk = 0
+    if (previous30DaysClientShare > 0) {
+      const concentrationChange = current30DaysClientShare - previous30DaysClientShare
+      if (concentrationChange <= 0) {
+        clientConcentrationTrendRisk = 0 // Diversifying - good
+      } else if (concentrationChange <= 5) {
+        clientConcentrationTrendRisk = 0.5 // Slight increase
+      } else if (concentrationChange <= 10) {
+        clientConcentrationTrendRisk = 1.25 // Moderate increase
+      } else {
+        clientConcentrationTrendRisk = 2.5 // High increase
+      }
+    } else {
+      clientConcentrationTrendRisk = 0.5 // No baseline - slight risk
+    }
+
+    // 3. Daily Consistency Trend (2.5 points)
+    const current30DaysDailyHours = timeStats.rolling30Days?.current?.dailyHours || 0
+    const previous30DaysDailyHours = timeStats.rolling30Days?.previous?.dailyHours || 0
+
+    let consistencyTrendRisk = 0
+    if (previous30DaysDailyHours > 0 && targetDailyHours > 0) {
+      const currentDeviation = Math.abs(current30DaysDailyHours - targetDailyHours) / targetDailyHours
+      const previousDeviation = Math.abs(previous30DaysDailyHours - targetDailyHours) / targetDailyHours
+      const deviationChange = currentDeviation - previousDeviation
+
+      if (deviationChange <= 0) {
+        consistencyTrendRisk = 0 // Improving
+      } else if (deviationChange <= 0.1) {
+        consistencyTrendRisk = 0.5 // Slight deterioration
+      } else if (deviationChange <= 0.2) {
+        consistencyTrendRisk = 1.25 // Moderate deterioration
+      } else {
+        consistencyTrendRisk = 2.5 // Significant deterioration
+      }
+    } else {
+      consistencyTrendRisk = 0.5 // No baseline - slight risk
+    }
+
+    const businessContinuityRisk = roundToOneDecimal(
+      revenueStabilityRisk + clientConcentrationTrendRisk + consistencyTrendRisk
+    )
+
+    // Daily Consistency risk - 8 pts max (32% of 25)
+    // Use rolling 30-day data for consistency with other metrics
+    const actualDailyHours = timeStats.rolling30Days?.current?.dailyHours || 0
+    const distinctWorkingDays = timeStats.rolling30Days?.current?.distinctWorkingDays || 0
+
+    // Calculate days per week from rolling 30-day window
+    // 30 days ≈ 4.29 weeks (30/7)
+    const estimatedDaysPerWeek = distinctWorkingDays > 0
+      ? distinctWorkingDays / 4.29 // 30 days = 4.29 weeks
+      : targetDaysPerWeek // Fall back to target if no data
+
+    // Days/Week risk - 4 pts max (penalize deviation from target)
+    const daysDeviation = Math.abs(estimatedDaysPerWeek - targetDaysPerWeek) / targetDaysPerWeek
+    const daysRisk = roundToOneDecimal(Math.min(daysDeviation * 4, 4))
+
+    // Hours/Day risk - 4 pts max (penalize deviation from target)
+    const hoursDeviation = targetDailyHours > 0 ? Math.abs(actualDailyHours - targetDailyHours) / targetDailyHours : 0
+    const hoursRisk = roundToOneDecimal(Math.min(hoursDeviation * 4, 4))
+
+    const dailyConsistencyRisk = roundToOneDecimal(daysRisk + hoursRisk)
+
+    const totalRiskPenalty = roundToOneDecimal(clientRisk + businessContinuityRisk + dailyConsistencyRisk)
+    const finalScore = roundToOneDecimal(Math.max(0, 25 - totalRiskPenalty))
 
     return {
       score: finalScore,
       breakdown: {
-        readyToBillAmount,
-        overdueCount,
-        overdueAmount,
         penalties: {
-          invoiceProcessingRisk,
-          paymentRisk,
           clientRisk,
-          subscriptionRisk
+          businessContinuityRisk,
+          dailyConsistencyRisk,
+          daysRisk,
+          hoursRisk
         },
-        totalPenalty: totalRiskPenalty
+        totalPenalty: totalRiskPenalty,
+        // Business Continuity Risk sub-metrics breakdown
+        businessContinuityBreakdown: {
+          revenueStabilityRisk,
+          clientConcentrationTrendRisk,
+          consistencyTrendRisk,
+          current30DaysBillableRevenue,
+          previous30DaysBillableRevenue,
+          current30DaysClientShare,
+          previous30DaysClientShare,
+          current30DaysDailyHours,
+          previous30DaysDailyHours
+        },
+        // Client concentration data
+        topClient: clientRevenue?.topClient,
+        topClientShare,
+        // Daily Consistency data
+        targetDaysPerWeek,
+        estimatedDaysPerWeek,
+        targetDailyHours,
+        actualDailyHours,
+        distinctWorkingDays, // Add distinct working days to breakdown
+        daysDeviation,
+        hoursDeviation
       }
     }
   }
 
   generateExplanation(inputs: HealthScoreInputs, result: { score: number; breakdown: any }): HealthExplanation {
-    const { timeStats } = inputs
-    const { readyToBillAmount, overdueAmount, overdueCount, penalties } = result.breakdown
+    const { timeStats, profitTargets, clientRevenue } = inputs
+    const { penalties, hasSubscription, activeUsers, topClient, topClientShare } = result.breakdown
+
+    // Detect business model
+    const businessModel = hasSubscription ? 'hybrid' : 'time-only'
+
+    // Build details array conditionally
+    const details: any[] = []
+
+    // Business Continuity Data - core metrics
+    const coreMetrics = [
+      {
+        type: 'metric',
+        label: 'Client Dependency',
+        value: 'High Risk',
+        description: 'Business relies on few key clients',
+        emphasis: 'secondary'
+      }
+    ]
+
+    // Conditionally add subscription metrics
+    if (businessModel !== 'time-only') {
+      coreMetrics.push({
+        type: 'metric',
+        label: 'Subscription Health',
+        value: timeStats.subscription ?
+          `${timeStats.subscription.monthlyActiveUsers?.current || 0} users` :
+          'Not applicable',
+        description: 'Business model diversification'
+      })
+    }
+
+    coreMetrics.push({
+      type: 'text',
+      description: 'Note: This metric focuses purely on business continuity factors, independent of time tracking or efficiency.'
+    })
+
+    details.push({
+      type: 'metrics',
+      title: 'Business Continuity Data',
+      items: coreMetrics
+    })
+
+    // Build calculations array
+    const clientRiskValue = topClient
+      ? `${topClient.name}: ${topClientShare.toFixed(1)}%`
+      : 'No client data available'
+
+    const calculationItems = [
+      {
+        type: 'calculation',
+        label: '1. Client Concentration Risk',
+        value: clientRiskValue,
+        description: `→ -${penalties?.clientRisk || 0}/9 pts`,
+        emphasis: 'primary'
+      },
+      {
+        type: 'standard',
+        value: topClientShare >= 30
+          ? `Risk: High dependency on ${topClient?.name || 'key client'}`
+          : topClientShare >= 20
+            ? `Risk: Moderate concentration on ${topClient?.name || 'key client'}`
+            : 'Risk: Diversified client base'
+      },
+      {
+        type: 'calculation',
+        label: '2. Business Continuity Risk',
+        value: businessModel === 'time-only'
+          ? 'Time-based business model'
+          : `${activeUsers} active subscribers`,
+        description: `→ -${penalties?.subscriptionRisk || 0}/8 pts`,
+        emphasis: 'primary'
+      },
+      {
+        type: 'standard',
+        value: businessModel === 'time-only'
+          ? 'Risk: Single revenue stream (time-based only)'
+          : activeUsers < 5
+            ? 'Risk: Low subscriber base (<5 users)'
+            : 'Low risk: Healthy subscriber base'
+      }
+    ]
+
+    calculationItems.push({
+      type: 'formula',
+      formula: `Total Score: 25 - ${penalties?.clientRisk || 0} - ${penalties?.subscriptionRisk || 0} = ${result.score}/25`
+    })
+
+    details.push({
+      type: 'calculations',
+      title: 'Independent Risk Assessment',
+      items: calculationItems
+    })
 
     return {
       title: 'Risk Management - Business Continuity (25 points)',
       score: result.score,
       maxScore: 25,
-      details: [
-        {
-          type: 'metrics',
-          title: 'Business Continuity Data',
-          items: [
-            {
-              type: 'metric',
-              label: 'Ready to Bill',
-              value: `€${readyToBillAmount?.toLocaleString() || 0}`,
-              description: 'Invoice processing backlog',
-              emphasis: readyToBillAmount > 5000 ? 'secondary' : 'primary'
-            },
-            {
-              type: 'metric',
-              label: 'Payment Risk',
-              value: `€${overdueAmount?.toLocaleString() || 0}`,
-              description: `${overdueCount} overdue items`,
-              emphasis: overdueAmount > 2000 ? 'secondary' : 'primary'
-            },
-            {
-              type: 'metric',
-              label: 'Subscription Health',
-              value: timeStats.subscription ?
-                `${timeStats.subscription.monthlyActiveUsers?.current || 0} users` :
-                'Not applicable',
-              description: 'Business model diversification'
-            },
-            {
-              type: 'text',
-              description: 'Note: This metric focuses purely on business continuity factors, independent of time tracking or efficiency.'
-            }
-          ]
-        },
-        {
-          type: 'calculations',
-          title: 'Independent Risk Assessment',
-          items: [
-            {
-              type: 'calculation',
-              label: '1. Invoice Processing Risk',
-              value: `€${readyToBillAmount?.toLocaleString() || 0}`,
-              description: `→ -${penalties?.invoiceProcessingRisk?.toFixed(1) || 0}/8 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'standard',
-              value: 'Risk: >€5k ready-to-bill = processing bottleneck'
-            },
-            {
-              type: 'calculation',
-              label: '2. Payment Collection Risk',
-              value: `€${overdueAmount?.toLocaleString() || 0} overdue`,
-              description: `→ -${penalties?.paymentRisk || 0}/5 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'standard',
-              value: 'Risk: >€10k=High, €5-10k=Medium, €2-5k=Low, <€2k=Minimal'
-            },
-            {
-              type: 'calculation',
-              label: '3. Client Concentration Risk',
-              value: 'Fixed moderate risk',
-              description: `→ -${penalties?.clientRisk || 0}/3 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'calculation',
-              label: '4. Business Model Risk',
-              value: timeStats.subscription ?
-                `${timeStats.subscription.monthlyActiveUsers?.current || 0} subscribers` :
-                'Time-based only',
-              description: `→ -${penalties?.subscriptionRisk || 0}/3 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'formula',
-              formula: `Total Score: 25 - ${penalties?.invoiceProcessingRisk?.toFixed(1) || 0} - ${penalties?.paymentRisk || 0} - ${penalties?.clientRisk || 0} - ${penalties?.subscriptionRisk || 0} = ${result.score}/25`
-            }
-          ]
-        }
-      ]
+      details
     }
   }
 
   generateRecommendations(inputs: HealthScoreInputs, breakdown: any): HealthRecommendation[] {
     const recommendations: HealthRecommendation[] = []
-    const { readyToBillAmount, overdueAmount, penalties } = breakdown
+    const { penalties, hasSubscription, activeUsers } = breakdown
     const { timeStats } = inputs
 
-    // 1. INVOICE PROCESSING OPTIMIZATION (up to 8 points)
-    const invoiceGap = Math.max(0, readyToBillAmount - 5000)
-    const invoicePointsToGain = Math.max(0.1, penalties.invoiceProcessingRisk)
+    // 1. CLIENT DIVERSIFICATION (up to 12.5 points)
+    const clientRiskPoints = penalties.clientRisk || 0
 
     recommendations.push({
-      id: 'reduce-invoice-processing-risk',
-      priority: invoicePointsToGain >= 4 ? 'high' : invoicePointsToGain >= 2 ? 'medium' : 'low',
-      impact: Math.round(invoicePointsToGain * 10) / 10,
-      effort: readyToBillAmount > 10000 ? 'high' : 'medium',
-      timeframe: 'immediate',
-      title: 'Reduce Invoice Processing Risk',
-      description: invoiceGap > 0
-        ? `Process €${Math.round(invoiceGap)} ready-to-bill to eliminate bottleneck`
-        : `Maintain efficient invoice processing below €5,000 threshold`,
-      actionItems: invoiceGap > 0 ? [
-        'Process all pending invoices immediately',
-        'Streamline invoice approval workflows',
-        'Implement automated invoicing systems'
-      ] : [
-        'Maintain current efficient processing workflow',
-        'Monitor ready-to-bill levels weekly',
-        'Prevent future processing bottlenecks'
+      id: 'reduce-client-concentration-risk',
+      priority: 'high',
+      impact: Math.round(clientRiskPoints * 10) / 10,
+      effort: 'high',
+      timeframe: 'quarterly',
+      title: 'Diversify Client Portfolio',
+      description: 'Reduce dependency on key clients by expanding client base',
+      actionItems: [
+        'Acquire new clients across different industries',
+        'Avoid over-reliance on single clients (target <20% revenue per client)',
+        'Develop multiple revenue streams and partnerships',
+        'Build strategic relationships with diverse client types'
       ],
       metrics: {
-        current: `€${readyToBillAmount?.toLocaleString() || 0} ready-to-bill`,
-        target: '€5,000 maximum',
-        pointsToGain: Math.round(invoicePointsToGain * 10) / 10
+        current: 'High client concentration',
+        target: 'Diversified client base',
+        pointsToGain: Math.round(clientRiskPoints * 10) / 10
       }
     })
 
-    // 2. PAYMENT COLLECTION OPTIMIZATION (up to 5 points)
-    const paymentGap = Math.max(0, overdueAmount - 2000)
-    const paymentPointsToGain = Math.max(0.1, penalties.paymentRisk)
-
-    recommendations.push({
-      id: 'reduce-payment-collection-risk',
-      priority: paymentPointsToGain >= 3 ? 'high' : paymentPointsToGain >= 1 ? 'medium' : 'low',
-      impact: Math.round(paymentPointsToGain * 10) / 10,
-      effort: overdueAmount > 5000 ? 'high' : 'medium',
-      timeframe: 'weekly',
-      title: 'Reduce Payment Collection Risk',
-      description: paymentGap > 0
-        ? `Collect €${Math.round(paymentGap)} overdue to reduce payment risk`
-        : `Maintain excellent payment collection below €2,000`,
-      actionItems: paymentGap > 0 ? [
-        'Prioritize collection of largest overdue amounts',
-        'Negotiate payment plans for delinquent accounts',
-        'Implement stricter credit policies'
-      ] : [
-        'Maintain proactive payment follow-up processes',
-        'Monitor payment terms compliance',
-        'Strengthen client credit assessment'
-      ],
-      metrics: {
-        current: `€${overdueAmount?.toLocaleString() || 0} overdue`,
-        target: '€2,000 maximum',
-        pointsToGain: Math.round(paymentPointsToGain * 10) / 10
-      }
-    })
-
-    // 3. BUSINESS MODEL DIVERSIFICATION (up to 3 points)
-    const subscriptionPointsToGain = Math.max(0.1, penalties.subscriptionRisk)
+    // 2. BUSINESS MODEL DIVERSIFICATION (up to 12.5 points)
+    const subscriptionPointsToGain = penalties.subscriptionRisk || 0
 
     if (timeStats.subscription) {
       const currentUsers = timeStats.subscription.monthlyActiveUsers?.current || 0
@@ -849,32 +1062,6 @@ class RiskScoreCalculator {
       })
     }
 
-    // 4. CLIENT CONCENTRATION RISK (up to 3 points)
-    const clientRiskPointsToGain = Math.max(0.1, penalties.clientRisk)
-
-    recommendations.push({
-      id: 'reduce-client-concentration-risk',
-      priority: clientRiskPointsToGain >= 2 ? 'medium' : 'low',
-      impact: Math.round(clientRiskPointsToGain * 10) / 10,
-      effort: 'high',
-      timeframe: 'monthly',
-      title: 'Reduce Client Concentration Risk',
-      description: clientRiskPointsToGain > 1
-        ? 'Diversify client base to reduce dependency on key accounts'
-        : 'Maintain healthy client diversification and acquisition',
-      actionItems: [
-        'Develop new client acquisition strategies',
-        'Reduce dependency on largest revenue clients',
-        'Build relationships across multiple market segments',
-        'Create client retention and expansion programs'
-      ],
-      metrics: {
-        current: 'Moderate concentration risk',
-        target: 'Diversified client portfolio',
-        pointsToGain: Math.round(clientRiskPointsToGain * 10) / 10
-      }
-    })
-
     // Sort by priority and impact, return top 5
     return recommendations
       .sort((a, b) => {
@@ -891,13 +1078,17 @@ class ProfitScoreCalculator {
   calculate(inputs: HealthScoreInputs): { score: number; breakdown: any } {
     const { dashboardMetrics, timeStats, mtdCalculations, profitTargets } = inputs
 
-    // Only calculate if profit targets are set up
-    if (!profitTargets?.setup_completed) {
+    // Only calculate if minimum time-based profit targets are set up
+    if (!profitTargets?.setup_completed ||
+        !profitTargets?.monthly_hours_target ||
+        profitTargets.monthly_hours_target <= 0 ||
+        !profitTargets?.target_hourly_rate ||
+        profitTargets.target_hourly_rate <= 0) {
       return {
         score: 0,
         breakdown: {
           available: false,
-          reason: 'Profit targets not configured'
+          reason: 'Time-based profit targets (hours and hourly rate) must be configured'
         }
       }
     }
@@ -933,9 +1124,9 @@ class ProfitScoreCalculator {
       currentMRR = currentUsers * currentSubFee
       targetMRR = targetUsers * targetSubFee
     } else {
-      // Give full points for disabled subscription stream (user chose not to use it)
-      subscriberScore = 6
-      subscriptionPricingScore = 6
+      // ❌ FIXED: No more free points - redistribution will handle this
+      subscriberScore = 0
+      subscriptionPricingScore = 0
     }
 
     // === 2. REVENUE MIX & QUALITY (7 points - NO overlap) ===
@@ -946,7 +1137,7 @@ class ProfitScoreCalculator {
     const timeBasedStreamEnabled = targetHours > 0 && targetHourlyRate > 0
 
     // 2A. Revenue Diversification (3 points) - only relevant if both streams exist
-    let revenueMixScore = 3 // Default full points for single-stream setups
+    let revenueMixScore = 0 // ❌ FIXED: No default points - calculate or redistribute
     if (subscriptionStreamEnabled && timeBasedStreamEnabled) {
       const timeRevenue = dashboardMetrics.totale_registratie || 0
       const totalRevenue = timeRevenue + currentMRR
@@ -957,8 +1148,8 @@ class ProfitScoreCalculator {
     }
 
     // 2B. Pricing Efficiency (4 points) - Revenue per hour VALUE (not volume)
-    let pricingEfficiencyScore = 4 // Default full points for disabled time-based stream
-    let rateEfficiencyPerformance = 1
+    let pricingEfficiencyScore = 0 // ❌ FIXED: No default points - calculate or redistribute
+    let rateEfficiencyPerformance = 0
     if (timeBasedStreamEnabled) {
       const timeRevenue = dashboardMetrics.totale_registratie || 0
       const currentHours = timeStats.thisMonth?.hours || 0
@@ -970,7 +1161,7 @@ class ProfitScoreCalculator {
     // === 3. VALUE CREATION (6 points - NO overlap) ===
 
     // 3A. Rate Optimization (3 points) - Whether rates meet profit targets
-    let rateOptimizationScore = 3 // Default full points for disabled time-based stream
+    let rateOptimizationScore = 0 // ❌ FIXED: No default points - calculate or redistribute
     let hourlyRateContribution = 0
     if (timeBasedStreamEnabled) {
       const timeRevenue = dashboardMetrics.totale_registratie || 0
@@ -980,7 +1171,7 @@ class ProfitScoreCalculator {
     }
 
     // 3B. Subscription Pricing Effectiveness (3 points) - Fees supporting profit goals
-    let subscriptionEffectivenessScore = 3 // Default full points for disabled subscription stream
+    let subscriptionEffectivenessScore = 0 // ❌ FIXED: No default points - calculate or redistribute
     let subscriptionContribution = 0
     if (subscriptionStreamEnabled) {
       subscriptionContribution = profitTargets?.monthly_revenue_target ?
@@ -988,10 +1179,37 @@ class ProfitScoreCalculator {
       subscriptionEffectivenessScore = Math.min(subscriptionContribution * 3, 3) // 3 points max
     }
 
+    // === TIME UTILIZATION CALCULATION ===
+    // Calculate time utilization (15 points) - KEEP IN PROFIT
+    const timeUtilizationScore = this.calculateTimeUtilization(timeStats, profitTargets, mtdCalculations)
+
+    // === REDISTRIBUTION LOGIC ===
+    // Apply point redistribution based on business model
+    const baseScores = {
+      subscriberScore,
+      subscriptionPricingScore,
+      revenueMixScore,
+      pricingEfficiencyScore,
+      rateOptimizationScore,
+      subscriptionEffectivenessScore
+    }
+
+    const redistributedScores = this.redistributePoints(
+      subscriptionStreamEnabled,
+      timeBasedStreamEnabled,
+      baseScores,
+      timeUtilizationScore
+    )
+
     // === TOTAL CALCULATION ===
-    // Total: 25 points (6+6+3+4+3+3 = 25)
-    const driverScore = subscriberScore + subscriptionPricingScore + revenueMixScore +
-                       pricingEfficiencyScore + rateOptimizationScore + subscriptionEffectivenessScore
+    // Use redistributed scores for fair 25-point scaling (max 25 points)
+    const driverScore = redistributedScores.subscriberScore +
+                       redistributedScores.subscriptionPricingScore +
+                       redistributedScores.revenueMixScore +
+                       redistributedScores.pricingEfficiencyScore +
+                       redistributedScores.rateOptimizationScore +
+                       redistributedScores.subscriptionEffectivenessScore +
+                       redistributedScores.timeUtilizationScore
 
     // Apply penalties for critically weak drivers (only for enabled streams)
     let penalties = 0
@@ -1022,18 +1240,27 @@ class ProfitScoreCalculator {
       if (mixOptimization < 0.5 && totalRevenue > 0) { penalties += 1; weakDrivers.push('revenue-diversification') }
     }
 
-    // 🔍 DEBUG: Log penalty calculations
-    console.log('🔍 DEBUG: Profit Score Penalties:', {
+    // 🔍 DEBUG: Log redistribution and penalty calculations
+    console.log('🔍 DEBUG: Profit Score Redistribution:', {
+      businessModel: redistributedScores.businessModel,
       subscriptionStreamEnabled,
       timeBasedStreamEnabled,
-      userGrowthPerformance,
-      currentUsers: timeStats.subscription?.monthlyActiveUsers?.current || 0,
-      pricingPerformance,
-      currentSubFee: timeStats.subscription?.averageSubscriptionFee?.current || 0,
-      rateEfficiencyPerformance,
+      originalScores: baseScores,
+      redistributedScores: {
+        subscriber: redistributedScores.subscriberScore,
+        subscriptionPricing: redistributedScores.subscriptionPricingScore,
+        revenueMix: redistributedScores.revenueMixScore,
+        pricingEfficiency: redistributedScores.pricingEfficiencyScore,
+        rateOptimization: redistributedScores.rateOptimizationScore,
+        subscriptionEffectiveness: redistributedScores.subscriptionEffectivenessScore,
+        timeUtilization: redistributedScores.timeUtilizationScore,
+        revenueQuality: redistributedScores.revenueQualityScore
+      },
+      originalTotal: baseScores.subscriberScore + baseScores.subscriptionPricingScore + baseScores.revenueMixScore + baseScores.pricingEfficiencyScore + baseScores.rateOptimizationScore + baseScores.subscriptionEffectivenessScore,
+      redistributedTotal: driverScore,
+      finalScore: Math.max(0, Math.round(driverScore) - penalties),
       totalPenalties: penalties,
-      weakDrivers,
-      driverScoreBeforePenalties: subscriberScore + subscriptionPricingScore + revenueMixScore + pricingEfficiencyScore + rateOptimizationScore + subscriptionEffectivenessScore
+      weakDrivers
     })
 
     // Calculate legacy metrics for backward compatibility
@@ -1046,7 +1273,7 @@ class ProfitScoreCalculator {
     const progressRatio = mtdProfitTarget > 0 ? currentProfit / mtdProfitTarget : 0
 
     return {
-      score: Math.max(0, Math.round(driverScore) - penalties),
+      score: roundToOneDecimal(Math.max(0, driverScore - penalties)),
       breakdown: {
         available: true,
         // Stream configuration status
@@ -1055,18 +1282,27 @@ class ProfitScoreCalculator {
           timeBasedStreamEnabled,
           bothStreamsEnabled: subscriptionStreamEnabled && timeBasedStreamEnabled
         },
+        // ✅ REDISTRIBUTION INFORMATION
+        redistribution: {
+          businessModel: redistributedScores.businessModel,
+          originalTotal: baseScores.subscriberScore + baseScores.subscriptionPricingScore + baseScores.revenueMixScore + baseScores.pricingEfficiencyScore + baseScores.rateOptimizationScore + baseScores.subscriptionEffectivenessScore,
+          redistributedTotal: driverScore,
+          pointsRedistributed: redistributedScores.businessModel !== 'hybrid'
+        },
         // 🎯 CLEARLY DENOTED PROFIT-EXCLUSIVE METRICS
         subscriptionMetrics: {
           enabled: subscriptionStreamEnabled,
           subscriberGrowth: {
             performance: userGrowthPerformance,
-            score: subscriberScore,
+            score: redistributedScores.subscriberScore,
+            originalScore: subscriberScore,
             target: targetUsers,
             current: subscriptionStreamEnabled ? (timeStats.subscription?.monthlyActiveUsers?.current || 0) : 0
           },
           subscriptionPricing: {
             performance: pricingPerformance,
-            score: subscriptionPricingScore,
+            score: redistributedScores.subscriptionPricingScore,
+            originalScore: subscriptionPricingScore,
             target: targetSubFee,
             current: subscriptionStreamEnabled ? (timeStats.subscription?.averageSubscriptionFee?.current || 0) : 0
           },
@@ -1077,7 +1313,8 @@ class ProfitScoreCalculator {
             enabled: subscriptionStreamEnabled && timeBasedStreamEnabled,
             performance: subscriptionStreamEnabled && timeBasedStreamEnabled ?
               Math.max(0, 1 - Math.abs((totalRevenue > 0 ? currentMRR / totalRevenue : 0) - 0.3)) : 1,
-            score: revenueMixScore,
+            score: redistributedScores.revenueMixScore,
+            originalScore: revenueMixScore,
             target: 0.3,
             current: subscriptionStreamEnabled && timeBasedStreamEnabled ?
               (totalRevenue > 0 ? currentMRR / totalRevenue : 0) : 0
@@ -1085,7 +1322,8 @@ class ProfitScoreCalculator {
           pricingEfficiency: {
             enabled: timeBasedStreamEnabled,
             performance: rateEfficiencyPerformance,
-            score: pricingEfficiencyScore,
+            score: redistributedScores.pricingEfficiencyScore,
+            originalScore: pricingEfficiencyScore,
             target: targetHourlyRate,
             current: timeBasedStreamEnabled ?
               (timeStats.thisMonth?.hours > 0 ? (dashboardMetrics.totale_registratie || 0) / timeStats.thisMonth.hours : 0) : 0
@@ -1094,13 +1332,36 @@ class ProfitScoreCalculator {
         valueCreation: {
           rateOptimization: {
             enabled: timeBasedStreamEnabled,
-            score: rateOptimizationScore,
+            score: redistributedScores.rateOptimizationScore,
+            originalScore: rateOptimizationScore,
             contribution: hourlyRateContribution
           },
           subscriptionEffectiveness: {
             enabled: subscriptionStreamEnabled,
-            score: subscriptionEffectivenessScore,
+            score: redistributedScores.subscriptionEffectivenessScore,
+            originalScore: subscriptionEffectivenessScore,
             contribution: subscriptionContribution
+          }
+        },
+        // ✅ NEW TIME-BASED METRICS (for redistribution)
+        newTimeBasedMetrics: {
+          timeUtilization: {
+            enabled: redistributedScores.businessModel === 'time-only' || redistributedScores.businessModel === 'hybrid',
+            score: redistributedScores.timeUtilizationScore,
+            components: {
+              hoursTarget: profitTargets?.monthly_hours_target || 0,
+              currentHours: timeStats.thisMonth?.hours || 0,
+              unbilledHours: timeStats.unbilled?.hours || 0
+            }
+          },
+          revenueQuality: {
+            enabled: redistributedScores.businessModel === 'time-only' || redistributedScores.businessModel === 'hybrid',
+            score: redistributedScores.revenueQualityScore,
+            components: {
+              totalRevenue: dashboardMetrics.totale_registratie || 0,
+              unbilledValue: timeStats.unbilled?.value || 0,
+              overdueAmount: dashboardMetrics.achterstallig || 0
+            }
           }
         },
         penalties,
@@ -1108,6 +1369,8 @@ class ProfitScoreCalculator {
         totalRevenue,
         timeRevenue,
         subscriptionRevenue: currentMRR,
+        // Redistributed scores for explanation generation
+        redistributedScores,
         // Legacy metrics for backward compatibility
         estimatedCosts: estimatedMonthlyCosts,
         currentProfit,
@@ -1115,7 +1378,32 @@ class ProfitScoreCalculator {
         monthlyProfitTarget: profitTargets.monthly_profit_target,
         progressRatio,
         progressPercentage: progressRatio * 100,
-        dayProgress: dayProgress * 100
+        dayProgress: dayProgress * 100,
+
+        // Individual scores for organogram compatibility
+        scores: {
+          hourlyRateScore: roundToOneDecimal(redistributedScores.pricingEfficiencyScore || 0),
+          timeUtilizationScore: roundToOneDecimal(redistributedScores.timeUtilizationScore || 0),
+          revenueQualityScore: roundToOneDecimal(redistributedScores.revenueQualityScore || 0)
+        },
+
+        // Real-time metrics for organogram display
+        currentRate: timeStats.thisMonth?.billableHours > 0 ? (dashboardMetrics.totale_registratie || 0) / timeStats.thisMonth.billableHours : 0,
+        targetRate: profitTargets?.target_hourly_rate || 0,
+        currentHours: timeStats.thisMonth?.hours || 0, // Total hours
+        billableHours: timeStats.thisMonth?.billableHours || 0,
+        nonBillableHours: timeStats.thisMonth?.nonBillableHours || 0,
+        targetHours: profitTargets?.monthly_hours_target || 0,
+        mtdTargetHours: Math.round((profitTargets?.monthly_hours_target || 0) * mtdCalculations.monthProgress),
+        currentDay: mtdCalculations.currentDay,
+
+        // Time Utilization component scores for organogram
+        timeUtilizationComponents: this.timeUtilizationComponents,
+        targetBillableRatio: profitTargets?.target_billable_ratio || 90,
+        actualBillableRatio: this.actualBillableRatioValue,
+
+        // Detailed breakdown for modal display
+        timeUtilizationBreakdown: this.generateTimeUtilizationBreakdown(timeStats, inputs, redistributedScores)
       }
     }
   }
@@ -1141,205 +1429,366 @@ class ProfitScoreCalculator {
     }
 
     const { breakdown } = result
-    const { subscriptionMetrics, revenueMixQuality, valueCreation, weakDrivers, penalties } = breakdown
+    const { subscriptionMetrics, revenueMixQuality, valueCreation, weakDrivers, penalties, redistributedScores } = breakdown
+    const { timeStats, profitTargets } = inputs
+
+    // Build details array conditionally based on business model
+    const details: any[] = []
+
+    // Only show subscription metrics if SaaS is enabled
+    if (redistributedScores.businessModel !== 'time-only') {
+      details.push({
+        type: 'metrics',
+        title: 'Subscription Business Metrics (12 points)',
+        items: [
+          {
+            type: 'metric',
+            label: 'Active Subscribers',
+            value: `${subscriptionMetrics.subscriberGrowth.current} / ${subscriptionMetrics.subscriberGrowth.target}`,
+            description: `→ ${subscriptionMetrics.subscriberGrowth.score.toFixed(1)}/6 pts`,
+            emphasis: subscriptionMetrics.subscriberGrowth.performance >= 1 ? 'primary' : 'secondary'
+          },
+          {
+            type: 'metric',
+            label: 'Average Subscription Fee',
+            value: `€${subscriptionMetrics.subscriptionPricing.current} / €${subscriptionMetrics.subscriptionPricing.target}`,
+            description: `→ ${subscriptionMetrics.subscriptionPricing.score.toFixed(1)}/6 pts`,
+            emphasis: subscriptionMetrics.subscriptionPricing.performance >= 1 ? 'primary' : 'secondary'
+          },
+          {
+            type: 'metric',
+            label: 'Monthly Recurring Revenue',
+            value: `€${subscriptionMetrics.monthlyRecurringRevenue.current.toLocaleString()} / €${subscriptionMetrics.monthlyRecurringRevenue.target.toLocaleString()}`,
+            description: 'Calculated: Users × Fee',
+            emphasis: 'muted'
+          }
+        ]
+      })
+    }
+
+    // Add Revenue Quality & Mix section
+    const revenueQualityItems: any[] = []
+
+    // Only show Revenue Diversification for hybrid models
+    if (redistributedScores.businessModel === 'hybrid') {
+      revenueQualityItems.push({
+        type: 'metric',
+        label: 'Revenue Diversification',
+        value: `${(revenueMixQuality.revenueDiversification.current * 100).toFixed(1)}% subscription`,
+        description: `Target: ${(revenueMixQuality.revenueDiversification.target * 100).toFixed(1)}% → ${revenueMixQuality.revenueDiversification.score.toFixed(1)}/3 pts`,
+        emphasis: revenueMixQuality.revenueDiversification.performance >= 0.8 ? 'primary' : 'secondary'
+      })
+    }
+
+    // Always show Hourly Rate Value for time-based models
+    if (redistributedScores.businessModel !== 'saas-only') {
+      revenueQualityItems.push({
+        type: 'metric',
+        label: 'Hourly Rate Value',
+        value: `€${revenueMixQuality.pricingEfficiency.current.toFixed(0)}/h`,
+        description: `Target: €${revenueMixQuality.pricingEfficiency.target}/h → ${redistributedScores.pricingEfficiencyScore.toFixed(1)}/${redistributedScores.businessModel === 'time-only' ? '8' : '4'} pts`,
+        emphasis: revenueMixQuality.pricingEfficiency.performance >= 1 ? 'primary' : 'secondary'
+      })
+    }
+
+    if (revenueQualityItems.length > 0) {
+      details.push({
+        type: 'metrics',
+        title: `Revenue Quality & Mix (${redistributedScores.businessModel === 'time-only' ? '8' : '7'} points${redistributedScores.businessModel !== 'hybrid' ? ' - Redistributed' : ''})`,
+        items: revenueQualityItems
+      })
+    }
+
+    // Add Value Creation section
+    const valueCreationItems: any[] = []
+
+    // Only show Rate Target Contribution for hybrid models (not time-only)
+    if (redistributedScores.businessModel === 'hybrid') {
+      valueCreationItems.push({
+        type: 'metric',
+        label: 'Rate Target Contribution',
+        value: `${(valueCreation.rateOptimization.contribution * 100).toFixed(1)}%`,
+        description: `→ ${redistributedScores.rateOptimizationScore.toFixed(1)}/3 pts`,
+        emphasis: valueCreation.rateOptimization.contribution >= 0.8 ? 'primary' : 'secondary'
+      })
+    }
+
+    // Only show Subscription Target Contribution for SaaS models
+    if (redistributedScores.businessModel !== 'time-only') {
+      valueCreationItems.push({
+        type: 'metric',
+        label: 'Subscription Target Contribution',
+        value: `${(valueCreation.subscriptionEffectiveness.contribution * 100).toFixed(1)}%`,
+        description: `→ ${redistributedScores.subscriptionEffectivenessScore.toFixed(1)}/${redistributedScores.businessModel === 'saas-only' ? '4' : '3'} pts`,
+        emphasis: valueCreation.subscriptionEffectiveness.contribution >= 0.3 ? 'primary' : 'secondary'
+      })
+    }
+
+    if (valueCreationItems.length > 0) {
+      details.push({
+        type: 'metrics',
+        title: `Value Creation Performance (${redistributedScores.businessModel === 'time-only' ? '7' : '6'} points${redistributedScores.businessModel !== 'hybrid' ? ' - Redistributed' : ''})`,
+        items: valueCreationItems
+      })
+    }
+
+    // Add Input Data section
+    details.push({
+      type: 'metrics',
+      title: 'Input Data Sources',
+      items: [
+        {
+          type: 'metric',
+          label: 'Monthly Hours Target',
+          value: `${profitTargets?.monthly_hours_target || 0}h`,
+          description: 'Target monthly working hours from profit targets configuration',
+          emphasis: 'muted'
+        },
+        {
+          type: 'metric',
+          label: 'Target Hourly Rate',
+          value: `€${profitTargets?.target_hourly_rate || 0}/h`,
+          description: 'Target rate per hour from profit targets configuration',
+          emphasis: 'muted'
+        },
+        {
+          type: 'metric',
+          label: 'Current Month Hours',
+          value: `${timeStats.thisMonth?.hours || 0}h`,
+          description: 'Actual tracked hours this month from time tracking data',
+          emphasis: 'muted'
+        },
+        {
+          type: 'metric',
+          label: 'Current Revenue (MTD)',
+          value: `€${timeStats.thisMonth?.revenue?.toLocaleString() || 0}`,
+          description: 'Month-to-date revenue from time-based work',
+          emphasis: 'muted'
+        },
+        ...(redistributedScores.businessModel === 'time-only' ? [{
+          type: 'text' as const,
+          description: 'Note: SaaS/subscription metrics are not applicable for time-only business model. Points are redistributed to time-based performance metrics.'
+        }] : [])
+      ]
+    })
+
+    // Add calculation sections for time-only business model
+    if (redistributedScores.businessModel === 'time-only') {
+      details.push({
+        type: 'calculations',
+        title: 'Time-Based Business Calculation (25 points)',
+        items: [
+          {
+            type: 'calculation',
+            label: '1. Hourly Rate Value',
+            value: `€${revenueMixQuality.pricingEfficiency.current.toFixed(0)}/hour`,
+            description: `→ ${redistributedScores.pricingEfficiencyScore.toFixed(1)}/8 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: `Target: €${revenueMixQuality.pricingEfficiency.target}/h | Achievement: ${(revenueMixQuality.pricingEfficiency.performance * 100).toFixed(1)}% | Score: ${Math.min(revenueMixQuality.pricingEfficiency.performance, 2) * 4}/8 pts (capped at 200%)`
+          },
+        ]
+      })
+
+      // Add enhanced metrics for time-only businesses
+      details.push({
+        type: 'calculations',
+        title: 'Enhanced Time-Based Performance',
+        items: [
+          {
+            type: 'calculation',
+            label: '2. Time Utilization Efficiency',
+            value: `${timeStats.thisMonth?.hours || 0}h of ${inputs.mtdCalculations?.mtdHoursTarget || Math.round((profitTargets?.monthly_hours_target || 0) * (inputs.mtdCalculations?.monthProgress || 1))}h MTD target`,
+            description: `→ ${redistributedScores.timeUtilizationScore?.toFixed(1) || 0}/6 pts (redistributed)`,
+            emphasis: 'primary',
+            // detailedCalculation: this.generateTimeUtilizationBreakdown(timeStats, inputs, redistributedScores)
+          },
+          {
+            type: 'text',
+            description: 'Component Breakdown:'
+          },
+          {
+            type: 'calculation',
+            label: 'Hours Progress',
+            value: `${((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.mtdHoursTarget || Math.round((profitTargets?.monthly_hours_target || 0) * (inputs.mtdCalculations?.monthProgress || 1))) * 100).toFixed(1)}%`,
+            description: `→ ${(((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.mtdHoursTarget || Math.round((profitTargets?.monthly_hours_target || 0) * (inputs.mtdCalculations?.monthProgress || 1)))) * 2.4).toFixed(1)}/2.4 pts`
+          },
+          {
+            type: 'calculation',
+            label: 'Billing Efficiency',
+            value: `${(((timeStats.thisMonth?.hours || 0) / ((timeStats.thisMonth?.hours || 0) + (timeStats.unbilled?.hours || 0))) * 100).toFixed(1)}%`,
+            description: `→ ${(((timeStats.thisMonth?.hours || 0) / ((timeStats.thisMonth?.hours || 0) + (timeStats.unbilled?.hours || 0))) * 2.1).toFixed(1)}/2.1 pts`
+          },
+          {
+            type: 'calculation',
+            label: 'Daily Consistency',
+            value: `${((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.currentDay || 1)).toFixed(1)}h/day`,
+            description: `→ ${((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.currentDay || 1)) >= 5 ? '1.5' : ((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.currentDay || 1)) >= 3 ? '1.2' : ((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.currentDay || 1)) >= 2 ? '0.8' : '0.3'}/1.5 pts`
+          },
+          {
+            type: 'calculation',
+            label: '3. Revenue Quality & Collection',
+            value: `Collection & invoicing efficiency`,
+            description: `→ ${redistributedScores.revenueQualityScore?.toFixed(1) || 0}/4 pts (redistributed)`,
+            emphasis: 'primary',
+            // detailedCalculation: this.generateRevenueQualityBreakdown(dashboardMetrics, timeStats, inputs, redistributedScores)
+          },
+          {
+            type: 'text',
+            description: 'Component Breakdown:'
+          },
+          {
+            type: 'calculation',
+            label: 'Collection Rate',
+            value: `${(((inputs.dashboardMetrics?.totale_registratie || 0) / ((inputs.dashboardMetrics?.totale_registratie || 0) + (timeStats.unbilled?.value || 0))) * 100).toFixed(1)}%`,
+            description: `→ ${(((inputs.dashboardMetrics?.totale_registratie || 0) / ((inputs.dashboardMetrics?.totale_registratie || 0) + (timeStats.unbilled?.value || 0))) * 1.6).toFixed(1)}/1.6 pts`
+          },
+          {
+            type: 'calculation',
+            label: 'Invoicing Speed',
+            value: `${(100 - ((timeStats.unbilled?.value || 0) / ((inputs.dashboardMetrics?.totale_registratie || 0) + (timeStats.unbilled?.value || 0)) * 100)).toFixed(1)}%`,
+            description: `→ ${((1 - Math.min((timeStats.unbilled?.value || 0) / ((inputs.dashboardMetrics?.totale_registratie || 0) + (timeStats.unbilled?.value || 0)), 1)) * 1.4).toFixed(1)}/1.4 pts`
+          },
+          {
+            type: 'calculation',
+            label: 'Payment Quality',
+            value: `${(100 - Math.min(((inputs.dashboardMetrics?.achterstallig || 0) / (inputs.dashboardMetrics?.totale_registratie || 1)) * 100, 100)).toFixed(1)}%`,
+            description: `→ ${((1 - Math.min((inputs.dashboardMetrics?.achterstallig || 0) / (inputs.dashboardMetrics?.totale_registratie || 1), 1)) * 1.0).toFixed(1)}/1.0 pts`
+          }
+        ]
+      })
+    } else {
+      // Add calculation sections for hybrid/SaaS models
+      const hybridCalculationItems = []
+
+      if (redistributedScores.businessModel === 'hybrid') {
+        hybridCalculationItems.push(
+          {
+            type: 'calculation',
+            label: '1. Subscription Growth',
+            value: `${subscriptionMetrics.subscriberGrowth.current} / ${subscriptionMetrics.subscriberGrowth.target} users`,
+            description: `→ ${subscriptionMetrics.subscriberGrowth.score.toFixed(1)}/6 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: 'Target: Monthly active user growth for sustainable subscription revenue'
+          },
+          {
+            type: 'calculation',
+            label: '2. Subscription Pricing',
+            value: `€${subscriptionMetrics.subscriptionPricing.current} / €${subscriptionMetrics.subscriptionPricing.target} avg fee`,
+            description: `→ ${subscriptionMetrics.subscriptionPricing.score.toFixed(1)}/6 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: 'Target: Average subscription fee per user for optimal pricing'
+          },
+          {
+            type: 'calculation',
+            label: '3. Revenue Diversification',
+            value: `${(revenueMixQuality.revenueDiversification.current * 100).toFixed(1)}% subscription mix`,
+            description: `→ ${revenueMixQuality.revenueDiversification.score.toFixed(1)}/3 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: 'Target: 40%+ subscription revenue for balanced business model'
+          },
+          {
+            type: 'calculation',
+            label: '4. Hourly Rate Value',
+            value: `€${revenueMixQuality.pricingEfficiency.current.toFixed(0)}/hour`,
+            description: `→ ${redistributedScores.pricingEfficiencyScore.toFixed(1)}/4 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: 'Scoring: 0-4 points based on time-based hourly rate achievement'
+          },
+          {
+            type: 'calculation',
+            label: '5. Rate Target Contribution',
+            value: `${(valueCreation.rateOptimization.contribution * 100).toFixed(1)}% of revenue target`,
+            description: `→ ${redistributedScores.rateOptimizationScore.toFixed(1)}/3 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: 'Scoring: 0-3 points based on time-based revenue achievement'
+          },
+          {
+            type: 'calculation',
+            label: '6. Subscription Effectiveness',
+            value: `${(valueCreation.subscriptionEffectiveness.contribution * 100).toFixed(1)}% of subscription target`,
+            description: `→ ${redistributedScores.subscriptionEffectivenessScore.toFixed(1)}/3 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: 'Scoring: 0-3 points based on subscription revenue performance'
+          }
+        )
+      } else {
+        // SaaS-only model
+        hybridCalculationItems.push(
+          {
+            type: 'calculation',
+            label: '1. Subscription Growth',
+            value: `${subscriptionMetrics.subscriberGrowth.current} / ${subscriptionMetrics.subscriberGrowth.target} users`,
+            description: `→ ${subscriptionMetrics.subscriberGrowth.score.toFixed(1)}/6 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: 'Target: Monthly active user growth for sustainable revenue'
+          },
+          {
+            type: 'calculation',
+            label: '2. Subscription Pricing',
+            value: `€${subscriptionMetrics.subscriptionPricing.current} / €${subscriptionMetrics.subscriptionPricing.target} avg fee`,
+            description: `→ ${subscriptionMetrics.subscriptionPricing.score.toFixed(1)}/6 pts`,
+            emphasis: 'primary'
+          },
+          {
+            type: 'standard',
+            value: 'Target: Average subscription fee optimization'
+          }
+        )
+      }
+
+      details.push({
+        type: 'calculations',
+        title: redistributedScores.businessModel === 'hybrid' ? 'Hybrid Business Calculation (25 points)' : 'SaaS Business Calculation (25 points)',
+        items: hybridCalculationItems
+      })
+    }
+
+    // Add final summary section
+    details.push({
+      type: 'summary',
+      items: [
+        {
+          type: 'standard',
+          description: result.score >= 20
+            ? 'Strong profit drivers - business fundamentals are performing well'
+            : result.score >= 15
+              ? 'Mixed profit drivers - some areas need improvement'
+              : result.score >= 10
+                ? 'Weak profit drivers - significant optimization needed'
+                : 'Critical profit drivers - fundamental business model review required'
+        }
+      ]
+    })
 
     return {
       title: 'Profit Health - Driver Performance (25 points)',
       score: result.score,
       maxScore: 25,
-      details: [
-        {
-          type: 'metrics',
-          title: 'Subscription Business Metrics (12 points)',
-          items: [
-            {
-              type: 'metric',
-              label: 'Active Subscribers',
-              value: `${subscriptionMetrics.subscriberGrowth.current} / ${subscriptionMetrics.subscriberGrowth.target}`,
-              description: `→ ${subscriptionMetrics.subscriberGrowth.score.toFixed(1)}/6 pts`,
-              emphasis: subscriptionMetrics.subscriberGrowth.performance >= 1 ? 'primary' : 'secondary'
-            },
-            {
-              type: 'metric',
-              label: 'Average Subscription Fee',
-              value: `€${subscriptionMetrics.subscriptionPricing.current} / €${subscriptionMetrics.subscriptionPricing.target}`,
-              description: `→ ${subscriptionMetrics.subscriptionPricing.score.toFixed(1)}/6 pts`,
-              emphasis: subscriptionMetrics.subscriptionPricing.performance >= 1 ? 'primary' : 'secondary'
-            },
-            {
-              type: 'metric',
-              label: 'Monthly Recurring Revenue',
-              value: `€${subscriptionMetrics.monthlyRecurringRevenue.current.toLocaleString()} / €${subscriptionMetrics.monthlyRecurringRevenue.target.toLocaleString()}`,
-              description: 'Calculated: Users × Fee',
-              emphasis: 'muted'
-            }
-          ]
-        },
-        {
-          type: 'metrics',
-          title: 'Revenue Quality & Mix (7 points)',
-          items: [
-            {
-              type: 'metric',
-              label: 'Revenue Diversification',
-              value: `${(revenueMixQuality.revenueDiversification.current * 100).toFixed(1)}% subscription`,
-              description: `Target: ${(revenueMixQuality.revenueDiversification.target * 100).toFixed(1)}% → ${revenueMixQuality.revenueDiversification.score.toFixed(1)}/3 pts`,
-              emphasis: revenueMixQuality.revenueDiversification.performance >= 0.8 ? 'primary' : 'secondary'
-            },
-            {
-              type: 'metric',
-              label: 'Hourly Rate Value',
-              value: `€${revenueMixQuality.pricingEfficiency.current.toFixed(0)}/h`,
-              description: `Target: €${revenueMixQuality.pricingEfficiency.target}/h → ${revenueMixQuality.pricingEfficiency.score.toFixed(1)}/4 pts`,
-              emphasis: revenueMixQuality.pricingEfficiency.performance >= 1 ? 'primary' : 'secondary'
-            }
-          ]
-        },
-        {
-          type: 'metrics',
-          title: 'Value Creation Performance (6 points)',
-          items: [
-            {
-              type: 'metric',
-              label: 'Rate Target Contribution',
-              value: `${(valueCreation.rateOptimization.contribution * 100).toFixed(1)}%`,
-              description: `→ ${valueCreation.rateOptimization.score.toFixed(1)}/3 pts`,
-              emphasis: valueCreation.rateOptimization.contribution >= 0.8 ? 'primary' : 'secondary'
-            },
-            {
-              type: 'metric',
-              label: 'Subscription Target Contribution',
-              value: `${(valueCreation.subscriptionEffectiveness.contribution * 100).toFixed(1)}%`,
-              description: `→ ${valueCreation.subscriptionEffectiveness.score.toFixed(1)}/3 pts`,
-              emphasis: valueCreation.subscriptionEffectiveness.contribution >= 0.3 ? 'primary' : 'secondary'
-            }
-          ]
-        },
-        {
-          type: 'calculations',
-          title: 'Subscription Business Calculation (12 points)',
-          items: [
-            {
-              type: 'calculation',
-              label: '1. Subscriber Growth',
-              value: `${subscriptionMetrics.subscriberGrowth.current}/${subscriptionMetrics.subscriberGrowth.target} users`,
-              description: `→ ${subscriptionMetrics.subscriberGrowth.score.toFixed(1)}/6 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'standard',
-              value: 'Scoring: Linear scale 0-6 points based on user target achievement'
-            },
-            {
-              type: 'calculation',
-              label: '2. Subscription Pricing',
-              value: `€${subscriptionMetrics.subscriptionPricing.current}/€${subscriptionMetrics.subscriptionPricing.target}`,
-              description: `→ ${subscriptionMetrics.subscriptionPricing.score.toFixed(1)}/6 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'standard',
-              value: 'Scoring: Linear scale 0-6 points based on pricing target achievement'
-            }
-          ]
-        },
-        {
-          type: 'calculations',
-          title: 'Revenue Quality Calculation (7 points)',
-          items: [
-            {
-              type: 'calculation',
-              label: '3. Revenue Diversification',
-              value: `${(revenueMixQuality.revenueDiversification.current * 100).toFixed(1)}% subscription mix`,
-              description: `→ ${revenueMixQuality.revenueDiversification.score.toFixed(1)}/3 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'standard',
-              value: 'Target: 40%+ subscription revenue. Scoring: 0-3 points based on subscription percentage'
-            },
-            {
-              type: 'calculation',
-              label: '4. Pricing Efficiency',
-              value: `€${revenueMixQuality.pricingEfficiency.current.toFixed(0)}/hour`,
-              description: `→ ${revenueMixQuality.pricingEfficiency.score.toFixed(1)}/4 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'standard',
-              value: 'Scoring: 0-4 points based on hourly rate achievement vs target'
-            }
-          ]
-        },
-        {
-          type: 'calculations',
-          title: 'Value Creation Calculation (6 points)',
-          items: [
-            {
-              type: 'calculation',
-              label: '5. Rate Target Contribution',
-              value: `${(valueCreation.rateOptimization.contribution * 100).toFixed(1)}% of revenue target`,
-              description: `→ ${valueCreation.rateOptimization.score.toFixed(1)}/3 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'standard',
-              value: 'Target: 80%+ contribution. Scoring: 0-3 points based on revenue target achievement'
-            },
-            {
-              type: 'calculation',
-              label: '6. Subscription Effectiveness',
-              value: `${(valueCreation.subscriptionEffectiveness.contribution * 100).toFixed(1)}% of revenue target`,
-              description: `→ ${valueCreation.subscriptionEffectiveness.score.toFixed(1)}/3 pts`,
-              emphasis: 'primary'
-            },
-            {
-              type: 'standard',
-              value: 'Target: 30%+ contribution. Scoring: 0-3 points based on subscription revenue achievement'
-            }
-          ]
-        },
-        {
-          type: 'calculations',
-          title: 'Final Score Calculation',
-          items: [
-            {
-              type: 'calculation',
-              label: 'Total Driver Score',
-              value: `${result.score + penalties}/25`,
-              description: penalties > 0 ? `Penalties applied: -${penalties} pts` : 'No penalties applied',
-              emphasis: 'primary'
-            },
-            {
-              type: 'formula',
-              formula: `${subscriptionMetrics.subscriberGrowth.score.toFixed(1)} + ${subscriptionMetrics.subscriptionPricing.score.toFixed(1)} + ${revenueMixQuality.revenueDiversification.score.toFixed(1)} + ${revenueMixQuality.pricingEfficiency.score.toFixed(1)} + ${valueCreation.rateOptimization.score.toFixed(1)} + ${valueCreation.subscriptionEffectiveness.score.toFixed(1)}${penalties > 0 ? ` - ${penalties}` : ''} = ${result.score}/25`
-            },
-            ...(weakDrivers.length > 0 ? [{
-              type: 'text' as const,
-              description: `⚠️ Weak drivers detected: ${weakDrivers.join(', ')}`
-            }] : []),
-            {
-              type: 'text',
-              description: 'Note: This metric focuses exclusively on profit-driving business fundamentals, completely independent of time tracking, collection, or operational efficiency.'
-            }
-          ]
-        },
-        {
-          type: 'summary',
-          items: [
-            {
-              type: 'standard',
-              description: result.score >= 20
-                ? 'Strong profit drivers - business fundamentals are performing well'
-                : result.score >= 15
-                  ? 'Mixed profit drivers - some areas need improvement'
-                  : result.score >= 10
-                    ? 'Weak profit drivers - significant optimization needed'
-                    : 'Critical profit drivers - fundamental business model review required'
-            }
-          ]
-        }
-      ]
+      details
     }
   }
 
@@ -1368,11 +1817,17 @@ class ProfitScoreCalculator {
 
     const recommendations: HealthRecommendation[] = []
     const { breakdown } = result
-    const { subscriptionMetrics, revenueMixQuality, valueCreation, weakDrivers } = breakdown
+    const { subscriptionMetrics, revenueMixQuality, valueCreation, weakDrivers, redistribution } = breakdown
 
-    // === ALWAYS-ON RECOMMENDATIONS (no thresholds, prioritized by impact) ===
+    // Detect business model for relevant recommendations
+    const businessModel = redistribution?.businessModel || 'hybrid'
+    const subscriptionEnabled = ['hybrid', 'saas-only'].includes(businessModel)
+    const timeBasedEnabled = ['hybrid', 'time-only'].includes(businessModel)
 
-    // 1. SUBSCRIPTION GROWTH OPTIMIZATION (highest impact: 6 points)
+    // === BUSINESS MODEL SPECIFIC RECOMMENDATIONS ===
+
+    // 1. SUBSCRIPTION GROWTH OPTIMIZATION (highest impact: 6 points) - Only for SaaS models
+    if (subscriptionEnabled) {
     const userGap = Math.max(0, subscriptionMetrics.subscriberGrowth.target - subscriptionMetrics.subscriberGrowth.current)
     const subscriberPointsToGain = Math.max(0.1, 6 - subscriptionMetrics.subscriberGrowth.score)
 
@@ -1435,8 +1890,10 @@ class ProfitScoreCalculator {
         pointsToGain: Math.round(pricingPointsToGain * 10) / 10
       }
     })
+    } // End SaaS recommendations
 
-    // 3. HOURLY RATE VALUE OPTIMIZATION (medium-high impact: 4 points)
+    // 3. HOURLY RATE VALUE OPTIMIZATION (medium-high impact: 4 points) - Only for time-based models
+    if (timeBasedEnabled) {
     console.log('🔍 DEBUG: Pricing Efficiency Data:', {
       enabled: revenueMixQuality.pricingEfficiency?.enabled,
       target: revenueMixQuality.pricingEfficiency?.target,
@@ -1475,8 +1932,10 @@ class ProfitScoreCalculator {
         pointsToGain: Math.round(ratePointsToGain * 10) / 10
       }
     })
+    } // End time-based recommendations
 
-    // 4. REVENUE DIVERSIFICATION OPTIMIZATION (medium impact: 3 points)
+    // 4. REVENUE DIVERSIFICATION OPTIMIZATION (medium impact: 3 points) - Only for hybrid models
+    if (businessModel === 'hybrid') {
     const currentMix = revenueMixQuality.revenueDiversification.current
     const targetMix = revenueMixQuality.revenueDiversification.target
     const mixPointsToGain = Math.max(0.1, 3 - revenueMixQuality.revenueDiversification.score)
@@ -1512,10 +1971,11 @@ class ProfitScoreCalculator {
         pointsToGain: Math.round(mixPointsToGain * 10) / 10
       }
     })
+    } // End hybrid model recommendations
 
     // 5. SUBSCRIPTION EFFECTIVENESS ENHANCEMENT (high impact: up to 3 points)
     // Only create subscription effectiveness recommendation if subscription stream is enabled
-    if (breakdown.streamConfiguration.subscriptionStreamEnabled) {
+    if (subscriptionEnabled) {
       const subscriptionEffectivenessPointsToGain = Math.max(0.1, 3 - valueCreation.subscriptionEffectiveness.score)
       const currentContribution = valueCreation.subscriptionEffectiveness.contribution
       const targetContribution = 0.3 // 30% of revenue target
@@ -1560,7 +2020,9 @@ class ProfitScoreCalculator {
       })
     }
 
-    // 6. RATE TARGET ENHANCEMENT (lower impact but strategic: 3 points each)
+    // 6. RATE TARGET ENHANCEMENT (lower impact but strategic: 3 points each) - Only for time-based models
+    // Only include Rate Target Contribution for hybrid models (not time-only)
+    if (timeBasedEnabled && result.breakdown.redistributedScores?.businessModel === 'hybrid') {
     const valuePointsToGain = Math.max(0.1, 3 - valueCreation.rateOptimization.score)
     const contributionGap = Math.max(0, 0.8 - valueCreation.rateOptimization.contribution)
 
@@ -1601,6 +2063,7 @@ class ProfitScoreCalculator {
         pointsToGain: Math.round(valuePointsToGain * 10) / 10
       }
     })
+    }
 
     // Sort by priority and impact, return top 2
     const sortedRecommendations = recommendations
@@ -1637,6 +2100,298 @@ class ProfitScoreCalculator {
 
     return sortedRecommendations.slice(0, 5)
   }
+
+  // ================== REDISTRIBUTION LOGIC ==================
+
+  private redistributePoints(
+    subscriptionEnabled: boolean,
+    timeBasedEnabled: boolean,
+    baseScores: {
+      subscriberScore: number
+      subscriptionPricingScore: number
+      revenueMixScore: number
+      pricingEfficiencyScore: number
+      rateOptimizationScore: number
+      subscriptionEffectivenessScore: number
+    },
+    timeUtilizationScore: number = 0
+  ): RedistributedScores {
+    const businessModel = this.detectBusinessModel(subscriptionEnabled, timeBasedEnabled)
+
+    let redistributed = {
+      subscriberScore: baseScores.subscriberScore,
+      subscriptionPricingScore: baseScores.subscriptionPricingScore,
+      revenueMixScore: baseScores.revenueMixScore,
+      pricingEfficiencyScore: baseScores.pricingEfficiencyScore,
+      rateOptimizationScore: baseScores.rateOptimizationScore,
+      subscriptionEffectivenessScore: baseScores.subscriptionEffectivenessScore,
+      timeUtilizationScore: timeUtilizationScore, // Pass through time utilization
+      totalPoints: 25,
+      businessModel
+    }
+
+    if (businessModel === 'time-only') {
+      // Redistribute 21 SaaS points across 2 time-based categories
+      const disabledPoints = 6 + 6 + 3 + 3 + 3 // subscriber + pricing + mix + effectiveness + rateOptimization
+      redistributed.subscriberScore = 0
+      redistributed.subscriptionPricingScore = 0
+      redistributed.revenueMixScore = 0
+      redistributed.subscriptionEffectivenessScore = 0
+      redistributed.rateOptimizationScore = 0
+      // Redistribute proportionally: 4→10, timeUtil→15 = 25 total
+      redistributed.pricingEfficiencyScore = baseScores.pricingEfficiencyScore * (10/4) // 4 → 10 pts (Hourly Rate)
+      redistributed.timeUtilizationScore = timeUtilizationScore // Use directly (15 pts)
+
+    } else if (businessModel === 'saas-only') {
+      // Redistribute time-based points across 4 SaaS categories (no time utilization for SaaS-only)
+      redistributed.pricingEfficiencyScore = 0
+      redistributed.rateOptimizationScore = 0
+      redistributed.timeUtilizationScore = 0
+
+      // Redistribute proportionally: 6→8, 6→8, 3→5, 3→4 = +7 total (25 - 18 SaaS points)
+      redistributed.subscriberScore = baseScores.subscriberScore * (8/6) // 6 → 8 pts
+      redistributed.subscriptionPricingScore = baseScores.subscriptionPricingScore * (8/6) // 6 → 8 pts
+      redistributed.revenueMixScore = baseScores.revenueMixScore * (5/3) // 3 → 5 pts
+      redistributed.subscriptionEffectivenessScore = baseScores.subscriptionEffectivenessScore * (4/3) // 3 → 4 pts
+    }
+    // else: hybrid model keeps original distribution (both enabled)
+
+    return redistributed
+  }
+
+  private detectBusinessModel(subscriptionEnabled: boolean, timeBasedEnabled: boolean): 'time-only' | 'saas-only' | 'hybrid' {
+    if (subscriptionEnabled && timeBasedEnabled) return 'hybrid'
+    if (subscriptionEnabled && !timeBasedEnabled) return 'saas-only'
+    if (!subscriptionEnabled && timeBasedEnabled) return 'time-only'
+    return 'time-only' // default fallback
+  }
+
+  private calculateTimeUtilization(timeStats: any, profitTargets: any, mtdCalculations: any): number {
+    if (!profitTargets?.monthly_hours_target || profitTargets.monthly_hours_target <= 0) {
+      return 0
+    }
+
+    const totalTrackedHours = timeStats.thisMonth?.hours || 0 // Total hours (billable + non-billable)
+    const billableHours = timeStats.thisMonth?.billableHours || 0 // Only billable hours
+    const nonBillableHours = timeStats.thisMonth?.nonBillableHours || 0 // Only non-billable hours
+    const monthlyTarget = profitTargets.monthly_hours_target
+
+    // Use MTD target for accurate progress assessment
+    const mtdTarget = mtdCalculations?.mtdHoursTarget ||
+                     Math.round(monthlyTarget * (mtdCalculations?.monthProgress || 1))
+
+    // Calculate components (0-15 points total) - NEW ALLOCATIONS
+    // Hours Progress: 6 pts (40%), Billable Ratio: 6 pts (40%), Daily Consistency: 3 pts (20%)
+
+    // 1. Target vs Actual Hours (40% weight = 6 points) - using MTD target
+    // Assesses total tracked hours (billable + non-billable) against target
+    const hoursAchievement = mtdTarget > 0 ? totalTrackedHours / mtdTarget : 0
+    const hoursScore = Math.min(hoursAchievement * 6, 6) // max 6 points (100% = 6)
+
+    // 2. Billable Ratio (40% weight = 6 points)
+    // Get target billable ratio (default 90% if not set)
+    const targetBillableRatio = profitTargets?.target_billable_ratio || 90
+
+    // Calculate actual billable ratio: billable / (billable + non-billable)
+    const actualBillableRatio = totalTrackedHours > 0 ? (billableHours / totalTrackedHours) * 100 : 0
+
+    // Store actual billable ratio for organogram display
+    this.actualBillableRatioValue = actualBillableRatio
+
+    // Compare actual ratio to target ratio
+    const billableRatioAchievement = targetBillableRatio > 0 ? actualBillableRatio / targetBillableRatio : 0
+
+    // Score based on achievement (max 6 points, capped at 100% achievement)
+    const billableScore = Math.min(billableRatioAchievement * 6, 6) // max 6 points
+
+    // 3. Consistency Score (20% weight = 3 points) - DYNAMIC based on working days target
+    // Calculate expected daily hours target based on working days schedule
+    const workingDays = profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
+    const dailyHoursTarget = calculateDailyHoursTarget(monthlyTarget, workingDays)
+
+    // Calculate actual daily average
+    // TODO: Enhance with actual working days count from time entries
+    // For now, using calendar days (MTD) as approximation
+    const actualDailyAverage = mtdCalculations?.currentDay > 0 ?
+                              totalTrackedHours / mtdCalculations.currentDay : 0
+
+    // Compare actual vs target daily hours
+    const dailyConsistencyRatio = dailyHoursTarget > 0 ?
+                                  actualDailyAverage / dailyHoursTarget : 0
+
+    // Score based on achievement (max 3 points)
+    const consistencyScore = Math.min(dailyConsistencyRatio * 3, 3)
+
+    const totalScore = Math.min(hoursScore + billableScore + consistencyScore, 15)
+
+    // Store component scores for organogram breakdown
+    this.timeUtilizationComponents = {
+      hoursScore: roundToOneDecimal(hoursScore),
+      billableScore: roundToOneDecimal(billableScore),
+      consistencyScore: roundToOneDecimal(consistencyScore)
+    }
+
+    return totalScore
+  }
+
+  private timeUtilizationComponents: { hoursScore: number; billableScore: number; consistencyScore: number } = {
+    hoursScore: 0,
+    billableScore: 0,
+    consistencyScore: 0
+  }
+
+  private actualBillableRatioValue: number = 0
+
+  private generateTimeUtilizationBreakdown(timeStats: any, inputs: any, redistributedScores: any) {
+    // Safe extraction with proper defaults
+    const currentHours = Math.max(0, timeStats?.thisMonth?.hours || 0)
+    const unbilledHours = Math.max(0, timeStats?.unbilled?.hours || 0)
+    const mtdTarget = Math.max(0, inputs?.mtdCalculations?.mtdHoursTarget || 0)
+    const currentDay = Math.max(1, inputs?.mtdCalculations?.currentDay || 1)
+    const profitTargets = inputs?.profitTargets
+
+    // Calculate component ratios safely
+    const hoursProgress = mtdTarget > 0 ? Math.min(currentHours / mtdTarget, 1.5) : 0
+    const billingEfficiency = currentHours > 0 ? (currentHours - unbilledHours) / currentHours : 1
+
+    // Calculate dynamic daily consistency based on working days
+    const workingDays = profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
+    const monthlyTarget = profitTargets?.monthly_hours_target || 0
+    const dailyHoursTarget = calculateDailyHoursTarget(monthlyTarget, workingDays)
+    const actualDailyAverage = currentHours / currentDay
+    const dailyConsistency = actualDailyAverage
+
+    // Component scoring (15-point scale total: 6 + 6 + 3 = 15) - UPDATED ALLOCATIONS
+    const hoursProgressScore = Math.min(hoursProgress * 6, 6) // 40% of 15 points
+    const billingEfficiencyScore = Math.min(billingEfficiency * 6, 6) // 40% of 15 points
+
+    // Dynamic consistency scoring based on daily hours target
+    const dailyConsistencyRatio = dailyHoursTarget > 0 ? actualDailyAverage / dailyHoursTarget : 0
+    const consistencyScore = Math.min(dailyConsistencyRatio * 3, 3) // 20% of 15 points
+
+    const totalScore = redistributedScores?.timeUtilizationScore || 0
+
+    return {
+      components: [
+        {
+          name: 'Hours Progress',
+          value: mtdTarget > 0 ? `${currentHours}h / ${mtdTarget}h MTD target` : `${currentHours}h (no target set)`,
+          percentage: `${(hoursProgress * 100).toFixed(1)}%`,
+          score: hoursProgressScore,
+          maxScore: 6,
+          description: 'Progress toward monthly hour target based on current day of month',
+          formula: mtdTarget > 0 ? `(${currentHours} ÷ ${mtdTarget}) × 6 = ${hoursProgressScore.toFixed(1)} pts` : 'No target set',
+          benchmark: 'Target: 100% progress (on track with monthly hours)'
+        },
+        {
+          name: 'Billing Efficiency',
+          value: currentHours > 0 ? `${Math.max(0, currentHours - unbilledHours)}h billed / ${currentHours}h total` : 'No hours tracked',
+          percentage: `${(billingEfficiency * 100).toFixed(1)}%`,
+          score: billingEfficiencyScore,
+          maxScore: 6,
+          description: 'Percentage of worked hours that have been converted to invoices',
+          formula: currentHours > 0 ? `${(billingEfficiency * 100).toFixed(1)}% × 6 = ${billingEfficiencyScore.toFixed(1)} pts` : 'No hours to calculate',
+          benchmark: 'Target: 90%+ billing efficiency (minimal unbilled work)'
+        },
+        {
+          name: 'Daily Consistency',
+          value: `${dailyConsistency.toFixed(1)}h/day average`,
+          percentage: dailyConsistencyRatio >= 1 ? '100%' : `${(dailyConsistencyRatio * 100).toFixed(0)}%`,
+          score: consistencyScore,
+          maxScore: 3,
+          description: `Average hours per day vs target (${dailyHoursTarget.toFixed(1)}h/day based on ${workingDays.length} working days/week)`,
+          formula: `${dailyConsistency.toFixed(1)}h ÷ ${dailyHoursTarget.toFixed(1)}h target = ${(dailyConsistencyRatio * 100).toFixed(0)}% × 3 = ${consistencyScore.toFixed(1)} pts`,
+          benchmark: `Target: ${dailyHoursTarget.toFixed(1)}h/day (${monthlyTarget}h ÷ ${Math.round(calculateExpectedWorkingDays(getStartOfMonth(), getEndOfMonth(), workingDays))} working days)`
+        }
+      ],
+      totalScore: totalScore,
+      totalMaxScore: 15,
+      summary: `Time utilization combines hour progress (${(hoursProgressScore/6*100).toFixed(0)}%), billing efficiency (${(billingEfficiency*100).toFixed(0)}%), and daily consistency (${dailyConsistency.toFixed(1)}h/day) for comprehensive productivity measurement.`
+    }
+  }
+
+  private generateRevenueQualityBreakdown(dashboardMetrics: any, timeStats: any, inputs: any, redistributedScores: any) {
+    const totalRevenue = dashboardMetrics.totale_registratie || 0
+    const unbilledValue = timeStats.unbilled?.value || 0
+    const overdueAmount = dashboardMetrics.achterstallig || 0
+    const currentHours = timeStats.thisMonth?.hours || 0
+
+    // Calculate component metrics
+    const collectionRate = totalRevenue > 0 ? (totalRevenue / (totalRevenue + unbilledValue)) : 0
+    const invoicingSpeed = unbilledValue > 0 ? (1 - (unbilledValue / (totalRevenue + unbilledValue))) : 1
+    const paymentQuality = totalRevenue > 0 ? (1 - (overdueAmount / totalRevenue)) : 1
+
+    // Component scoring (4-point scale total: 1.4 + 1.3 + 1.3 = 4)
+    const collectionScore = Math.min(collectionRate * 1.4, 1.4) // 35% of 4 points
+    const invoicingScore = Math.min(invoicingSpeed * 1.3, 1.3) // 32.5% of 4 points
+    const paymentScore = Math.min(paymentQuality * 1.3, 1.3) // 32.5% of 4 points
+
+    return {
+      components: [
+        {
+          name: 'Collection Rate',
+          value: `€${totalRevenue.toFixed(0)} collected / €${(totalRevenue + unbilledValue).toFixed(0)} total`,
+          percentage: `${(collectionRate * 100).toFixed(1)}%`,
+          score: collectionScore,
+          maxScore: 1.4,
+          description: 'Percentage of potential revenue successfully converted to collected payments',
+          formula: `€${totalRevenue} ÷ €${(totalRevenue + unbilledValue).toFixed(0)} × 1.4 = ${collectionScore.toFixed(1)} pts`,
+          benchmark: 'Target: 95%+ collection rate (minimal unbilled work)'
+        },
+        {
+          name: 'Invoicing Speed',
+          value: unbilledValue > 0 ? `€${unbilledValue.toFixed(0)} pending invoicing` : 'All work invoiced',
+          percentage: `${(invoicingSpeed * 100).toFixed(1)}%`,
+          score: invoicingScore,
+          maxScore: 1.3,
+          description: 'How quickly completed work is converted to invoices',
+          formula: `(1 - €${unbilledValue} ÷ €${(totalRevenue + unbilledValue).toFixed(0)}) × 1.3 = ${invoicingScore.toFixed(1)} pts`,
+          benchmark: 'Target: Invoice within 24-48 hours of work completion'
+        },
+        {
+          name: 'Payment Quality',
+          value: overdueAmount > 0 ? `€${overdueAmount.toFixed(0)} overdue` : 'All payments on time',
+          percentage: `${(paymentQuality * 100).toFixed(1)}%`,
+          score: paymentScore,
+          maxScore: 1.3,
+          description: 'Percentage of revenue collected on time vs. overdue amounts',
+          formula: `(1 - €${overdueAmount} ÷ €${totalRevenue.toFixed(0)}) × 1.3 = ${paymentScore.toFixed(1)} pts`,
+          benchmark: 'Target: <5% overdue amounts (excellent payment collection)'
+        }
+      ],
+      totalScore: redistributedScores.revenueQualityScore || 0,
+      totalMaxScore: 4,
+      summary: `Revenue quality combines collection rate (${(collectionRate*100).toFixed(0)}%), invoicing speed (${(invoicingSpeed*100).toFixed(0)}%), and payment quality (${(paymentQuality*100).toFixed(0)}%) for comprehensive revenue execution measurement.`
+    }
+  }
+
+  private calculateRevenueQuality(dashboardMetrics: any, timeStats: any): number {
+    const totalRevenue = dashboardMetrics.totale_registratie || 0
+    const currentHours = timeStats.thisMonth?.hours || 0
+    const unbilledValue = timeStats.unbilled?.value || 0
+    const overdueAmount = dashboardMetrics.achterstallig || 0
+
+    if (totalRevenue <= 0 && unbilledValue <= 0) {
+      return 0
+    }
+
+    // Calculate components (0-4 points when redistributed)
+
+    // 1. Collection Efficiency (40% weight)
+    const totalEarned = totalRevenue + unbilledValue
+    const collectionRate = totalEarned > 0 ? totalRevenue / totalEarned : 0
+    const collectionScore = Math.min(collectionRate * 1.6, 1.6) // max 1.6 points
+
+    // 2. Invoicing Speed (35% weight) - inverse of unbilled ratio
+    const unbilledRatio = totalEarned > 0 ? unbilledValue / totalEarned : 0
+    const invoicingScore = (1 - Math.min(unbilledRatio, 1)) * 1.4 // max 1.4 points
+
+    // 3. Payment Quality (25% weight) - inverse of overdue amount
+    const overdueRatio = totalRevenue > 0 ? Math.min(overdueAmount / totalRevenue, 1) : 0
+    const paymentScore = (1 - overdueRatio) * 1.0 // max 1.0 points
+
+    return Math.min(collectionScore + invoicingScore + paymentScore, 4)
+  }
 }
 
 // ================== MAIN DECISION TREE ENGINE ==================
@@ -1649,12 +2404,16 @@ export class HealthScoreDecisionTree {
 
   /**
    * Main decision tree execution: Input → Transform → Output
-   * Profit targets are now mandatory - no revenue health fallback
+   * Only time-based targets are mandatory, SaaS targets are optional
    */
   public process(inputs: HealthScoreInputs): HealthScoreOutputs {
-    // Check if profit targets are configured (now mandatory)
-    if (!inputs.profitTargets?.setup_completed) {
-      throw new Error('Profit targets must be configured to use the dashboard')
+    // Check if minimum time-based profit targets are configured
+    if (!inputs.profitTargets?.setup_completed ||
+        !inputs.profitTargets?.monthly_hours_target ||
+        inputs.profitTargets.monthly_hours_target <= 0 ||
+        !inputs.profitTargets?.target_hourly_rate ||
+        inputs.profitTargets.target_hourly_rate <= 0) {
+      throw new Error('Time-based profit targets (hours and hourly rate) must be configured to use the dashboard')
     }
 
     // TRANSFORM: Calculate all scores (profit-focused system)
@@ -1676,6 +2435,12 @@ export class HealthScoreDecisionTree {
         risk: riskResult.score,
         total,
         totalRounded
+      },
+      breakdown: {
+        profit: profitResult.breakdown,
+        cashflow: cashflowResult.breakdown,
+        efficiency: efficiencyResult.breakdown,
+        risk: riskResult.breakdown
       },
       explanations: {
         profit: this.profitCalculator.generateExplanation(inputs, profitResult),

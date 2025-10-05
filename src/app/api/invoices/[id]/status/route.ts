@@ -10,6 +10,7 @@ import {
   createTransactionLog,
   isValidUUID
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface RouteParams {
   params: {
@@ -86,10 +87,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // Set timestamps based on status
     switch (newStatus) {
       case 'sent':
-        updateData.sent_at = new Date().toISOString()
+        updateData.sent_at = getCurrentDate().toISOString()
         break
       case 'paid':
-        updateData.paid_at = new Date().toISOString()
+        updateData.paid_at = getCurrentDate().toISOString()
         break
       case 'cancelled':
         // Clear payment/sent timestamps when cancelled
@@ -108,7 +109,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       .from('invoices')
       .update({
         ...updateData,
-        updated_at: new Date().toISOString()
+        updated_at: getCurrentDate().toISOString()
       })
       .eq('id', invoiceId)
       .eq('tenant_id', profile.tenant_id)
@@ -228,7 +229,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Check if invoice should be automatically marked as overdue
     const isOverdue = invoice.status === 'sent' && 
                      invoice.due_date && 
-                     new Date(invoice.due_date) < new Date()
+                     new Date(invoice.due_date) < getCurrentDate()
 
     const response = createApiResponse({
       current_status: invoice.status,

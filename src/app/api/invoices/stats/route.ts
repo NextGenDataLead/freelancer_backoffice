@@ -5,6 +5,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * GET /api/invoices/stats
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
       return NextResponse.json(ApiErrors.Unauthorized, { status: ApiErrors.Unauthorized.status })
     }
 
-    const now = new Date()
+    const now = getCurrentDate()
     const currentMonth = now.getMonth() + 1
     const currentYear = now.getFullYear()
     const previousMonth = currentMonth === 1 ? 12 : currentMonth - 1

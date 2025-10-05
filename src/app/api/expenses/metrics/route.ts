@@ -5,6 +5,7 @@ import {
   ApiErrors, 
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface ExpenseMetrics {
   currentMonth: {
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = supabaseAdmin;
-    const now = new Date()
+    const now = getCurrentDate()
     const currentMonth = now.getMonth() + 1
     const currentYear = now.getFullYear()
     const previousMonth = currentMonth === 1 ? 12 : currentMonth - 1
