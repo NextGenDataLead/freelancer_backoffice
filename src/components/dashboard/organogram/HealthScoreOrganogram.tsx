@@ -804,6 +804,50 @@ export function HealthScoreOrganogram({
           hasDetailedBreakdown: false
         },
         {
+          id: 'daily_consistency_risk',
+          name: 'Daily Consistency Risk',
+          score: Math.max(0, 8 - (dailyConsistencyRisk || 0)),
+          maxScore: 8,
+          contribution: 32, // 32% of Risk category
+          level: 1,
+          description: `${actualDailyHours.toFixed(1)}h/day vs ${targetDailyHours}h target (rolling 30 days)`,
+          calculationValue: `${((Math.abs(actualDailyHours - targetDailyHours) / targetDailyHours) * 100).toFixed(1)}% deviation`,
+          calculationDescription: `Daily consistency (30-day): ${actualDailyHours.toFixed(1)}h vs ${targetDailyHours}h → ${Math.max(0, 8 - (dailyConsistencyRisk || 0)).toFixed(1)}/8 pts`,
+          isCalculationDriver: true,
+          metricId: 'daily_consistency_risk',
+          hasDetailedBreakdown: true,
+          children: [
+            {
+              id: 'days_per_week_risk',
+              name: 'Days/Week',
+              score: Math.max(0, 4 - (daysRisk || 0)),
+              maxScore: 4,
+              contribution: 50, // 50% of Daily Consistency
+              level: 2,
+              description: `${estimatedDaysPerWeek.toFixed(1)} days/week vs ${targetDaysPerWeek} target (rolling 30 days)`,
+              calculationValue: `${estimatedDaysPerWeek.toFixed(1)} days`,
+              calculationDescription: `Days/week (30-day): ${estimatedDaysPerWeek.toFixed(1)} vs ${targetDaysPerWeek} target → ${Math.max(0, 4 - (daysRisk || 0)).toFixed(1)}/4 pts`,
+              isCalculationDriver: true,
+              metricId: 'days_per_week_risk',
+              hasDetailedBreakdown: false
+            },
+            {
+              id: 'hours_per_day_risk',
+              name: 'Hours/Day',
+              score: Math.max(0, 4 - (hoursRisk || 0)),
+              maxScore: 4,
+              contribution: 50, // 50% of Daily Consistency
+              level: 2,
+              description: `${actualDailyHours.toFixed(1)}h/day vs ${targetDailyHours.toFixed(1)}h target (rolling 30 days)`,
+              calculationValue: `${actualDailyHours.toFixed(1)}h`,
+              calculationDescription: `Hours/day (30-day): ${actualDailyHours.toFixed(1)} vs ${targetDailyHours.toFixed(1)} target → ${Math.max(0, 4 - (hoursRisk || 0)).toFixed(1)}/4 pts`,
+              isCalculationDriver: true,
+              metricId: 'hours_per_day_risk',
+              hasDetailedBreakdown: false
+            }
+          ]
+        },
+        {
           id: 'business_continuity_risk',
           name: 'Business Continuity Risk',
           score: Math.max(0, 8 - (businessContinuityRisk || 0)),
@@ -857,50 +901,6 @@ export function HealthScoreOrganogram({
               calculationDescription: `Consistency trend: ${current30DaysDailyHours.toFixed(1)}h vs ${previous30DaysDailyHours.toFixed(1)}h (prev 30d) → ${Math.max(0, 2.5 - (consistencyTrendRisk || 0)).toFixed(1)}/2.5 pts`,
               isCalculationDriver: true,
               metricId: 'consistency_trend_risk',
-              hasDetailedBreakdown: false
-            }
-          ]
-        },
-        {
-          id: 'daily_consistency_risk',
-          name: 'Daily Consistency Risk',
-          score: Math.max(0, 8 - (dailyConsistencyRisk || 0)),
-          maxScore: 8,
-          contribution: 32, // 32% of Risk category
-          level: 1,
-          description: `${actualDailyHours.toFixed(1)}h/day vs ${targetDailyHours}h target (rolling 30 days)`,
-          calculationValue: `${((Math.abs(actualDailyHours - targetDailyHours) / targetDailyHours) * 100).toFixed(1)}% deviation`,
-          calculationDescription: `Daily consistency (30-day): ${actualDailyHours.toFixed(1)}h vs ${targetDailyHours}h → ${Math.max(0, 8 - (dailyConsistencyRisk || 0)).toFixed(1)}/8 pts`,
-          isCalculationDriver: true,
-          metricId: 'daily_consistency_risk',
-          hasDetailedBreakdown: true,
-          children: [
-            {
-              id: 'days_per_week_risk',
-              name: 'Days/Week',
-              score: Math.max(0, 4 - (daysRisk || 0)),
-              maxScore: 4,
-              contribution: 50, // 50% of Daily Consistency
-              level: 2,
-              description: `${estimatedDaysPerWeek.toFixed(1)} days/week vs ${targetDaysPerWeek} target (rolling 30 days)`,
-              calculationValue: `${estimatedDaysPerWeek.toFixed(1)} days`,
-              calculationDescription: `Days/week (30-day): ${estimatedDaysPerWeek.toFixed(1)} vs ${targetDaysPerWeek} target → ${Math.max(0, 4 - (daysRisk || 0)).toFixed(1)}/4 pts`,
-              isCalculationDriver: true,
-              metricId: 'days_per_week_risk',
-              hasDetailedBreakdown: false
-            },
-            {
-              id: 'hours_per_day_risk',
-              name: 'Hours/Day',
-              score: Math.max(0, 4 - (hoursRisk || 0)),
-              maxScore: 4,
-              contribution: 50, // 50% of Daily Consistency
-              level: 2,
-              description: `${actualDailyHours.toFixed(1)}h/day vs ${targetDailyHours.toFixed(1)}h target (rolling 30 days)`,
-              calculationValue: `${actualDailyHours.toFixed(1)}h`,
-              calculationDescription: `Hours/day (30-day): ${actualDailyHours.toFixed(1)} vs ${targetDailyHours.toFixed(1)} target → ${Math.max(0, 4 - (hoursRisk || 0)).toFixed(1)}/4 pts`,
-              isCalculationDriver: true,
-              metricId: 'hours_per_day_risk',
               hasDetailedBreakdown: false
             }
           ]

@@ -24,6 +24,10 @@ export interface HealthScoreInputs {
     actual_dso?: number
     average_payment_terms?: number
     average_dri?: number
+    rolling30DaysRevenue?: {
+      current: number
+      previous: number
+    }
   }
   timeStats: {
     thisMonth: {
@@ -48,12 +52,20 @@ export interface HealthScoreInputs {
         distinctWorkingDays: number
         totalHours: number
         dailyHours: number
+        billableHours: number
+        nonBillableHours: number
+        unbilledHours: number
+        unbilledValue: number
       }
       previous: {
         billableRevenue: number
         distinctWorkingDays: number
         totalHours: number
         dailyHours: number
+        billableHours: number
+        nonBillableHours: number
+        unbilledHours: number
+        unbilledValue: number
       }
     }
   }
@@ -71,6 +83,8 @@ export interface HealthScoreInputs {
     // Component-based targets
     monthly_hours_target: number
     target_hourly_rate: number
+    target_billable_ratio: number
+    target_working_days_per_week: number[]
     target_monthly_active_users: number
     target_avg_subscription_fee: number
     setup_completed: boolean
@@ -1139,7 +1153,7 @@ class ProfitScoreCalculator {
     // 2A. Revenue Diversification (3 points) - only relevant if both streams exist
     let revenueMixScore = 0 // ❌ FIXED: No default points - calculate or redistribute
     if (subscriptionStreamEnabled && timeBasedStreamEnabled) {
-      const timeRevenue = dashboardMetrics.totale_registratie || 0
+      const timeRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
       const totalRevenue = timeRevenue + currentMRR
       const subscriptionWeight = totalRevenue > 0 ? currentMRR / totalRevenue : 0
       const optimalMix = 0.3 // Target 30% subscription revenue
@@ -1151,8 +1165,9 @@ class ProfitScoreCalculator {
     let pricingEfficiencyScore = 0 // ❌ FIXED: No default points - calculate or redistribute
     let rateEfficiencyPerformance = 0
     if (timeBasedStreamEnabled) {
-      const timeRevenue = dashboardMetrics.totale_registratie || 0
-      const currentHours = timeStats.thisMonth?.hours || 0
+      // Use billable revenue from TIME ENTRIES, not from invoices
+      const timeRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
+      const currentHours = timeStats.rolling30Days?.current?.billableHours || 0
       const currentHourlyRate = currentHours > 0 ? timeRevenue / currentHours : 0
       rateEfficiencyPerformance = targetHourlyRate > 0 ? Math.min(currentHourlyRate / targetHourlyRate, 1.5) : 0
       pricingEfficiencyScore = Math.min(rateEfficiencyPerformance * 4, 4) // 4 points max
@@ -1164,7 +1179,8 @@ class ProfitScoreCalculator {
     let rateOptimizationScore = 0 // ❌ FIXED: No default points - calculate or redistribute
     let hourlyRateContribution = 0
     if (timeBasedStreamEnabled) {
-      const timeRevenue = dashboardMetrics.totale_registratie || 0
+      // Use billable revenue from TIME ENTRIES for rate optimization
+      const timeRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
       hourlyRateContribution = profitTargets?.monthly_revenue_target ?
         (timeRevenue / profitTargets.monthly_revenue_target) : 0
       rateOptimizationScore = Math.min(hourlyRateContribution * 3, 3) // 3 points max
@@ -1181,7 +1197,7 @@ class ProfitScoreCalculator {
 
     // === TIME UTILIZATION CALCULATION ===
     // Calculate time utilization (15 points) - KEEP IN PROFIT
-    const timeUtilizationScore = this.calculateTimeUtilization(timeStats, profitTargets, mtdCalculations)
+    const timeUtilizationScore = this.calculateTimeUtilization(timeStats, profitTargets)
 
     // === REDISTRIBUTION LOGIC ===
     // Apply point redistribution based on business model
@@ -1225,15 +1241,15 @@ class ProfitScoreCalculator {
 
     // Only apply time-based penalties if time-based stream is enabled
     if (timeBasedStreamEnabled) {
-      const timeRevenue = dashboardMetrics.totale_registratie || 0
-      const currentHours = timeStats.thisMonth?.hours || 0
+      const timeRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
+      const currentHours = timeStats.rolling30Days?.current?.billableHours || 0
       const currentHourlyRate = currentHours > 0 ? timeRevenue / currentHours : 0
       if (rateEfficiencyPerformance < 0.7 && currentHourlyRate < 50) { penalties += 2; weakDrivers.push('hourly-rate-value') }
     }
 
     // Only apply mix penalty if both streams are enabled
     if (subscriptionStreamEnabled && timeBasedStreamEnabled) {
-      const timeRevenue = dashboardMetrics.totale_registratie || 0
+      const timeRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
       const totalRevenue = timeRevenue + currentMRR
       const subscriptionWeight = totalRevenue > 0 ? currentMRR / totalRevenue : 0
       const mixOptimization = Math.max(0, 1 - Math.abs(subscriptionWeight - 0.3))
@@ -1263,12 +1279,13 @@ class ProfitScoreCalculator {
       weakDrivers
     })
 
-    // Calculate legacy metrics for backward compatibility
+    // Calculate legacy metrics for backward compatibility (using rolling 30-day data)
     const estimatedMonthlyCosts = profitTargets.monthly_cost_target
-    const timeRevenue = dashboardMetrics.totale_registratie || 0
+    const timeRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
     const totalRevenue = timeRevenue + currentMRR
     const currentProfit = totalRevenue - estimatedMonthlyCosts
-    const dayProgress = mtdCalculations.currentDay / mtdCalculations.daysInMonth
+    // For rolling 30 days, we compare against full monthly targets (30 days ≈ 1 month)
+    const dayProgress = 1.0 // Rolling 30 days represents a full month's worth of data
     const mtdProfitTarget = profitTargets.monthly_profit_target * dayProgress
     const progressRatio = mtdProfitTarget > 0 ? currentProfit / mtdProfitTarget : 0
 
@@ -1326,7 +1343,7 @@ class ProfitScoreCalculator {
             originalScore: pricingEfficiencyScore,
             target: targetHourlyRate,
             current: timeBasedStreamEnabled ?
-              (timeStats.thisMonth?.hours > 0 ? (dashboardMetrics.totale_registratie || 0) / timeStats.thisMonth.hours : 0) : 0
+              ((timeStats.rolling30Days?.current?.billableHours || 0) > 0 ? (timeStats.rolling30Days?.current?.billableRevenue || 0) / (timeStats.rolling30Days?.current?.billableHours || 1) : 0) : 0
           }
         },
         valueCreation: {
@@ -1350,16 +1367,16 @@ class ProfitScoreCalculator {
             score: redistributedScores.timeUtilizationScore,
             components: {
               hoursTarget: profitTargets?.monthly_hours_target || 0,
-              currentHours: timeStats.thisMonth?.hours || 0,
-              unbilledHours: timeStats.unbilled?.hours || 0
+              currentHours: timeStats.rolling30Days?.current?.totalHours || 0,
+              unbilledHours: timeStats.rolling30Days?.current?.unbilledHours || 0
             }
           },
           revenueQuality: {
             enabled: redistributedScores.businessModel === 'time-only' || redistributedScores.businessModel === 'hybrid',
             score: redistributedScores.revenueQualityScore,
             components: {
-              totalRevenue: dashboardMetrics.totale_registratie || 0,
-              unbilledValue: timeStats.unbilled?.value || 0,
+              totalRevenue: dashboardMetrics.rolling30DaysRevenue?.current || 0,
+              unbilledValue: timeStats.rolling30Days?.current?.unbilledValue || 0,
               overdueAmount: dashboardMetrics.achterstallig || 0
             }
           }
@@ -1387,15 +1404,15 @@ class ProfitScoreCalculator {
           revenueQualityScore: roundToOneDecimal(redistributedScores.revenueQualityScore || 0)
         },
 
-        // Real-time metrics for organogram display
-        currentRate: timeStats.thisMonth?.billableHours > 0 ? (dashboardMetrics.totale_registratie || 0) / timeStats.thisMonth.billableHours : 0,
+        // Real-time metrics for organogram display (using rolling 30-day data)
+        currentRate: (timeStats.rolling30Days?.current?.billableHours || 0) > 0 ? (timeStats.rolling30Days?.current?.billableRevenue || 0) / (timeStats.rolling30Days?.current?.billableHours || 1) : 0,
         targetRate: profitTargets?.target_hourly_rate || 0,
-        currentHours: timeStats.thisMonth?.hours || 0, // Total hours
-        billableHours: timeStats.thisMonth?.billableHours || 0,
-        nonBillableHours: timeStats.thisMonth?.nonBillableHours || 0,
+        currentHours: timeStats.rolling30Days?.current?.totalHours || 0,
+        billableHours: timeStats.rolling30Days?.current?.billableHours || 0,
+        nonBillableHours: timeStats.rolling30Days?.current?.nonBillableHours || 0,
         targetHours: profitTargets?.monthly_hours_target || 0,
-        mtdTargetHours: Math.round((profitTargets?.monthly_hours_target || 0) * mtdCalculations.monthProgress),
-        currentDay: mtdCalculations.currentDay,
+        mtdTargetHours: profitTargets?.monthly_hours_target || 0, // For rolling 30 days, compare against full monthly target
+        currentDay: 30, // Rolling 30-day window
 
         // Time Utilization component scores for organogram
         timeUtilizationComponents: this.timeUtilizationComponents,
@@ -1430,7 +1447,7 @@ class ProfitScoreCalculator {
 
     const { breakdown } = result
     const { subscriptionMetrics, revenueMixQuality, valueCreation, weakDrivers, penalties, redistributedScores } = breakdown
-    const { timeStats, profitTargets } = inputs
+    const { timeStats, profitTargets, dashboardMetrics } = inputs
 
     // Build details array conditionally based on business model
     const details: any[] = []
@@ -1553,16 +1570,16 @@ class ProfitScoreCalculator {
         },
         {
           type: 'metric',
-          label: 'Current Month Hours',
-          value: `${timeStats.thisMonth?.hours || 0}h`,
-          description: 'Actual tracked hours this month from time tracking data',
+          label: 'Rolling 30-Day Hours',
+          value: `${timeStats.rolling30Days?.current?.totalHours || 0}h`,
+          description: 'Actual tracked hours in the last 30 days from time tracking data',
           emphasis: 'muted'
         },
         {
           type: 'metric',
-          label: 'Current Revenue (MTD)',
-          value: `€${timeStats.thisMonth?.revenue?.toLocaleString() || 0}`,
-          description: 'Month-to-date revenue from time-based work',
+          label: 'Rolling 30-Day Billable Revenue',
+          value: `€${(timeStats.rolling30Days?.current?.billableRevenue || 0).toLocaleString()}`,
+          description: 'Billable revenue from time entries in the last 30 days (hours × rates)',
           emphasis: 'muted'
         },
         ...(redistributedScores.businessModel === 'time-only' ? [{
@@ -1600,7 +1617,7 @@ class ProfitScoreCalculator {
           {
             type: 'calculation',
             label: '2. Time Utilization Efficiency',
-            value: `${timeStats.thisMonth?.hours || 0}h of ${inputs.mtdCalculations?.mtdHoursTarget || Math.round((profitTargets?.monthly_hours_target || 0) * (inputs.mtdCalculations?.monthProgress || 1))}h MTD target`,
+            value: `${timeStats.rolling30Days?.current?.totalHours || 0}h of ${profitTargets?.monthly_hours_target || 0}h rolling 30-day target`,
             description: `→ ${redistributedScores.timeUtilizationScore?.toFixed(1) || 0}/6 pts (redistributed)`,
             emphasis: 'primary',
             // detailedCalculation: this.generateTimeUtilizationBreakdown(timeStats, inputs, redistributedScores)
@@ -1612,20 +1629,20 @@ class ProfitScoreCalculator {
           {
             type: 'calculation',
             label: 'Hours Progress',
-            value: `${((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.mtdHoursTarget || Math.round((profitTargets?.monthly_hours_target || 0) * (inputs.mtdCalculations?.monthProgress || 1))) * 100).toFixed(1)}%`,
-            description: `→ ${(((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.mtdHoursTarget || Math.round((profitTargets?.monthly_hours_target || 0) * (inputs.mtdCalculations?.monthProgress || 1)))) * 2.4).toFixed(1)}/2.4 pts`
+            value: `${((timeStats.rolling30Days?.current?.totalHours || 0) / (profitTargets?.monthly_hours_target || 1) * 100).toFixed(1)}%`,
+            description: `→ ${(((timeStats.rolling30Days?.current?.totalHours || 0) / (profitTargets?.monthly_hours_target || 1)) * 2.4).toFixed(1)}/2.4 pts`
           },
           {
             type: 'calculation',
             label: 'Billing Efficiency',
-            value: `${(((timeStats.thisMonth?.hours || 0) / ((timeStats.thisMonth?.hours || 0) + (timeStats.unbilled?.hours || 0))) * 100).toFixed(1)}%`,
-            description: `→ ${(((timeStats.thisMonth?.hours || 0) / ((timeStats.thisMonth?.hours || 0) + (timeStats.unbilled?.hours || 0))) * 2.1).toFixed(1)}/2.1 pts`
+            value: `${(((timeStats.rolling30Days?.current?.totalHours || 0) / ((timeStats.rolling30Days?.current?.totalHours || 0) + (timeStats.rolling30Days?.current?.unbilledHours || 0))) * 100).toFixed(1)}%`,
+            description: `→ ${(((timeStats.rolling30Days?.current?.totalHours || 0) / ((timeStats.rolling30Days?.current?.totalHours || 0) + (timeStats.rolling30Days?.current?.unbilledHours || 0))) * 2.1).toFixed(1)}/2.1 pts`
           },
           {
             type: 'calculation',
             label: 'Daily Consistency',
-            value: `${((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.currentDay || 1)).toFixed(1)}h/day`,
-            description: `→ ${((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.currentDay || 1)) >= 5 ? '1.5' : ((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.currentDay || 1)) >= 3 ? '1.2' : ((timeStats.thisMonth?.hours || 0) / (inputs.mtdCalculations?.currentDay || 1)) >= 2 ? '0.8' : '0.3'}/1.5 pts`
+            value: `${(timeStats.rolling30Days?.current?.dailyHours || 0).toFixed(1)}h/day`,
+            description: `→ ${(timeStats.rolling30Days?.current?.dailyHours || 0) >= 5 ? '1.5' : (timeStats.rolling30Days?.current?.dailyHours || 0) >= 3 ? '1.2' : (timeStats.rolling30Days?.current?.dailyHours || 0) >= 2 ? '0.8' : '0.3'}/1.5 pts`
           },
           {
             type: 'calculation',
@@ -1642,20 +1659,20 @@ class ProfitScoreCalculator {
           {
             type: 'calculation',
             label: 'Collection Rate',
-            value: `${(((inputs.dashboardMetrics?.totale_registratie || 0) / ((inputs.dashboardMetrics?.totale_registratie || 0) + (timeStats.unbilled?.value || 0))) * 100).toFixed(1)}%`,
-            description: `→ ${(((inputs.dashboardMetrics?.totale_registratie || 0) / ((inputs.dashboardMetrics?.totale_registratie || 0) + (timeStats.unbilled?.value || 0))) * 1.6).toFixed(1)}/1.6 pts`
+            value: `${(((inputs.dashboardMetrics?.rolling30DaysRevenue?.current || 0) / ((inputs.dashboardMetrics?.rolling30DaysRevenue?.current || 0) + (timeStats.rolling30Days?.current?.unbilledValue || 0))) * 100).toFixed(1)}%`,
+            description: `→ ${(((inputs.dashboardMetrics?.rolling30DaysRevenue?.current || 0) / ((inputs.dashboardMetrics?.rolling30DaysRevenue?.current || 0) + (timeStats.rolling30Days?.current?.unbilledValue || 0))) * 1.6).toFixed(1)}/1.6 pts`
           },
           {
             type: 'calculation',
             label: 'Invoicing Speed',
-            value: `${(100 - ((timeStats.unbilled?.value || 0) / ((inputs.dashboardMetrics?.totale_registratie || 0) + (timeStats.unbilled?.value || 0)) * 100)).toFixed(1)}%`,
-            description: `→ ${((1 - Math.min((timeStats.unbilled?.value || 0) / ((inputs.dashboardMetrics?.totale_registratie || 0) + (timeStats.unbilled?.value || 0)), 1)) * 1.4).toFixed(1)}/1.4 pts`
+            value: `${(100 - ((timeStats.rolling30Days?.current?.unbilledValue || 0) / ((inputs.dashboardMetrics?.rolling30DaysRevenue?.current || 0) + (timeStats.rolling30Days?.current?.unbilledValue || 0)) * 100)).toFixed(1)}%`,
+            description: `→ ${((1 - Math.min((timeStats.rolling30Days?.current?.unbilledValue || 0) / ((inputs.dashboardMetrics?.rolling30DaysRevenue?.current || 0) + (timeStats.rolling30Days?.current?.unbilledValue || 0)), 1)) * 1.4).toFixed(1)}/1.4 pts`
           },
           {
             type: 'calculation',
             label: 'Payment Quality',
-            value: `${(100 - Math.min(((inputs.dashboardMetrics?.achterstallig || 0) / (inputs.dashboardMetrics?.totale_registratie || 1)) * 100, 100)).toFixed(1)}%`,
-            description: `→ ${((1 - Math.min((inputs.dashboardMetrics?.achterstallig || 0) / (inputs.dashboardMetrics?.totale_registratie || 1), 1)) * 1.0).toFixed(1)}/1.0 pts`
+            value: `${(100 - Math.min(((inputs.dashboardMetrics?.achterstallig || 0) / (inputs.dashboardMetrics?.rolling30DaysRevenue?.current || 1)) * 100, 100)).toFixed(1)}%`,
+            description: `→ ${((1 - Math.min((inputs.dashboardMetrics?.achterstallig || 0) / (inputs.dashboardMetrics?.rolling30DaysRevenue?.current || 1), 1)) * 1.0).toFixed(1)}/1.0 pts`
           }
         ]
       })
@@ -2166,26 +2183,23 @@ class ProfitScoreCalculator {
     return 'time-only' // default fallback
   }
 
-  private calculateTimeUtilization(timeStats: any, profitTargets: any, mtdCalculations: any): number {
+  private calculateTimeUtilization(timeStats: any, profitTargets: any): number {
     if (!profitTargets?.monthly_hours_target || profitTargets.monthly_hours_target <= 0) {
       return 0
     }
 
-    const totalTrackedHours = timeStats.thisMonth?.hours || 0 // Total hours (billable + non-billable)
-    const billableHours = timeStats.thisMonth?.billableHours || 0 // Only billable hours
-    const nonBillableHours = timeStats.thisMonth?.nonBillableHours || 0 // Only non-billable hours
+    // Use rolling 30-day data for consistent time windows
+    const totalTrackedHours = timeStats.rolling30Days?.current?.totalHours || 0
+    const billableHours = timeStats.rolling30Days?.current?.billableHours || 0
+    const nonBillableHours = timeStats.rolling30Days?.current?.nonBillableHours || 0
     const monthlyTarget = profitTargets.monthly_hours_target
 
-    // Use MTD target for accurate progress assessment
-    const mtdTarget = mtdCalculations?.mtdHoursTarget ||
-                     Math.round(monthlyTarget * (mtdCalculations?.monthProgress || 1))
-
-    // Calculate components (0-15 points total) - NEW ALLOCATIONS
+    // Calculate components (0-15 points total)
     // Hours Progress: 6 pts (40%), Billable Ratio: 6 pts (40%), Daily Consistency: 3 pts (20%)
 
-    // 1. Target vs Actual Hours (40% weight = 6 points) - using MTD target
-    // Assesses total tracked hours (billable + non-billable) against target
-    const hoursAchievement = mtdTarget > 0 ? totalTrackedHours / mtdTarget : 0
+    // 1. Target vs Actual Hours (40% weight = 6 points) - using 30-day window
+    // 30 days ≈ 1.0 months, so we compare against the full monthly target
+    const hoursAchievement = monthlyTarget > 0 ? totalTrackedHours / monthlyTarget : 0
     const hoursScore = Math.min(hoursAchievement * 6, 6) // max 6 points (100% = 6)
 
     // 2. Billable Ratio (40% weight = 6 points)
@@ -2209,11 +2223,8 @@ class ProfitScoreCalculator {
     const workingDays = profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
     const dailyHoursTarget = calculateDailyHoursTarget(monthlyTarget, workingDays)
 
-    // Calculate actual daily average
-    // TODO: Enhance with actual working days count from time entries
-    // For now, using calendar days (MTD) as approximation
-    const actualDailyAverage = mtdCalculations?.currentDay > 0 ?
-                              totalTrackedHours / mtdCalculations.currentDay : 0
+    // Use rolling 30-day daily hours average (already calculated by API)
+    const actualDailyAverage = timeStats.rolling30Days?.current?.dailyHours || 0
 
     // Compare actual vs target daily hours
     const dailyConsistencyRatio = dailyHoursTarget > 0 ?
@@ -2243,22 +2254,20 @@ class ProfitScoreCalculator {
   private actualBillableRatioValue: number = 0
 
   private generateTimeUtilizationBreakdown(timeStats: any, inputs: any, redistributedScores: any) {
-    // Safe extraction with proper defaults
-    const currentHours = Math.max(0, timeStats?.thisMonth?.hours || 0)
-    const unbilledHours = Math.max(0, timeStats?.unbilled?.hours || 0)
-    const mtdTarget = Math.max(0, inputs?.mtdCalculations?.mtdHoursTarget || 0)
-    const currentDay = Math.max(1, inputs?.mtdCalculations?.currentDay || 1)
+    // Safe extraction with proper defaults using rolling 30-day data
+    const currentHours = Math.max(0, timeStats?.rolling30Days?.current?.totalHours || 0)
+    const unbilledHours = Math.max(0, timeStats?.rolling30Days?.current?.unbilledHours || 0)
+    const monthlyTarget = Math.max(0, inputs?.profitTargets?.monthly_hours_target || 0)
     const profitTargets = inputs?.profitTargets
 
-    // Calculate component ratios safely
-    const hoursProgress = mtdTarget > 0 ? Math.min(currentHours / mtdTarget, 1.5) : 0
+    // Calculate component ratios safely (comparing rolling 30 days against monthly target)
+    const hoursProgress = monthlyTarget > 0 ? Math.min(currentHours / monthlyTarget, 1.5) : 0
     const billingEfficiency = currentHours > 0 ? (currentHours - unbilledHours) / currentHours : 1
 
     // Calculate dynamic daily consistency based on working days
     const workingDays = profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
-    const monthlyTarget = profitTargets?.monthly_hours_target || 0
     const dailyHoursTarget = calculateDailyHoursTarget(monthlyTarget, workingDays)
-    const actualDailyAverage = currentHours / currentDay
+    const actualDailyAverage = timeStats?.rolling30Days?.current?.dailyHours || 0
     const dailyConsistency = actualDailyAverage
 
     // Component scoring (15-point scale total: 6 + 6 + 3 = 15) - UPDATED ALLOCATIONS
@@ -2275,12 +2284,12 @@ class ProfitScoreCalculator {
       components: [
         {
           name: 'Hours Progress',
-          value: mtdTarget > 0 ? `${currentHours}h / ${mtdTarget}h MTD target` : `${currentHours}h (no target set)`,
+          value: monthlyTarget > 0 ? `${currentHours}h / ${monthlyTarget}h rolling 30-day target` : `${currentHours}h (no target set)`,
           percentage: `${(hoursProgress * 100).toFixed(1)}%`,
           score: hoursProgressScore,
           maxScore: 6,
-          description: 'Progress toward monthly hour target based on current day of month',
-          formula: mtdTarget > 0 ? `(${currentHours} ÷ ${mtdTarget}) × 6 = ${hoursProgressScore.toFixed(1)} pts` : 'No target set',
+          description: 'Progress toward monthly hour target over rolling 30-day window',
+          formula: monthlyTarget > 0 ? `(${currentHours} ÷ ${monthlyTarget}) × 6 = ${hoursProgressScore.toFixed(1)} pts` : 'No target set',
           benchmark: 'Target: 100% progress (on track with monthly hours)'
         },
         {
@@ -2311,15 +2320,18 @@ class ProfitScoreCalculator {
   }
 
   private generateRevenueQualityBreakdown(dashboardMetrics: any, timeStats: any, inputs: any, redistributedScores: any) {
-    const totalRevenue = dashboardMetrics.totale_registratie || 0
-    const unbilledValue = timeStats.unbilled?.value || 0
+    // Use billable revenue from time entries for accurate collection tracking
+    const billableRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
+    const unbilledValue = timeStats.rolling30Days?.current?.unbilledValue || 0
+    const totalWorkValue = billableRevenue // billableRevenue already includes all billable work
+    const invoicedWorkValue = Math.max(0, billableRevenue - unbilledValue) // Work that has been invoiced
     const overdueAmount = dashboardMetrics.achterstallig || 0
-    const currentHours = timeStats.thisMonth?.hours || 0
+    const currentHours = timeStats.rolling30Days?.current?.totalHours || 0
 
     // Calculate component metrics
-    const collectionRate = totalRevenue > 0 ? (totalRevenue / (totalRevenue + unbilledValue)) : 0
-    const invoicingSpeed = unbilledValue > 0 ? (1 - (unbilledValue / (totalRevenue + unbilledValue))) : 1
-    const paymentQuality = totalRevenue > 0 ? (1 - (overdueAmount / totalRevenue)) : 1
+    const collectionRate = totalWorkValue > 0 ? (invoicedWorkValue / totalWorkValue) : 0
+    const invoicingSpeed = totalWorkValue > 0 ? (invoicedWorkValue / totalWorkValue) : 1
+    const paymentQuality = invoicedWorkValue > 0 ? (1 - (overdueAmount / invoicedWorkValue)) : 1
 
     // Component scoring (4-point scale total: 1.4 + 1.3 + 1.3 = 4)
     const collectionScore = Math.min(collectionRate * 1.4, 1.4) // 35% of 4 points
@@ -2330,12 +2342,12 @@ class ProfitScoreCalculator {
       components: [
         {
           name: 'Collection Rate',
-          value: `€${totalRevenue.toFixed(0)} collected / €${(totalRevenue + unbilledValue).toFixed(0)} total`,
+          value: `€${invoicedWorkValue.toFixed(0)} invoiced / €${totalWorkValue.toFixed(0)} total`,
           percentage: `${(collectionRate * 100).toFixed(1)}%`,
           score: collectionScore,
           maxScore: 1.4,
-          description: 'Percentage of potential revenue successfully converted to collected payments',
-          formula: `€${totalRevenue} ÷ €${(totalRevenue + unbilledValue).toFixed(0)} × 1.4 = ${collectionScore.toFixed(1)} pts`,
+          description: 'Percentage of billable work successfully converted to invoices',
+          formula: `€${invoicedWorkValue.toFixed(0)} ÷ €${totalWorkValue.toFixed(0)} × 1.4 = ${collectionScore.toFixed(1)} pts`,
           benchmark: 'Target: 95%+ collection rate (minimal unbilled work)'
         },
         {
@@ -2345,7 +2357,7 @@ class ProfitScoreCalculator {
           score: invoicingScore,
           maxScore: 1.3,
           description: 'How quickly completed work is converted to invoices',
-          formula: `(1 - €${unbilledValue} ÷ €${(totalRevenue + unbilledValue).toFixed(0)}) × 1.3 = ${invoicingScore.toFixed(1)} pts`,
+          formula: `€${invoicedWorkValue.toFixed(0)} ÷ €${totalWorkValue.toFixed(0)} × 1.3 = ${invoicingScore.toFixed(1)} pts`,
           benchmark: 'Target: Invoice within 24-48 hours of work completion'
         },
         {
@@ -2355,7 +2367,7 @@ class ProfitScoreCalculator {
           score: paymentScore,
           maxScore: 1.3,
           description: 'Percentage of revenue collected on time vs. overdue amounts',
-          formula: `(1 - €${overdueAmount} ÷ €${totalRevenue.toFixed(0)}) × 1.3 = ${paymentScore.toFixed(1)} pts`,
+          formula: `(1 - €${overdueAmount} ÷ €${invoicedWorkValue.toFixed(0)}) × 1.3 = ${paymentScore.toFixed(1)} pts`,
           benchmark: 'Target: <5% overdue amounts (excellent payment collection)'
         }
       ],
@@ -2366,28 +2378,27 @@ class ProfitScoreCalculator {
   }
 
   private calculateRevenueQuality(dashboardMetrics: any, timeStats: any): number {
-    const totalRevenue = dashboardMetrics.totale_registratie || 0
-    const currentHours = timeStats.thisMonth?.hours || 0
-    const unbilledValue = timeStats.unbilled?.value || 0
+    const billableRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
+    const unbilledValue = timeStats.rolling30Days?.current?.unbilledValue || 0
+    const invoicedWorkValue = Math.max(0, billableRevenue - unbilledValue)
     const overdueAmount = dashboardMetrics.achterstallig || 0
 
-    if (totalRevenue <= 0 && unbilledValue <= 0) {
+    if (billableRevenue <= 0) {
       return 0
     }
 
     // Calculate components (0-4 points when redistributed)
 
     // 1. Collection Efficiency (40% weight)
-    const totalEarned = totalRevenue + unbilledValue
-    const collectionRate = totalEarned > 0 ? totalRevenue / totalEarned : 0
+    const collectionRate = billableRevenue > 0 ? invoicedWorkValue / billableRevenue : 0
     const collectionScore = Math.min(collectionRate * 1.6, 1.6) // max 1.6 points
 
     // 2. Invoicing Speed (35% weight) - inverse of unbilled ratio
-    const unbilledRatio = totalEarned > 0 ? unbilledValue / totalEarned : 0
+    const unbilledRatio = billableRevenue > 0 ? unbilledValue / billableRevenue : 0
     const invoicingScore = (1 - Math.min(unbilledRatio, 1)) * 1.4 // max 1.4 points
 
     // 3. Payment Quality (25% weight) - inverse of overdue amount
-    const overdueRatio = totalRevenue > 0 ? Math.min(overdueAmount / totalRevenue, 1) : 0
+    const overdueRatio = invoicedWorkValue > 0 ? Math.min(overdueAmount / invoicedWorkValue, 1) : 0
     const paymentScore = (1 - overdueRatio) * 1.0 // max 1.0 points
 
     return Math.min(collectionScore + invoicingScore + paymentScore, 4)

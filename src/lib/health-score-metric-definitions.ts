@@ -126,9 +126,9 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
     id: 'hours_progress',
     name: 'Hours Progress (Time Utilization)',
     category: 'efficiency',
-    description: 'Measures your tracked hours against the MTD target based on expected working days (not calendar days). The target adapts to your working schedule - e.g., if you work Mon-Thu, the system only counts those days when calculating your MTD target.',
-    importance: 'This metric ensures fair assessment regardless of your working schedule. Part-time or custom schedules get appropriate targets. Staying on track ensures consistent income and identifies productivity gaps when they\'re still correctable.',
-    calculation: 'MTD Target = (expected working days up to yesterday / total working days in month) × monthly target. Score = (actual hours / MTD target) × 100%. Example: Sept 9, Mon-Thu schedule: 5 working days passed ÷ 18 total = 27.8% × 120h = 33.3h target.',
+    description: 'Measures your tracked hours in the rolling 30-day window against your monthly target. This provides a consistent measurement window that adapts to your working schedule regardless of calendar boundaries.',
+    importance: 'Rolling 30-day measurement eliminates calendar edge-case issues (month-end, varying month lengths) and provides more consistent tracking. Staying on track ensures consistent income and identifies productivity gaps.',
+    calculation: 'Rolling 30-Day Hours compared to Monthly Target. Score = (rolling 30-day hours / monthly target) × 100%. For a 120h monthly target, tracking 115h in the last 30 days = 95.8% achievement.',
     bestPractices: [
       'Configure your actual working days per week in settings (Mon-Sun)',
       'Set realistic monthly hours target aligned with your schedule',
@@ -163,11 +163,11 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
 
   current_hours_mtd: {
     id: 'current_hours_mtd',
-    name: 'Current Hours (Month-to-Date)',
+    name: 'Rolling 30-Day Hours',
     category: 'efficiency',
-    description: 'The total number of hours you\'ve tracked and logged for work activities so far this month. This includes all billable and potentially billable time.',
-    importance: 'Tracking hours accurately is essential for understanding productivity, pricing services correctly, and ensuring you meet your income targets.',
-    calculation: 'Sum of all logged hours from the 1st of current month to current date',
+    description: 'The total number of hours you\'ve tracked and logged for work activities in the last 30 days. This includes all billable and potentially billable time, measured in a rolling window for consistent tracking.',
+    importance: 'Tracking hours accurately is essential for understanding productivity, pricing services correctly, and ensuring you meet your income targets. Rolling 30-day windows eliminate calendar boundary issues.',
+    calculation: 'Sum of all logged hours from 30 days ago to today',
     bestPractices: [
       'Log time immediately after completing tasks',
       'Use time tracking software with project/client categorization',
@@ -185,23 +185,23 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
 
   mtd_target: {
     id: 'mtd_target',
-    name: 'MTD Target Hours',
+    name: 'Rolling 30-Day Target',
     category: 'efficiency',
-    description: 'The expected number of hours you should have completed by this point in the month, based on your monthly target and the current date.',
-    importance: 'This provides a benchmark to measure whether you\'re on track to meet your monthly productivity goals. Staying on target ensures consistent income.',
-    calculation: '(monthly_hours_target / days_in_month) * current_day_of_month',
+    description: 'Your monthly hours target serves as the benchmark for the rolling 30-day window. Since 30 days approximates one month, your target remains your monthly hours goal.',
+    importance: 'This provides a consistent benchmark to measure whether you\'re on track to meet your productivity goals. The rolling window eliminates month-boundary inconsistencies.',
+    calculation: 'Monthly hours target (used as the 30-day benchmark since 30 days ≈ 1 month)',
     bestPractices: [
       'Set realistic monthly hour targets based on your capacity',
-      'Check progress weekly against MTD targets',
+      'Check progress weekly against rolling 30-day targets',
       'Adjust daily schedules when falling behind target',
       'Account for holidays and planned time off',
       'Build in buffer time for unexpected interruptions'
     ],
     benchmarks: {
-      excellent: '100%+ of MTD target achieved',
-      good: '80-100% of MTD target achieved',
-      fair: '60-80% of MTD target achieved',
-      poor: 'Under 60% of MTD target achieved'
+      excellent: '100%+ of rolling 30-day target achieved',
+      good: '80-100% of rolling 30-day target achieved',
+      fair: '60-80% of rolling 30-day target achieved',
+      poor: 'Under 60% of rolling 30-day target achieved'
     }
   },
 
@@ -289,9 +289,9 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
     id: 'daily_consistency',
     name: 'Daily Consistency',
     category: 'efficiency',
-    description: 'Your average hours per day worked this month compared to your target daily hours (calculated from your monthly target ÷ expected working days). This measures how consistently you meet your productivity goals.',
-    importance: 'Meeting your daily hours target consistently ensures you hit your monthly goals. This metric adapts to your working schedule (e.g., if you work Mon-Thu, it calculates the appropriate daily target).',
-    calculation: 'Actual: total_hours_MTD / calendar_days_MTD. Target: monthly_hours_target / expected_working_days_in_month. Score: (actual / target) × 100%. Example: 6.5h/day actual vs 6.67h/day target = 97.5%',
+    description: 'Your average hours per day in the rolling 30-day window compared to your target daily hours (calculated from your monthly target ÷ expected working days). This measures how consistently you meet your productivity goals.',
+    importance: 'Consistent daily hours ensure you hit your targets. Rolling 30-day measurement provides stable, calendar-independent tracking that adapts to your working schedule.',
+    calculation: 'Actual: rolling_30_day_hours / distinct_working_days_in_30_days. Target: monthly_hours_target / expected_working_days_per_month. Score: (actual / target) × 100%. Example: 6.5h/day actual vs 6.67h/day target = 97.5%',
     bestPractices: [
       'Set realistic monthly hours targets based on your working schedule',
       'Select your actual working days per week in settings (Mon-Sun)',
@@ -668,9 +668,9 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
     id: 'time_utilization_efficiency',
     name: 'Time Utilization Efficiency',
     category: 'profit',
-    description: 'Measures how efficiently you\'re using your available time to meet monthly hour targets and maximize productivity.',
-    importance: 'Efficient time utilization directly impacts revenue potential and ensures you\'re on track to meet income goals.',
-    calculation: 'Current month-to-date hours vs. target hours for the current period',
+    description: 'Measures how efficiently you\'re using your available time to meet hour targets and maximize productivity, tracked over rolling 30-day windows.',
+    importance: 'Efficient time utilization directly impacts revenue potential and ensures you\'re on track to meet income goals. Rolling 30-day tracking eliminates calendar boundary inconsistencies.',
+    calculation: 'Rolling 30-day hours compared to monthly target (30 days ≈ 1 month)',
     bestPractices: [
       'Track time consistently and review daily progress',
       'Set weekly milestones to stay on track',

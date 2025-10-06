@@ -88,6 +88,10 @@ interface DashboardMetricsResponse {
     actual_dso: number
     average_payment_terms: number
     average_dri: number
+    rolling30DaysRevenue?: {
+      current: number
+      previous: number
+    }
   }
 }
 
@@ -108,6 +112,7 @@ interface TimeStatsResponse {
     unbilled: {
       hours: number
       revenue: number
+      value: number
     }
     projects: {
       count: number
@@ -127,6 +132,28 @@ interface TimeStatsResponse {
         trend: 'positive' | 'negative' | 'neutral'
       }
       totalRevenue: number
+    }
+    rolling30Days?: {
+      current: {
+        billableRevenue: number
+        distinctWorkingDays: number
+        totalHours: number
+        dailyHours: number
+        billableHours: number
+        nonBillableHours: number
+        unbilledHours: number
+        unbilledValue: number
+      }
+      previous: {
+        billableRevenue: number
+        distinctWorkingDays: number
+        totalHours: number
+        dailyHours: number
+        billableHours: number
+        nonBillableHours: number
+        unbilledHours: number
+        unbilledValue: number
+      }
     }
   }
 }
@@ -375,7 +402,8 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         factureerbaar_count: dashboardMetrics.factureerbaar_count || 0,
         actual_dso: dashboardMetrics.actual_dso,
         average_payment_terms: dashboardMetrics.average_payment_terms,
-        average_dri: dashboardMetrics.average_dri
+        average_dri: dashboardMetrics.average_dri,
+        rolling30DaysRevenue: dashboardMetrics.rolling30DaysRevenue
       },
       timeStats: {
         thisMonth: {

@@ -109,6 +109,31 @@ export async function GET() {
 
     if (previous30Error) throw previous30Error
 
+    // Query unbilled hours for rolling 30-day periods (billable but not invoiced)
+    // Current 30 days unbilled
+    const { data: current30DaysUnbilledEntries, error: current30UnbilledError } = await supabaseAdmin
+      .from('time_entries')
+      .select('hours, hourly_rate, effective_hourly_rate')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('billable', true)
+      .eq('invoiced', false)
+      .gte('entry_date', last30DaysStart.toISOString().split('T')[0])
+      .lte('entry_date', now.toISOString().split('T')[0])
+
+    if (current30UnbilledError) throw current30UnbilledError
+
+    // Previous 30 days unbilled
+    const { data: previous30DaysUnbilledEntries, error: previous30UnbilledError } = await supabaseAdmin
+      .from('time_entries')
+      .select('hours, hourly_rate, effective_hourly_rate')
+      .eq('tenant_id', profile.tenant_id)
+      .eq('billable', true)
+      .eq('invoiced', false)
+      .gte('entry_date', previous30DaysStart.toISOString().split('T')[0])
+      .lt('entry_date', previous30DaysEnd.toISOString().split('T')[0])
+
+    if (previous30UnbilledError) throw previous30UnbilledError
+
     // Query active projects and clients
     const { data: projectStats, error: projectError } = await supabaseAdmin
       .from('time_entries')
@@ -181,6 +206,14 @@ export async function GET() {
       ? current30DaysHours / current30DaysDistinctWorkingDays
       : 0
 
+    // Calculate billable/non-billable breakdown for current 30 days
+    const current30DaysBillableHours = current30DaysEntries
+      ?.filter(e => e.billable === true || e.billable === null)
+      .reduce((sum, e) => sum + e.hours, 0) || 0
+    const current30DaysNonBillableHours = current30DaysEntries
+      ?.filter(e => e.billable === false)
+      .reduce((sum, e) => sum + e.hours, 0) || 0
+
     // Previous period (days 31-60)
     const previous30DaysBillableRevenue = previous30DaysEntries
       ?.filter(e => e.billable !== false)
@@ -194,6 +227,25 @@ export async function GET() {
     const previous30DaysDailyHours = previous30DaysDistinctWorkingDays > 0
       ? previous30DaysHours / previous30DaysDistinctWorkingDays
       : 0
+
+    // Calculate billable/non-billable breakdown for previous 30 days
+    const previous30DaysBillableHours = previous30DaysEntries
+      ?.filter(e => e.billable === true || e.billable === null)
+      .reduce((sum, e) => sum + e.hours, 0) || 0
+    const previous30DaysNonBillableHours = previous30DaysEntries
+      ?.filter(e => e.billable === false)
+      .reduce((sum, e) => sum + e.hours, 0) || 0
+
+    // Calculate unbilled metrics for rolling 30-day periods
+    const current30DaysUnbilledHours = current30DaysUnbilledEntries
+      ?.reduce((sum, e) => sum + e.hours, 0) || 0
+    const current30DaysUnbilledValue = current30DaysUnbilledEntries
+      ?.reduce((sum, e) => sum + (e.hours * (e.effective_hourly_rate || e.hourly_rate || 0)), 0) || 0
+
+    const previous30DaysUnbilledHours = previous30DaysUnbilledEntries
+      ?.reduce((sum, e) => sum + e.hours, 0) || 0
+    const previous30DaysUnbilledValue = previous30DaysUnbilledEntries
+      ?.reduce((sum, e) => sum + (e.hours * (e.effective_hourly_rate || e.hourly_rate || 0)), 0) || 0
 
     // Get subscription metrics for SaaS dashboard cards
     const subscriptionMetrics = await calculateSubscriptionMetrics(profile.tenant_id, currentMonthStart, currentMonthEnd)
@@ -225,13 +277,21 @@ export async function GET() {
           billableRevenue: Math.round(current30DaysBillableRevenue * 100) / 100,
           distinctWorkingDays: current30DaysDistinctWorkingDays,
           totalHours: Math.round(current30DaysHours * 10) / 10,
-          dailyHours: Math.round(current30DaysDailyHours * 10) / 10
+          dailyHours: Math.round(current30DaysDailyHours * 10) / 10,
+          billableHours: Math.round(current30DaysBillableHours * 10) / 10,
+          nonBillableHours: Math.round(current30DaysNonBillableHours * 10) / 10,
+          unbilledHours: Math.round(current30DaysUnbilledHours * 10) / 10,
+          unbilledValue: Math.round(current30DaysUnbilledValue * 100) / 100
         },
         previous: {
           billableRevenue: Math.round(previous30DaysBillableRevenue * 100) / 100,
           distinctWorkingDays: previous30DaysDistinctWorkingDays,
           totalHours: Math.round(previous30DaysHours * 10) / 10,
-          dailyHours: Math.round(previous30DaysDailyHours * 10) / 10
+          dailyHours: Math.round(previous30DaysDailyHours * 10) / 10,
+          billableHours: Math.round(previous30DaysBillableHours * 10) / 10,
+          nonBillableHours: Math.round(previous30DaysNonBillableHours * 10) / 10,
+          unbilledHours: Math.round(previous30DaysUnbilledHours * 10) / 10,
+          unbilledValue: Math.round(previous30DaysUnbilledValue * 100) / 100
         }
       }
     }

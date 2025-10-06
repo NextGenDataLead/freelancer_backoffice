@@ -26,6 +26,11 @@ export async function GET(request: Request) {
     const now = getCurrentDate()
     const currentYear = now.getFullYear()
     const currentMonth = now.getMonth() + 1 // 1-12
+
+    // Calculate rolling 30-day periods for health score
+    const last30DaysStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const previous30DaysStart = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000)
+    const previous30DaysEnd = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     
     // Calculate previous month boundaries for "Factureerbaar"
     // For monthly frequency: everything up to and including the last day of previous month
@@ -110,6 +115,9 @@ export async function GET(request: Request) {
       prevWeekStart,
       prevWeekEnd,
       today: now.toISOString().split('T')[0],
+      last30DaysStart: last30DaysStart.toISOString().split('T')[0],
+      previous30DaysStart: previous30DaysStart.toISOString().split('T')[0],
+      previous30DaysEnd: previous30DaysEnd.toISOString().split('T')[0],
       tenantPaymentTermsBaseline
     })
 
@@ -128,15 +136,18 @@ export async function GET(request: Request) {
  * Calculate dashboard metrics based on business logic
  */
 function calculateDashboardMetrics(
-  clients: any[], 
-  timeEntries: any[], 
-  invoices: any[], 
+  clients: any[],
+  timeEntries: any[],
+  invoices: any[],
   periods: {
     prevMonthStart: string
     prevMonthEnd: string
     prevWeekStart: string
     prevWeekEnd: string
     today: string
+    last30DaysStart?: string
+    previous30DaysStart?: string
+    previous30DaysEnd?: string
     tenantPaymentTermsBaseline?: number
   }
 ) {
@@ -316,6 +327,30 @@ function calculateDashboardMetrics(
 
   const averageDRI = driCount > 0 ? Math.round((totalDRI / driCount) * 10) / 10 : 0
 
+  // 6. ROLLING 30-DAY INVOICE REVENUE - For health score Profit calculations
+  // Calculate total invoice revenue for rolling 30-day periods
+  let current30DaysRevenue = 0
+  let previous30DaysRevenue = 0
+
+  if (periods.last30DaysStart && periods.previous30DaysStart && periods.previous30DaysEnd) {
+    // Current 30 days: Invoices created in the last 30 days
+    processedInvoices.forEach(invoice => {
+      const invoiceDate = invoice.invoice_date
+      if (invoiceDate >= periods.last30DaysStart! && invoiceDate <= periods.today) {
+        // Count total invoice amount (not just paid amount)
+        current30DaysRevenue += parseFloat(invoice.total_amount)
+      }
+    })
+
+    // Previous 30 days: Invoices created in days 31-60
+    processedInvoices.forEach(invoice => {
+      const invoiceDate = invoice.invoice_date
+      if (invoiceDate >= periods.previous30DaysStart! && invoiceDate < periods.previous30DaysEnd!) {
+        previous30DaysRevenue += parseFloat(invoice.total_amount)
+      }
+    })
+  }
+
   // Round up to 2 decimals as requested
   return {
     factureerbaar: Math.ceil(factureerbaar * 100) / 100,
@@ -326,6 +361,10 @@ function calculateDashboardMetrics(
     actual_dso: averageDSO,
     average_payment_terms: averagePaymentTerms,
     average_dri: averageDRI,
+    rolling30DaysRevenue: {
+      current: Math.ceil(current30DaysRevenue * 100) / 100,
+      previous: Math.ceil(previous30DaysRevenue * 100) / 100
+    },
     period_info: {
       current_date: periods.today,
       previous_month: `${periods.prevMonthStart} to ${periods.prevMonthEnd}`,
