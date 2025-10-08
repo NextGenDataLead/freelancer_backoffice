@@ -18,7 +18,6 @@ import { HEALTH_STATUS_CONFIG, getStatusForScore, HEALTH_ANIMATIONS } from '@/li
 import { getMetricDefinition, type MetricDefinition } from '@/lib/health-score-metric-definitions'
 import { getCurrentDate } from '@/lib/current-date'
 import { HealthScoreHierarchicalTree } from './health-score-hierarchical-tree'
-import { HealthScoreOrganogram } from './organogram/HealthScoreOrganogram'
 import { CalculationDetailModal } from './calculation-detail-modal'
 import {
   Euro,
@@ -205,7 +204,6 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
   const [showExplanation, setShowExplanation] = useState<string | null>(null)
   const [showHealthReport, setShowHealthReport] = useState(false)
   const [healthScoreResults, setHealthScoreResults] = useState<HealthScoreOutputs | null>(null)
-  const [viewMode, setViewMode] = useState<'tree' | 'organogram'>('tree')
   const [calculationDetailModal, setCalculationDetailModal] = useState<{
     metricId: string;
     metricName: string;
@@ -1213,21 +1211,19 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                     />
                   </div>
                 </div>
-                <div className={`grid ${subscriptionEnabled ? 'grid-cols-2' : 'grid-cols-1'} gap-3 pt-3 border-t border-border/20`}>
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Time Value</p>
                     <p className="text-sm font-bold text-primary">
                       {formatCurrency(dashboardMetrics?.totale_registratie || 0)}
                     </p>
                   </div>
-                  {subscriptionEnabled && (
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Subscriptions</p>
                     <p className="text-sm font-bold text-emerald-500">
                       {formatCurrency(Math.round((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0)))}
                     </p>
                   </div>
-                  )}
                 </div>
               </div>
 
@@ -1680,95 +1676,36 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   </p>
                 </div>
 
-                {/* View Toggle */}
-                <div className="flex justify-center mb-6">
-                  <div className="bg-muted rounded-lg p-1 flex">
-                    <button
-                      onClick={() => setViewMode('organogram')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                        viewMode === 'organogram'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      📊 Organogram
-                    </button>
-                    <button
-                      onClick={() => setViewMode('tree')}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                        viewMode === 'tree'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      🌲 Tree View
-                    </button>
-                  </div>
-                </div>
-
                 {/* Score Breakdown Visualization */}
                 {healthScoreResults && (
-                  <>
-                    {viewMode === 'organogram' ? (
-                      <HealthScoreOrganogram
-                        healthScoreResults={healthScoreResults}
-                        category={showExplanation as 'profit' | 'cashflow' | 'efficiency' | 'risk'}
-                        onMetricClick={(metricId, metricName, score, maxScore, currentValue) => {
-                          // Fallback: if onCalculationClick fails, use calculation modal anyway
-                          setCalculationDetailModal({
-                            metricId,
-                            metricName,
-                            calculationValue: `${score}/${maxScore} points`,
-                            calculationDescription: `Current score: ${score}/${maxScore} points`,
-                            score,
-                            maxScore,
-                            detailedCalculation: undefined
-                          });
-                        }}
-                        onCalculationClick={(metricId, metricName, calculationValue, calculationDescription, score, maxScore, detailedCalculation) => {
-                          setCalculationDetailModal({
-                            metricId,
-                            metricName,
-                            calculationValue,
-                            calculationDescription,
-                            score,
-                            maxScore,
-                            detailedCalculation
-                          });
-                        }}
-                        className="max-w-full"
-                      />
-                    ) : (
-                      <HealthScoreHierarchicalTree
-                        healthScoreResults={healthScoreResults}
-                        category={showExplanation as 'profit' | 'cashflow' | 'efficiency' | 'risk'}
-                        onMetricClick={(metricId, metricName, score, maxScore, currentValue) => {
-                          // Use calculation modal for all metric clicks - no fallback to compact modal
-                          setCalculationDetailModal({
-                            metricId,
-                            metricName,
-                            calculationValue: `${score}/${maxScore} points`,
-                            calculationDescription: `Current score: ${score}/${maxScore} points`,
-                            score,
-                            maxScore,
-                            detailedCalculation: undefined
-                          });
-                        }}
-                        onCalculationClick={(metricId, metricName, calculationValue, calculationDescription, score, maxScore, detailedCalculation) => {
-                          setCalculationDetailModal({
-                            metricId,
-                            metricName,
-                            calculationValue,
-                            calculationDescription,
-                            score,
-                            maxScore,
-                            detailedCalculation
-                          });
-                        }}
-                        className="max-w-full"
-                      />
-                    )}
-                  </>
+                  <HealthScoreHierarchicalTree
+                    healthScoreResults={healthScoreResults}
+                    category={showExplanation as 'profit' | 'cashflow' | 'efficiency' | 'risk'}
+                    onMetricClick={(metricId, metricName, score, maxScore, currentValue) => {
+                      // Use calculation modal for all metric clicks - no fallback to compact modal
+                      setCalculationDetailModal({
+                        metricId,
+                        metricName,
+                        calculationValue: `${score}/${maxScore} points`,
+                        calculationDescription: `Current score: ${score}/${maxScore} points`,
+                        score,
+                        maxScore,
+                        detailedCalculation: undefined
+                      });
+                    }}
+                    onCalculationClick={(metricId, metricName, calculationValue, calculationDescription, score, maxScore, detailedCalculation) => {
+                      setCalculationDetailModal({
+                        metricId,
+                        metricName,
+                        calculationValue,
+                        calculationDescription,
+                        score,
+                        maxScore,
+                        detailedCalculation
+                      });
+                    }}
+                    className="max-w-full"
+                  />
                 )}
               </div>
 

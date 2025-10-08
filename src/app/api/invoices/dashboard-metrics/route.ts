@@ -255,6 +255,7 @@ function calculateDashboardMetrics(
   // 3. ACHTERSTALLIG - Overdue invoices past client payment terms
   let achterstallig = 0
   let achterstalligCount = 0
+  let oldestOverdueDueDate: string | null = null
 
   processedInvoices
     .filter(inv =>
@@ -266,6 +267,11 @@ function calculateDashboardMetrics(
 
       achterstallig += invoice.outstanding_amount
       achterstalligCount++
+
+      // Track oldest overdue due date (earliest date = longest overdue)
+      if (!oldestOverdueDueDate || invoice.due_date < oldestOverdueDueDate) {
+        oldestOverdueDueDate = invoice.due_date
+      }
     })
 
   // 4. ACTUAL DSO CALCULATION - Average days from invoice to payment
@@ -310,22 +316,27 @@ function calculateDashboardMetrics(
   const baselinePaymentTerms = periods.tenantPaymentTermsBaseline ?? 30
   const averagePaymentTerms = Math.max(baselinePaymentTerms, rawAveragePaymentTerms)
 
-  // 5. DRI (Days Ready to Invoice) - Average days since work became ready to invoice
-  let totalDRI = 0
-  let driCount = 0
+  // Calculate DIO (Days Invoice Overdue) - Days since oldest overdue invoice's due date
+  let actualDIO = 0
+  if (oldestOverdueDueDate) {
+    const oldestDueDateObj = new Date(oldestOverdueDueDate)
+    const todayDate = new Date(periods.today)
+    actualDIO = Math.round((todayDate.getTime() - oldestDueDateObj.getTime()) / (1000 * 60 * 60 * 24) * 10) / 10
+  }
+
+  // 5. DRI (Days Ready to Invoice) - Days since the oldest unbilled work became ready
+  let averageDRI = 0
   const currentDate = new Date(periods.today)
 
-  readyToInvoiceEntries.forEach(entry => {
-    const readyDateObj = new Date(entry.readyDate)
-    const daysReady = Math.round((currentDate.getTime() - readyDateObj.getTime()) / (1000 * 60 * 60 * 24))
+  if (readyToInvoiceEntries.length > 0) {
+    // Find the oldest ready date across all entries
+    const oldestReadyDate = readyToInvoiceEntries.reduce((oldest, entry) => {
+      return entry.readyDate < oldest ? entry.readyDate : oldest
+    }, readyToInvoiceEntries[0].readyDate)
 
-    if (daysReady >= 0) {
-      totalDRI += daysReady
-      driCount++
-    }
-  })
-
-  const averageDRI = driCount > 0 ? Math.round((totalDRI / driCount) * 10) / 10 : 0
+    const oldestReadyDateObj = new Date(oldestReadyDate)
+    averageDRI = Math.round((currentDate.getTime() - oldestReadyDateObj.getTime()) / (1000 * 60 * 60 * 24) * 10) / 10
+  }
 
   // 6. ROLLING 30-DAY INVOICE REVENUE - For health score Profit calculations
   // Calculate total invoice revenue for rolling 30-day periods
@@ -359,6 +370,7 @@ function calculateDashboardMetrics(
     achterstallig: Math.ceil(achterstallig * 100) / 100,
     achterstallig_count: achterstalligCount,
     actual_dso: averageDSO,
+    actual_dio: actualDIO,
     average_payment_terms: averagePaymentTerms,
     average_dri: averageDRI,
     rolling30DaysRevenue: {

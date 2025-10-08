@@ -3,6 +3,27 @@
  *
  * Centralizes all health score calculations, explanations, and recommendations
  * into a clean input → transform → output flow.
+ *
+ * IMPORTANT: Rolling 30-Day Window Methodology
+ * ============================================
+ * Most metrics use a rolling 30-day window (including the current day) rather than
+ * Month-To-Date (MTD) for the following reasons:
+ *
+ * 1. Consistency: Provides stable comparisons regardless of when in the month metrics are viewed
+ * 2. Trend Analysis: Enables better period-over-period comparisons (current vs previous 30 days)
+ * 3. Fair Scoring: Avoids penalizing users early in the month when MTD hours are naturally low
+ * 4. Business Reality: 30 days ≈ 1 month for most business calculations
+ *
+ * Time Periods Used:
+ * - Current 30 Days: Today going back 30 days (e.g., Aug 18 - Sept 17 when today is Sept 17)
+ * - Previous 30 Days: Days 31-60 back (e.g., July 19 - Aug 17)
+ *
+ * Key Metrics Using Rolling 30-Day Windows:
+ * - Hourly Rate Value: billable revenue ÷ billable hours (last 30 days, billable only)
+ * - Hours Progress: total hours vs monthly target (last 30 days, all hours)
+ * - Billable %: billable hours ÷ total hours (last 30 days)
+ * - Risk Metrics: Client concentration, daily consistency, etc. (last 30 days)
+ * - Business Continuity: Compares current 30 days vs previous 30 days
  */
 
 import {
@@ -22,6 +43,7 @@ export interface HealthScoreInputs {
     factureerbaar: number
     factureerbaar_count?: number
     actual_dso?: number
+    actual_dio?: number
     average_payment_terms?: number
     average_dri?: number
     rolling30DaysRevenue?: {
@@ -257,38 +279,52 @@ class CashFlowScoreCalculator {
   calculate(inputs: HealthScoreInputs): { score: number; breakdown: any } {
     const { dashboardMetrics } = inputs
 
-    // Use actual DIO (Days Invoice Overdue) from invoice payment timing
+    // Use actual DIO (Days Invoice Overdue) from oldest overdue invoice
     const overdueAmount = dashboardMetrics.achterstallig || 0
     const overdueCount = dashboardMetrics.achterstallig_count || 0
-    const actualDIO = dashboardMetrics.actual_dso ?? this.calculateRealDIOFromData(overdueAmount, overdueCount)
+    const actualDIO = dashboardMetrics.actual_dio ?? this.calculateRealDIOFromData(overdueAmount, overdueCount)
     const paymentTerms = dashboardMetrics.average_payment_terms || 30
 
-    // Volume efficiency - fewer overdue items = better
-    const volumeEfficiency = Math.max(0, 1 - (overdueCount / 10)) // Scale to 0-1 based on count
+    // Score components - DIO measures days OVERDUE (past payment terms)
+    // Target is 0 days overdue (paid within payment terms)
+    // Thresholds:
+    // - Excellent: 0 days overdue (paid on time or early)
+    // - Good: 1-7 days overdue
+    // - Fair: 8-15 days overdue
+    // - Poor: 16-30 days overdue
+    // - Critical: >30 days overdue
 
-    // Score components - DYNAMIC BASED ON PAYMENT TERMS
-    // Thresholds relative to payment terms:
-    // - Excellent: ≤payment terms (paid on time or early)
-    // - Good: payment terms + 1 to 7 days late
-    // - Fair: payment terms + 8 to 15 days late
-    // - Poor: payment terms + 16 to 30 days late
-    // - Critical: >payment terms + 30 days late
-
-    const excellent = paymentTerms
-    const good = paymentTerms + 7
-    const fair = paymentTerms + 15
-    const poor = paymentTerms + 30
+    const excellent = 0   // 0 days overdue
+    const good = 7        // up to 7 days overdue
+    const fair = 15       // up to 15 days overdue
+    const poor = 30       // up to 30 days overdue
 
     const dioScore = roundToOneDecimal(actualDIO <= excellent ? 15 :
                                       actualDIO <= good ? 12 :
                                       actualDIO <= fair ? 8 :
                                       actualDIO <= poor ? 3 : 0) // 15 points max
 
-    const volumeScore = roundToOneDecimal(volumeEfficiency * 5) // 0-5 points
+    // Volume efficiency - threshold-based scoring (5 points max)
+    // - Excellent: 0 invoices overdue (5 pts)
+    // - Good: 1-2 invoices overdue (3 pts)
+    // - Fair: 3-4 invoices overdue (1 pt)
+    // - Poor: 5+ invoices overdue (0 pts)
+    const volumeScore = roundToOneDecimal(
+      overdueCount === 0 ? 5 :
+      overdueCount <= 2 ? 3 :
+      overdueCount <= 4 ? 1 : 0
+    )
 
-    const absoluteAmountScore = roundToOneDecimal(overdueAmount <= 1000 ? 5 :
-                                                 overdueAmount <= 3000 ? 3 :
-                                                 overdueAmount <= 5000 ? 1 : 0) // 5 points max
+    // Absolute amount control - threshold-based scoring (5 points max)
+    // - Excellent: €0 overdue (5 pts)
+    // - Good: €1-€3,000 overdue (3 pts)
+    // - Fair: €3,001-€6,000 overdue (1 pt)
+    // - Poor: €6,000+ overdue (0 pts)
+    const absoluteAmountScore = roundToOneDecimal(
+      overdueAmount === 0 ? 5 :
+      overdueAmount <= 3000 ? 3 :
+      overdueAmount <= 6000 ? 1 : 0
+    )
 
     const finalScore = roundToOneDecimal(dioScore + volumeScore + absoluteAmountScore)
 
@@ -299,7 +335,6 @@ class CashFlowScoreCalculator {
         overdueCount,
         dioEquivalent: actualDIO,
         paymentTerms,
-        volumeEfficiency,
         scores: { dioScore, volumeScore, absoluteAmountScore }
       }
     }
@@ -347,7 +382,7 @@ class CashFlowScoreCalculator {
               type: 'calculation',
               label: '1. Collection Speed (DIO)',
               value: `${result.breakdown.dioEquivalent?.toFixed(1) || 0} days overdue`,
-              description: `→ ${result.breakdown.scores?.dioScore || 0}/15 pts`,
+              description: `→ ${result.breakdown.scores?.dioScore || 0}/15 pts (days since oldest overdue invoice due date)`,
               emphasis: 'primary'
             },
             {
@@ -357,13 +392,13 @@ class CashFlowScoreCalculator {
             {
               type: 'calculation',
               label: '2. Volume Efficiency',
-              value: `${(result.breakdown.volumeEfficiency * 100)?.toFixed(1) || 0}%`,
+              value: `${result.breakdown.overdueCount || 0} overdue invoices`,
               description: `→ ${result.breakdown.scores?.volumeScore || 0}/5 pts`,
               emphasis: 'primary'
             },
             {
               type: 'standard',
-              value: 'Volume: <3 items=Good, 3-5=Fair, 5-7=Poor, >7=Critical'
+              value: 'Volume: 0=Excellent (5), 1-2=Good (3), 3-4=Fair (1), 5+=Poor (0)'
             },
             {
               type: 'calculation',
@@ -374,7 +409,7 @@ class CashFlowScoreCalculator {
             },
             {
               type: 'standard',
-              value: 'Amount: <€1k=Excellent, €1-3k=Good, €3-5k=Fair, >€5k=Poor'
+              value: 'Amount: €0=Excellent (5), €1-3k=Good (3), €3-6k=Fair (1), €6k+=Poor (0)'
             },
             {
               type: 'formula',
@@ -391,93 +426,113 @@ class CashFlowScoreCalculator {
     const { overdueAmount, overdueCount, dioEquivalent, scores, paymentTerms } = breakdown
 
     // 1. COLLECTION SPEED OPTIMIZATION (up to 15 points)
-    const targetDIO = paymentTerms || 30
-    const speedGap = Math.max(0, dioEquivalent - targetDIO)
+    // DIO = Days Invoice OVERDUE (days past payment terms), target should be 0 (paid on time)
+    const targetDIO = 0 // Target is to be paid within payment terms (0 days overdue)
+    const speedGap = Math.max(0, dioEquivalent - targetDIO) // How many days overdue we currently are
     const speedPointsToGain = Math.max(0.1, 15 - (scores?.dioScore || 0))
+
+    // Calculate reduction needed per invoice if we have multiple overdue invoices
+    const avgDaysReductionPerInvoice = overdueCount > 0 ? speedGap / overdueCount : speedGap
 
     recommendations.push({
       id: 'reduce-dio',
       priority: speedPointsToGain >= 5 ? 'high' : speedPointsToGain >= 2 ? 'medium' : 'low',
       impact: Math.round(speedPointsToGain * 10) / 10,
-      effort: 'medium',
+      effort: speedGap <= 7 ? 'low' : speedGap <= 15 ? 'medium' : 'high',
       timeframe: 'immediate',
       title: 'Reduce Days Invoice Overdue (DIO)',
       description: speedGap > 0
-        ? `Reduce DIO from ${dioEquivalent.toFixed(1)} to ≤${targetDIO} days (payment terms)`
-        : `Maintain excellent DIO at ${dioEquivalent.toFixed(1)} days`,
+        ? `Reduce DIO from ${dioEquivalent.toFixed(1)} days overdue to 0 days (paid within ${paymentTerms || 30}-day terms)${overdueCount > 1 ? ` - reduce by ~${Math.ceil(avgDaysReductionPerInvoice)} days per invoice` : ''}`
+        : `Maintain excellent payment timing (invoices paid within terms)`,
       actionItems: speedGap > 0 ? [
-        'Contact clients with outstanding invoices immediately',
-        'Implement daily payment follow-up procedures',
-        'Offer early payment discounts for quick settlement',
-        'Send payment reminders before due date'
+        `Target: Collect payments ${Math.ceil(speedGap)} days faster (get to 0 days overdue)`,
+        `Current: ${dioEquivalent.toFixed(1)} days overdue → Target: 0 days (paid within ${paymentTerms || 30}-day terms)`,
+        overdueCount > 1 ? `Prioritize ${overdueCount} overdue invoices, focusing on oldest first` : 'Contact client immediately for payment commitment',
+        'Implement proactive reminders: 3 days before due date, on due date, 3 days after',
+        'Offer early payment incentive (e.g., 2% discount for payment within terms)'
       ] : [
-        'Maintain current efficient collection processes',
-        'Monitor payment timing consistency',
-        'Implement automated payment reminders'
+        'Maintain current excellent collection timing',
+        'Continue proactive payment reminders before due dates',
+        'Strengthen client relationships for sustained timely payment',
+        'Monitor weekly to catch any degradation early'
       ],
       metrics: {
-        current: `${dioEquivalent.toFixed(1)} days overdue`,
-        target: `≤${targetDIO} days (payment terms)`,
+        current: `${dioEquivalent.toFixed(1)} days overdue (${paymentTerms || 30}-day terms)`,
+        target: `0 days overdue (paid within terms)`,
         pointsToGain: Math.round(speedPointsToGain * 10) / 10
       }
     })
 
-    // 2. VOLUME EFFICIENCY OPTIMIZATION (up to 10 points)
-    const volumeGap = Math.max(0, overdueCount - 3)
-    const volumePointsToGain = Math.max(0.1, 10 - (scores?.volumeScore || 0))
+    // 2. VOLUME EFFICIENCY OPTIMIZATION (up to 5 points)
+    // Target is 0 invoices overdue (5 pts), 1-2 invoices = Good (3 pts), 3-4 = Fair (1 pt), 5+ = Poor (0 pts)
+    const volumeGap = Math.max(0, overdueCount - 0) // Target is 0 overdue invoices
+    const volumePointsToGain = Math.max(0.1, 5 - (scores?.volumeScore || 0))
+
+    // Calculate average amount per invoice for prioritization strategy
+    const avgAmountPerInvoice = overdueCount > 0 ? overdueAmount / overdueCount : 0
 
     recommendations.push({
       id: 'improve-volume-efficiency',
-      priority: volumePointsToGain >= 5 ? 'high' : volumePointsToGain >= 2 ? 'medium' : 'low',
+      priority: volumePointsToGain >= 3 ? 'high' : volumePointsToGain >= 1.5 ? 'medium' : 'low',
       impact: Math.round(volumePointsToGain * 10) / 10,
-      effort: 'medium',
+      effort: overdueCount <= 2 ? 'low' : overdueCount <= 4 ? 'medium' : 'high',
       timeframe: 'weekly',
-      title: 'Improve Volume Efficiency',
-      description: volumeGap > 0
-        ? `Reduce ${overdueCount} overdue items to 3 or fewer`
-        : `Maintain efficient volume with ${overdueCount} items`,
-      actionItems: volumeGap > 0 ? [
-        'Focus on clearing smallest outstanding amounts first',
-        'Implement systematic collection workflow',
-        'Negotiate payment plans for larger amounts'
+      title: overdueCount === 0 ? 'Maintain Zero Overdue Invoices' : 'Clear Overdue Invoices',
+      description: overdueCount > 0
+        ? `Clear ${overdueCount} overdue invoice${overdueCount > 1 ? 's' : ''} to reach target of 0 (Excellent)`
+        : `Maintain excellent status with 0 overdue invoices`,
+      actionItems: overdueCount > 0 ? [
+        `Target: Clear all ${overdueCount} overdue invoice${overdueCount > 1 ? 's' : ''} to reach 0 (Excellent)`,
+        `Current: ${overdueCount} overdue → Target: 0 invoices`,
+        avgAmountPerInvoice < 500 ? 'Start with smallest invoices for quick wins (build momentum)' : 'Prioritize by urgency and client relationship',
+        overdueCount <= 2 ? 'Focus on immediate collection for these 1-2 invoices' : 'Create systematic collection schedule',
+        'Implement preventive measures: invoice promptly, send reminders before due dates'
       ] : [
-        'Maintain systematic collection workflow',
-        'Monitor overdue item count weekly',
-        'Prevent new items from becoming overdue'
+        'Maintain excellent zero-overdue status',
+        'Continue proactive invoicing and collection practices',
+        'Send payment reminders before invoice due dates',
+        'Invoice work regularly (weekly or bi-weekly) to prevent backlogs'
       ],
       metrics: {
-        current: `${overdueCount} overdue items`,
-        target: '≤3 overdue items',
+        current: `${overdueCount} overdue invoice${overdueCount !== 1 ? 's' : ''} (avg €${Math.round(avgAmountPerInvoice)}/invoice)`,
+        target: '0 overdue invoices (Excellent)',
         pointsToGain: Math.round(volumePointsToGain * 10) / 10
       }
     })
 
     // 3. ABSOLUTE AMOUNT CONTROL (up to 5 points)
-    const amountGap = Math.max(0, overdueAmount - 1000)
+    // Target is €0 overdue (5 pts), €1-3k = Good (3 pts), €3-6k = Fair (1 pt), €6k+ = Poor (0 pts)
+    const amountGap = Math.max(0, overdueAmount - 0) // Target is €0 outstanding
     const amountPointsToGain = Math.max(0.1, 5 - (scores?.absoluteAmountScore || 0))
+
+    // Calculate collection target per invoice to reach goal
+    const amountReductionPerInvoice = overdueCount > 0 ? overdueAmount / overdueCount : 0
 
     recommendations.push({
       id: 'control-absolute-amounts',
-      priority: amountPointsToGain >= 3 ? 'medium' : 'low',
+      priority: amountPointsToGain >= 3 ? 'high' : amountPointsToGain >= 1.5 ? 'medium' : 'low',
       impact: Math.round(amountPointsToGain * 10) / 10,
-      effort: 'high',
+      effort: overdueAmount === 0 ? 'low' : overdueAmount <= 3000 ? 'medium' : 'high',
       timeframe: 'monthly',
-      title: 'Control Outstanding Amounts',
-      description: amountGap > 0
-        ? `Reduce €${Math.round(overdueAmount)} outstanding to under €1,000`
-        : `Maintain excellent amount control under €1,000`,
-      actionItems: amountGap > 0 ? [
-        'Target largest outstanding invoices for immediate collection',
-        'Review and improve credit management policies',
-        'Consider factoring for difficult-to-collect amounts'
+      title: overdueAmount === 0 ? 'Maintain Zero Outstanding Balance' : 'Clear Outstanding Amounts',
+      description: overdueAmount > 0
+        ? `Collect all €${Math.round(overdueAmount)} outstanding to reach target of €0 (Excellent)${overdueCount > 1 ? ` - avg €${Math.round(amountReductionPerInvoice)}/invoice` : ''}`
+        : `Maintain excellent status with €0 outstanding`,
+      actionItems: overdueAmount > 0 ? [
+        `Target: Collect all €${Math.round(overdueAmount)} outstanding to reach €0 (Excellent)`,
+        `Current: €${Math.round(overdueAmount)} outstanding → Target: €0`,
+        overdueCount > 1 ? `Focus on largest invoices first (${overdueCount} invoices, avg €${Math.round(amountReductionPerInvoice)})` : 'Prioritize single outstanding invoice',
+        overdueAmount > 3000 ? 'For amounts >€3,000, consider offering payment plans' : 'Implement weekly follow-up calls for all outstanding amounts',
+        'Set collection milestones to systematically reduce balance to €0'
       ] : [
-        'Maintain proactive credit management',
-        'Monitor outstanding amounts weekly',
-        'Implement preventive collection measures'
+        'Maintain excellent zero-balance status',
+        'Continue proactive collection practices',
+        'Send payment reminders before all invoice due dates',
+        'Monitor daily to catch any new overdue amounts immediately'
       ],
       metrics: {
-        current: `€${overdueAmount.toLocaleString()} outstanding`,
-        target: '<€1,000 outstanding',
+        current: `€${Math.round(overdueAmount).toLocaleString()} outstanding`,
+        target: '€0 outstanding (Excellent)',
         pointsToGain: Math.round(amountPointsToGain * 10) / 10
       }
     })
@@ -506,28 +561,29 @@ class EfficiencyScoreCalculator {
     // === EFFICIENCY METRICS (MIRRORING CASHFLOW STRUCTURE) ===
 
     // 1. DRI - Days Ready to Invoice (15 pts) - How quickly ready work becomes invoiced
-    // DRI Scoring: Lower is better (faster invoicing)
-    // Excellent: ≤2 days (15 pts), Good: 3-5 days (12 pts), Fair: 6-10 days (8 pts), Poor: 11-20 days (3 pts), Critical: >20 days (0 pts)
+    // DRI Scoring: Lower is better (faster invoicing) - Mirrors DIO exactly
+    // Excellent: 0 days (15 pts), Good: 1-7 days (12 pts), Fair: 8-15 days (8 pts), Poor: 16-30 days (3 pts), Critical: >30 days (0 pts)
     const driScore = roundToOneDecimal(
-      averageDRI <= 2 ? 15 :
-      averageDRI <= 5 ? 12 :
-      averageDRI <= 10 ? 8 :
-      averageDRI <= 20 ? 3 : 0
+      averageDRI === 0 ? 15 :
+      averageDRI <= 7 ? 12 :
+      averageDRI <= 15 ? 8 :
+      averageDRI <= 30 ? 3 : 0
     )
 
-    // 2. Volume Efficiency (5 pts) - Fewer ready-to-invoice items = better
-    const volumeEfficiency = Math.max(0, 1 - (unbilledCount / 10)) // Scale to 0-1 based on count
-    const volumeScore = roundToOneDecimal(volumeEfficiency * 5) // 0-5 points
+    // 2. Volume Efficiency (5 pts) - Fewer ready-to-invoice items = better - Mirrors Volume Efficiency exactly
+    // Excellent: 0 items (5 pts), Good: 1-2 items (3 pts), Fair: 3-4 items (1 pt), Poor: 5+ items (0 pts)
+    const volumeScore = roundToOneDecimal(
+      unbilledCount === 0 ? 5 :
+      unbilledCount <= 2 ? 3 :
+      unbilledCount <= 4 ? 1 : 0
+    )
 
-    // 3. Absolute Amount Control (5 pts) - Lower ready-to-invoice amounts = better
-    // €0-€1000 = Excellent (5 pts)
-    // €1000-€3000 = Good (3 pts)
-    // €3000-€5000 = Fair (1 pt)
-    // >€5000 = Poor (0 pts)
+    // 3. Absolute Amount Control (5 pts) - Lower ready-to-invoice amounts = better - Mirrors Absolute Amount exactly
+    // Excellent: €0 (5 pts), Good: €1-€3,000 (3 pts), Fair: €3,001-€6,000 (1 pt), Poor: €6,000+ (0 pts)
     const absoluteAmountScore = roundToOneDecimal(
-      unbilledValue <= 1000 ? 5 :
+      unbilledValue === 0 ? 5 :
       unbilledValue <= 3000 ? 3 :
-      unbilledValue <= 5000 ? 1 : 0
+      unbilledValue <= 6000 ? 1 : 0
     )
 
     const finalScore = roundToOneDecimal(driScore + volumeScore + absoluteAmountScore)
@@ -539,7 +595,6 @@ class EfficiencyScoreCalculator {
         unbilledValue,
         unbilledCount,
         averageDRI,
-        volumeEfficiency,
         scores: {
           driScore,
           volumeScore,
@@ -591,38 +646,38 @@ class EfficiencyScoreCalculator {
               type: 'calculation',
               label: '1. DRI (Days Ready to Invoice)',
               value: `${result.breakdown.averageDRI?.toFixed(1)} days`,
-              description: `→ ${result.breakdown.scores?.driScore || 0}/10 pts`,
+              description: `→ ${result.breakdown.scores?.driScore || 0}/15 pts (days since oldest unbilled work became ready)`,
               emphasis: 'primary'
             },
             {
               type: 'standard',
-              value: 'DRI: ≤2 days=Excellent (10), 3-5=Good (7.5), 6-10=Fair (5), 11-20=Poor (2.5), >20=Critical (0)'
+              value: 'DRI: 0 days=Excellent (15), 1-7=Good (12), 8-15=Fair (8), 16-30=Poor (3), >30=Critical (0)'
             },
             {
               type: 'calculation',
-              label: '2. Collection Rate',
-              value: `${(result.breakdown.collectionRate * 100)?.toFixed(1)}%`,
-              description: `→ ${result.breakdown.scores?.collectionRateScore || 0}/10 pts`,
+              label: '2. Volume Efficiency (Unbilled Count)',
+              value: `${result.breakdown.unbilledCount} items`,
+              description: `→ ${result.breakdown.scores?.volumeScore || 0}/5 pts`,
               emphasis: 'primary'
             },
             {
               type: 'standard',
-              value: 'Collection: >90%=Excellent, 80-90%=Good, 70-80%=Fair, <70%=Poor'
+              value: 'Volume: 0 items=Excellent (5), 1-2=Good (3), 3-4=Fair (1), 5+=Poor (0)'
             },
             {
               type: 'calculation',
-              label: '3. Invoice Quality',
-              value: 'Placeholder (80%)',
-              description: `→ ${result.breakdown.scores?.invoiceQualityScore || 0}/5 pts`,
-              emphasis: 'muted'
+              label: '3. Absolute Amount Control',
+              value: `€${result.breakdown.unbilledValue?.toFixed(0)}`,
+              description: `→ ${result.breakdown.scores?.absoluteAmountScore || 0}/5 pts`,
+              emphasis: 'primary'
             },
             {
               type: 'standard',
-              value: 'Quality: Future metric for tracking invoice accuracy'
+              value: 'Amount: €0=Excellent (5), €1-3k=Good (3), €3k-6k=Fair (1), €6k+=Poor (0)'
             },
             {
               type: 'formula',
-              formula: `Total Score: ${result.breakdown.scores?.invoicingSpeedScore || 0} + ${result.breakdown.scores?.collectionRateScore || 0} + ${result.breakdown.scores?.invoiceQualityScore || 0} = ${result.score}/25`
+              formula: `Total Score: ${result.breakdown.scores?.driScore || 0} + ${result.breakdown.scores?.volumeScore || 0} + ${result.breakdown.scores?.absoluteAmountScore || 0} = ${result.score}/25`
             }
           ]
         }
@@ -632,88 +687,95 @@ class EfficiencyScoreCalculator {
 
   generateRecommendations(inputs: HealthScoreInputs, breakdown: any): HealthRecommendation[] {
     const recommendations: HealthRecommendation[] = []
-    const { averageDRI, collectionRate, scores, unbilledValue, totalEarned } = breakdown
+    const { averageDRI, scores, unbilledValue, unbilledCount } = breakdown
 
-    // 1. DRI (DAYS READY TO INVOICE) OPTIMIZATION (up to 10 points)
-    const driPointsToGain = Math.max(0.1, 10 - (scores?.driScore || 0))
+    // 1. DRI (DAYS READY TO INVOICE) OPTIMIZATION (up to 15 points)
+    const driPointsToGain = Math.max(0.1, 15 - (scores?.driScore || 0))
 
     recommendations.push({
       id: 'reduce-dri',
-      priority: driPointsToGain >= 5 ? 'high' : driPointsToGain >= 3 ? 'medium' : 'low',
+      priority: driPointsToGain >= 7 ? 'high' : driPointsToGain >= 3 ? 'medium' : 'low',
       impact: Math.round(driPointsToGain * 10) / 10,
       effort: unbilledValue > 5000 ? 'high' : 'medium',
       timeframe: 'weekly',
       title: 'Reduce Days Ready to Invoice (DRI)',
-      description: averageDRI > 2
-        ? `Reduce DRI from ${averageDRI?.toFixed(1)} days to ≤2 days for maximum efficiency`
-        : `Maintain excellent DRI at ${averageDRI?.toFixed(1)} days`,
-      actionItems: averageDRI > 2 ? [
-        'Invoice ready work within 24-48 hours',
+      description: averageDRI > 0
+        ? `Reduce DRI from ${averageDRI?.toFixed(1)} days to 0 days for maximum efficiency`
+        : `Maintain excellent DRI at 0 days`,
+      actionItems: averageDRI > 0 ? [
+        'Invoice ready work immediately (same day)',
         'Set up automated invoicing workflows',
         'Review unbilled work daily',
         'Create invoicing calendar reminders'
       ] : [
-        'Maintain fast invoicing practices',
+        'Maintain immediate invoicing practices',
         'Monitor unbilled work daily',
         'Optimize invoice generation process'
       ],
       metrics: {
         current: `${averageDRI?.toFixed(1)} days average`,
-        target: '≤2 days (Excellent)',
+        target: '0 days (Excellent)',
         pointsToGain: Math.round(driPointsToGain * 10) / 10
       }
     })
 
-    // 2. COLLECTION RATE OPTIMIZATION (up to 10 points)
-    const collectionGap = Math.max(0, 0.90 - collectionRate)
-    const collectionPointsToGain = Math.max(0.1, 10 - (scores?.collectionRateScore || 0))
+    // 2. VOLUME EFFICIENCY OPTIMIZATION (up to 5 points)
+    const volumePointsToGain = Math.max(0.1, 5 - (scores?.volumeScore || 0))
 
     recommendations.push({
-      id: 'improve-collection-rate',
-      priority: collectionPointsToGain >= 5 ? 'high' : collectionPointsToGain >= 3 ? 'medium' : 'low',
-      impact: Math.round(collectionPointsToGain * 10) / 10,
-      effort: 'medium',
+      id: 'reduce-unbilled-volume',
+      priority: volumePointsToGain >= 3 ? 'high' : volumePointsToGain >= 2 ? 'medium' : 'low',
+      impact: Math.round(volumePointsToGain * 10) / 10,
+      effort: unbilledCount > 5 ? 'high' : 'medium',
       timeframe: 'weekly',
-      title: 'Improve Collection Rate',
-      description: collectionGap > 0
-        ? `Increase collection rate from ${Math.round(collectionRate * 100)}% to 90%+`
-        : `Maintain excellent collection rate at ${Math.round(collectionRate * 100)}%`,
-      actionItems: collectionGap > 0 ? [
-        'Follow up on outstanding invoices',
-        'Implement payment reminders',
-        'Offer multiple payment methods'
+      title: 'Reduce Unbilled Item Volume',
+      description: unbilledCount > 0
+        ? `Reduce unbilled items from ${unbilledCount} to 0 for maximum efficiency`
+        : `Maintain zero unbilled items`,
+      actionItems: unbilledCount > 0 ? [
+        'Clear all ready-to-invoice items immediately',
+        'Review unbilled work queue daily',
+        'Set up automated invoice generation',
+        'Create client-specific invoicing schedules'
       ] : [
-        'Maintain efficient collection practices',
-        'Monitor payment patterns weekly',
-        'Optimize client payment terms'
+        'Maintain zero unbilled item policy',
+        'Continue daily monitoring',
+        'Optimize invoicing workflows'
       ],
       metrics: {
-        current: `${Math.round(collectionRate * 100)}% collected`,
-        target: '90%+ collection rate',
-        pointsToGain: Math.round(collectionPointsToGain * 10) / 10
+        current: `${unbilledCount} unbilled items`,
+        target: '0 items (Excellent)',
+        pointsToGain: Math.round(volumePointsToGain * 10) / 10
       }
     })
 
-    // 3. INVOICE QUALITY OPTIMIZATION (up to 5 points) - Placeholder
-    const qualityPointsToGain = Math.max(0.1, 5 - (scores?.invoiceQualityScore || 0))
+    // 3. ABSOLUTE AMOUNT CONTROL OPTIMIZATION (up to 5 points)
+    const amountPointsToGain = Math.max(0.1, 5 - (scores?.absoluteAmountScore || 0))
 
     recommendations.push({
-      id: 'improve-invoice-quality',
-      priority: 'low',
-      impact: Math.round(qualityPointsToGain * 10) / 10,
-      effort: 'low',
-      timeframe: 'ongoing',
-      title: 'Improve Invoice Quality',
-      description: 'Future metric - maintain invoice accuracy and completeness',
-      actionItems: [
-        'Use invoice templates',
-        'Double-check before sending',
-        'Track client feedback'
+      id: 'reduce-unbilled-amount',
+      priority: amountPointsToGain >= 3 ? 'high' : amountPointsToGain >= 2 ? 'medium' : 'low',
+      impact: Math.round(amountPointsToGain * 10) / 10,
+      effort: unbilledValue > 6000 ? 'high' : 'medium',
+      timeframe: 'weekly',
+      title: 'Reduce Unbilled Value',
+      description: unbilledValue > 0
+        ? `Reduce unbilled value from €${unbilledValue?.toFixed(0)} to €0 for maximum efficiency`
+        : `Maintain zero unbilled value`,
+      actionItems: unbilledValue > 0 ? [
+        'Prioritize high-value unbilled items',
+        'Invoice all ready work immediately',
+        'Implement value-based invoicing alerts',
+        'Review unbilled work by value daily'
+      ] : [
+        'Maintain zero unbilled value policy',
+        'Continue daily value monitoring',
+        'Optimize cash flow timing'
       ],
       metrics: {
-        current: 'Placeholder (80%)',
-        target: '100% invoice accuracy',
-        pointsToGain: Math.round(qualityPointsToGain * 10) / 10
+        current: `€${unbilledValue?.toFixed(0)} unbilled`,
+        target: '€0 (Excellent)',
+        pointsToGain: Math.round(amountPointsToGain * 10) / 10
       }
     })
 
@@ -1165,7 +1227,16 @@ class ProfitScoreCalculator {
     let pricingEfficiencyScore = 0 // ❌ FIXED: No default points - calculate or redistribute
     let rateEfficiencyPerformance = 0
     if (timeBasedStreamEnabled) {
-      // Use billable revenue from TIME ENTRIES, not from invoices
+      /**
+       * HOURLY RATE CALCULATION (Rolling 30 days, billable only)
+       *
+       * Formula: Weighted Average = Total billable revenue ÷ Total billable hours
+       * - Uses billable time entries only (excludes non-billable work)
+       * - Represents actual earning rate over the period
+       * - More accurate than simple average of rates
+       *
+       * Example: €8,577.50 revenue ÷ 112 billable hours = €76.58/hr
+       */
       const timeRevenue = timeStats.rolling30Days?.current?.billableRevenue || 0
       const currentHours = timeStats.rolling30Days?.current?.billableHours || 0
       const currentHourlyRate = currentHours > 0 ? timeRevenue / currentHours : 0
@@ -1949,6 +2020,178 @@ class ProfitScoreCalculator {
         pointsToGain: Math.round(ratePointsToGain * 10) / 10
       }
     })
+
+    // 3a. BILLABLE RATIO OPTIMIZATION (high impact: up to 6 points) - Time-based models
+    // Extract time utilization data for billable ratio recommendation
+    const timeUtilBreakdown = breakdown.timeUtilizationBreakdown
+    const billableRatioData = {
+      current: breakdown.actualBillableRatio || 0,
+      target: breakdown.targetBillableRatio || 90,
+      score: breakdown.timeUtilizationComponents?.billableScore || 0,
+      maxScore: 6
+    }
+
+    const billableRatioPointsToGain = Math.max(0.1, billableRatioData.maxScore - billableRatioData.score)
+    const billableRatioGap = Math.max(0, billableRatioData.target - billableRatioData.current)
+
+    // Calculate exact billable hours needed, accounting for denominator change
+    // Formula: (B + x) / (T + x) = R/100 → x = (R*T/100 - B) / (1 - R/100)
+    // Where B = current billable hours, T = current total hours, R = target ratio, x = hours needed
+    const rolling30DaysData = inputs.timeStats?.rolling30Days?.current
+    const currentBillableHours = rolling30DaysData?.billableHours || 0
+    const currentTotalHours = rolling30DaysData?.totalHours || 0
+    const targetRatioDecimal = billableRatioData.target / 100
+
+    let billableHoursNeeded = 0
+    let recommendationDescription = ''
+    let actionItemsList: string[] = []
+
+    if (billableRatioGap > 1) {
+      // Calculate hours needed only if significantly below target
+      // x = (R*T - B) / (1 - R) where R is decimal (e.g., 0.9 for 90%)
+      if (targetRatioDecimal < 1) {
+        billableHoursNeeded = (targetRatioDecimal * currentTotalHours - currentBillableHours) / (1 - targetRatioDecimal)
+      } else {
+        billableHoursNeeded = currentTotalHours // If target is 100%, need to convert all non-billable hours
+      }
+
+      const newTotalHours = currentTotalHours + billableHoursNeeded
+      const newBillableHours = currentBillableHours + billableHoursNeeded
+
+      recommendationDescription = `Add ${Math.ceil(billableHoursNeeded)} billable hours to reach ${billableRatioData.target.toFixed(0)}% ratio (increases total from ${Math.round(currentTotalHours)}h to ${Math.round(newTotalHours)}h)`
+
+      actionItemsList = [
+        `Track ${Math.ceil(billableHoursNeeded)} additional billable hours over the next 30 days`,
+        `Current: ${Math.round(currentBillableHours)}h billable / ${Math.round(currentTotalHours)}h total = ${billableRatioData.current.toFixed(1)}%`,
+        `Target: ${Math.round(newBillableHours)}h billable / ${Math.round(newTotalHours)}h total = ${billableRatioData.target.toFixed(0)}%`,
+        'Minimize non-billable hours (admin, meetings) by batching and scheduling',
+        'Review time tracking accuracy - ensure all billable work is tagged correctly'
+      ]
+    } else {
+      // Already at or near target
+      recommendationDescription = `Maintain excellent billable ratio at ${billableRatioData.current.toFixed(1)}%`
+      actionItemsList = [
+        'Continue tracking billable vs non-billable time accurately',
+        'Maintain efficient workflows to preserve high billable ratio',
+        'Monitor ratio weekly to catch any deterioration early',
+        'Share best practices with team for sustaining performance'
+      ]
+    }
+
+    recommendations.push({
+      id: 'optimize-billable-ratio',
+      priority: billableRatioPointsToGain >= 3 ? 'high' : billableRatioPointsToGain >= 1 ? 'medium' : 'low',
+      impact: Math.round(billableRatioPointsToGain * 10) / 10,
+      effort: billableHoursNeeded <= 20 ? 'low' : billableHoursNeeded <= 50 ? 'medium' : 'high',
+      timeframe: 'weekly',
+      title: billableRatioGap > 1 ? 'Improve Billable Ratio' : 'Maintain Billable Excellence',
+      description: recommendationDescription,
+      actionItems: actionItemsList,
+      metrics: {
+        current: `${billableRatioData.current.toFixed(1)}% (${Math.round(currentBillableHours)}h / ${Math.round(currentTotalHours)}h)`,
+        target: `${billableRatioData.target.toFixed(0)}%`,
+        pointsToGain: Math.round(billableRatioPointsToGain * 10) / 10
+      }
+    })
+
+    // 3b. HOURS PROGRESS OPTIMIZATION (high impact: up to 6 points) - Time-based models
+    const hoursProgressData = {
+      current: rolling30DaysData?.totalHours || 0,
+      target: inputs.profitTargets?.monthly_hours_target || 0,
+      score: breakdown.timeUtilizationComponents?.hoursScore || 0,
+      maxScore: 6
+    }
+
+    const hoursProgressPointsToGain = Math.max(0.1, hoursProgressData.maxScore - hoursProgressData.score)
+    const hoursGap = Math.max(0, hoursProgressData.target - hoursProgressData.current)
+
+    if (hoursProgressData.target > 0) {
+      const workingDays = inputs.profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
+      const daysPerWeek = workingDays.length
+      const estimatedRemainingDays = Math.ceil(30 / 7) * daysPerWeek // Rough estimate of working days in next 30 days
+      const dailyHoursNeeded = estimatedRemainingDays > 0 ? hoursGap / estimatedRemainingDays : 0
+
+      recommendations.push({
+        id: 'optimize-hours-progress',
+        priority: hoursProgressPointsToGain >= 3 ? 'high' : hoursProgressPointsToGain >= 1 ? 'medium' : 'low',
+        impact: Math.round(hoursProgressPointsToGain * 10) / 10,
+        effort: hoursGap <= 20 ? 'low' : hoursGap <= 50 ? 'medium' : 'high',
+        timeframe: 'weekly',
+        title: hoursGap > 5 ? 'Increase Total Hours Tracked' : 'Maintain Hours Excellence',
+        description: hoursGap > 5
+          ? `Track ${Math.ceil(hoursGap)} more hours to reach ${Math.round(hoursProgressData.target)}h target (add ~${dailyHoursNeeded.toFixed(1)}h/day)`
+          : `Maintain excellent hours tracking at ${Math.round(hoursProgressData.current)}h`,
+        actionItems: hoursGap > 5 ? [
+          `Add ${Math.ceil(hoursGap)} total hours over the next 30 days`,
+          `Increase daily tracking by ~${dailyHoursNeeded.toFixed(1)} hours per working day`,
+          `Current progress: ${Math.round(hoursProgressData.current)}h / ${Math.round(hoursProgressData.target)}h (${Math.round((hoursProgressData.current / hoursProgressData.target) * 100)}%)`,
+          'Track time consistently every working day to reach monthly target',
+          'Review if monthly target is realistic based on current work availability'
+        ] : [
+          'Continue consistent time tracking practices',
+          'Maintain current tracking discipline and accuracy',
+          'Monitor weekly progress to stay on target',
+          'Share tracking practices with team members'
+        ],
+        metrics: {
+          current: `${Math.round(hoursProgressData.current)}h / ${Math.round(hoursProgressData.target)}h (${Math.round((hoursProgressData.current / hoursProgressData.target) * 100)}%)`,
+          target: `${Math.round(hoursProgressData.target)}h (100%+)`,
+          pointsToGain: Math.round(hoursProgressPointsToGain * 10) / 10
+        }
+      })
+    }
+
+    // 3c. DAILY CONSISTENCY OPTIMIZATION (medium impact: up to 3 points) - Time-based models
+    const consistencyData = {
+      currentDailyHours: rolling30DaysData?.dailyHours || 0,
+      targetDailyHours: 0, // Will calculate below
+      score: breakdown.timeUtilizationComponents?.consistencyScore || 0,
+      maxScore: 3
+    }
+
+    // Calculate target daily hours based on monthly target and working days
+    if (inputs.profitTargets?.monthly_hours_target > 0) {
+      const workingDays = inputs.profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
+      consistencyData.targetDailyHours = calculateDailyHoursTarget(
+        inputs.profitTargets.monthly_hours_target,
+        workingDays
+      )
+    }
+
+    const consistencyPointsToGain = Math.max(0.1, consistencyData.maxScore - consistencyData.score)
+    const dailyHoursGap = Math.max(0, consistencyData.targetDailyHours - consistencyData.currentDailyHours)
+
+    if (consistencyData.targetDailyHours > 0) {
+      recommendations.push({
+        id: 'optimize-daily-consistency',
+        priority: consistencyPointsToGain >= 1.5 ? 'medium' : 'low',
+        impact: Math.round(consistencyPointsToGain * 10) / 10,
+        effort: dailyHoursGap <= 1 ? 'low' : dailyHoursGap <= 2 ? 'medium' : 'high',
+        timeframe: 'weekly',
+        title: dailyHoursGap > 0.5 ? 'Improve Daily Hour Consistency' : 'Maintain Daily Excellence',
+        description: dailyHoursGap > 0.5
+          ? `Increase daily hours from ${consistencyData.currentDailyHours.toFixed(1)}h to ${consistencyData.targetDailyHours.toFixed(1)}h per day (add ${dailyHoursGap.toFixed(1)}h/day)`
+          : `Maintain excellent daily consistency at ${consistencyData.currentDailyHours.toFixed(1)}h/day`,
+        actionItems: dailyHoursGap > 0.5 ? [
+          `Add ${dailyHoursGap.toFixed(1)} hours per working day to reach target`,
+          `Current average: ${consistencyData.currentDailyHours.toFixed(1)}h/day`,
+          `Target average: ${consistencyData.targetDailyHours.toFixed(1)}h/day`,
+          'Establish consistent daily work routines and schedules',
+          'Review if daily target is sustainable for work-life balance'
+        ] : [
+          'Continue consistent daily work patterns',
+          'Maintain sustainable daily hour targets',
+          'Monitor daily averages to prevent burnout',
+          'Adjust workload to preserve consistency'
+        ],
+        metrics: {
+          current: `${consistencyData.currentDailyHours.toFixed(1)}h/day (${Math.round((consistencyData.currentDailyHours / consistencyData.targetDailyHours) * 100)}%)`,
+          target: `${consistencyData.targetDailyHours.toFixed(1)}h/day (100%+)`,
+          pointsToGain: Math.round(consistencyPointsToGain * 10) / 10
+        }
+      })
+    }
+
     } // End time-based recommendations
 
     // 4. REVENUE DIVERSIFICATION OPTIMIZATION (medium impact: 3 points) - Only for hybrid models
@@ -2188,7 +2431,16 @@ class ProfitScoreCalculator {
       return 0
     }
 
-    // Use rolling 30-day data for consistent time windows
+    /**
+     * ROLLING 30-DAY WINDOW (including current day)
+     *
+     * Why we use rolling 30 days instead of Month-To-Date:
+     * - Provides fair scoring regardless of day of month (no early-month penalty)
+     * - Enables consistent period-over-period trend analysis
+     * - Represents ~1 month of activity for business calculations
+     *
+     * Example: On Sept 17, we look at Aug 18 - Sept 17 (30 days inclusive)
+     */
     const totalTrackedHours = timeStats.rolling30Days?.current?.totalHours || 0
     const billableHours = timeStats.rolling30Days?.current?.billableHours || 0
     const nonBillableHours = timeStats.rolling30Days?.current?.nonBillableHours || 0

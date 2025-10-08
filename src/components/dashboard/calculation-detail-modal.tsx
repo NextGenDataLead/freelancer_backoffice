@@ -188,8 +188,10 @@ export function CalculationDetailModal({
                           return `Compares actual billable ratio to target (${target}%)`
                         })()}
                       </div>
-                      <div className="text-xs text-muted-foreground mb-3">
-                        Formula: Billable / (Billable + Unbilled) × 100 = Actual %
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Rolling 30 days (including current day)<br/>
+                        <span className="font-medium">Formula:</span> Billable Hours ÷ Total Hours × 100<br/>
+                        <span className="font-medium">Example:</span> 112h billable ÷ 115h total = 97.4%
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>≥100% of target ratio</span>
@@ -214,9 +216,9 @@ export function CalculationDetailModal({
                       <div className="mt-3 pt-3 border-t">
                         <div className="text-xs font-medium mb-1">How to Improve:</div>
                         <div className="text-xs text-muted-foreground">
-                          • Minimize unbilled hours<br/>
+                          • Minimize non-billable hours (admin, meetings)<br/>
                           • Track billable vs non-billable time carefully<br/>
-                          • Convert unbilled work to invoices promptly
+                          • Set clear expectations about billable work
                         </div>
                       </div>
                     </div>
@@ -322,55 +324,58 @@ export function CalculationDetailModal({
                   ) : metricId === 'collection_speed' ? (
                     <div className="space-y-2">
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
-                        Measures average invoice overdue time (DIO)
+                        Measures days invoices are overdue (past payment terms)
                         <div className="mt-1 text-muted-foreground/90">
-                          DIO (Days Invoice Overdue) is how many days past the payment terms invoices are typically paid. Lower values mean better payment discipline; higher values signal collection delays and cash-flow risk.
+                          DIO (Days Invoice Overdue) tracks days since the oldest overdue invoice's due date. Target is 0 days overdue (paid on time). Lower values mean better payment discipline; higher values signal collection delays and cash-flow risk.
                         </div>
                       </div>
                       {(() => {
-                        // Extract payment terms from calculation description
+                        // Extract payment terms from calculation description for context
                         const termsMatch = calculationDescription?.match(/Payment Terms: (\d+)/)
                         const paymentTerms = termsMatch ? parseInt(termsMatch[1]) : 30
-                        const excellent = paymentTerms
-                        const good = paymentTerms + 7
-                        const fair = paymentTerms + 15
-                        const poor = paymentTerms + 30
+
+                        // DIO scoring is based on days OVERDUE (past payment terms), not total days
+                        const excellent = 0   // 0 days overdue (paid on time)
+                        const good = 7        // up to 7 days overdue
+                        const fair = 15       // up to 15 days overdue
+                        const poor = 30       // up to 30 days overdue
 
                         return (
                           <>
                             <div className="flex justify-between text-xs">
-                              <span>≤{excellent} days</span>
+                              <span>0 days overdue</span>
                               <span className="text-green-600 font-medium">15/15 points (Excellent)</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                              <span>{excellent + 1}-{good} days</span>
+                              <span>1-{good} days overdue</span>
                               <span className="text-blue-600 font-medium">12/15 points (Good)</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                              <span>{good + 1}-{fair} days</span>
+                              <span>{good + 1}-{fair} days overdue</span>
                               <span className="text-yellow-600 font-medium">8/15 points (Fair)</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                              <span>{fair + 1}-{poor} days</span>
+                              <span>{fair + 1}-{poor} days overdue</span>
                               <span className="text-orange-600 font-medium">3/15 points (Poor)</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                              <span>&gt;{poor} days</span>
+                              <span>&gt;{poor} days overdue</span>
                               <span className="text-red-600 font-medium">0/15 points (Critical)</span>
                             </div>
                             <div className="text-xs text-muted-foreground mt-2">
-                              Based on {paymentTerms}-day payment terms. Excellent = paid within terms.
+                              Payment terms: {paymentTerms} days. Target: 0 days overdue (paid within terms).
                             </div>
                           </>
                         )
                       })()}
                       <div className="mt-3 pt-3 border-t">
-                        <div className="text-xs font-medium mb-1">How to Improve:</div>
+                        <div className="text-xs font-medium mb-1">How to Improve (Target: 0 days overdue):</div>
                         <div className="text-xs text-muted-foreground">
-                          • Set clear payment terms upfront (e.g., Net 15 or Net 30)<br/>
-                          • Send automated payment reminders before and after due dates<br/>
-                          • Offer early payment discounts or incentives<br/>
-                          • Follow up promptly on overdue invoices
+                          • Send proactive reminders: 3 days before due date, on due date, 3 days after<br/>
+                          • Offer early payment discounts (e.g., 2% for payment within terms)<br/>
+                          • Set clear payment terms upfront and confirm client acceptance<br/>
+                          • Follow up immediately on overdue invoices (don't wait)<br/>
+                          • Build strong client relationships to encourage timely payment
                         </div>
                       </div>
                     </div>
@@ -378,30 +383,34 @@ export function CalculationDetailModal({
                     <div className="space-y-2">
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Tracks number of overdue invoices
+                        <div className="mt-1 text-muted-foreground/90">
+                          Target: 0 overdue invoices for Excellent status. Keep invoice volume under control for optimal cash flow.
+                        </div>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>0-3 overdue invoices</span>
-                        <span className="text-green-600 font-medium">10/10 points (Excellent)</span>
+                        <span>0 overdue invoices</span>
+                        <span className="text-green-600 font-medium">5/5 points (Excellent)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>4-5 overdue invoices</span>
-                        <span className="text-blue-600 font-medium">7/10 points (Good)</span>
+                        <span>1-2 overdue invoices</span>
+                        <span className="text-blue-600 font-medium">3/5 points (Good)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>6-7 overdue invoices</span>
-                        <span className="text-yellow-600 font-medium">5/10 points (Fair)</span>
+                        <span>3-4 overdue invoices</span>
+                        <span className="text-yellow-600 font-medium">1/5 points (Fair)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>&gt;7 overdue invoices</span>
-                        <span className="text-red-600 font-medium">2/10 points (Poor)</span>
+                        <span>5+ overdue invoices</span>
+                        <span className="text-red-600 font-medium">0/5 points (Poor)</span>
                       </div>
                       <div className="mt-3 pt-3 border-t">
-                        <div className="text-xs font-medium mb-1">How to Improve:</div>
+                        <div className="text-xs font-medium mb-1">How to Improve (Target: 0 overdue invoices):</div>
                         <div className="text-xs text-muted-foreground">
-                          • Invoice work regularly (weekly or bi-weekly)<br/>
-                          • Use batch invoicing for recurring clients<br/>
-                          • Clear overdue invoices before creating new ones<br/>
-                          • Maintain open communication with clients about payment status
+                          • Clear all overdue invoices to reach Excellent status (5 points)<br/>
+                          • Send proactive payment reminders before invoice due dates<br/>
+                          • Invoice work regularly (weekly or bi-weekly) to prevent backlogs<br/>
+                          • Follow up immediately on any overdue payments<br/>
+                          • Maintain systematic collection workflow for consistent cash flow
                         </div>
                       </div>
                     </div>
@@ -409,30 +418,34 @@ export function CalculationDetailModal({
                     <div className="space-y-2">
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Monitors total value of overdue payments
+                        <div className="mt-1 text-muted-foreground/90">
+                          Target: €0 outstanding for Excellent status. Keep overdue amounts minimal for optimal cash flow.
+                        </div>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>&lt;€1,000</span>
+                        <span>€0 outstanding</span>
                         <span className="text-green-600 font-medium">5/5 points (Excellent)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>€1,000-€3,000</span>
-                        <span className="text-blue-600 font-medium">4/5 points (Good)</span>
+                        <span>€1-€3,000 outstanding</span>
+                        <span className="text-blue-600 font-medium">3/5 points (Good)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>€3,000-€5,000</span>
-                        <span className="text-yellow-600 font-medium">3/5 points (Fair)</span>
+                        <span>€3,001-€6,000 outstanding</span>
+                        <span className="text-yellow-600 font-medium">1/5 points (Fair)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>&gt;€5,000</span>
-                        <span className="text-red-600 font-medium">1/5 points (Poor)</span>
+                        <span>&gt;€6,000 outstanding</span>
+                        <span className="text-red-600 font-medium">0/5 points (Poor)</span>
                       </div>
                       <div className="mt-3 pt-3 border-t">
-                        <div className="text-xs font-medium mb-1">How to Improve:</div>
+                        <div className="text-xs font-medium mb-1">How to Improve (Target: €0 outstanding):</div>
                         <div className="text-xs text-muted-foreground">
-                          • Establish clear credit policies and payment terms<br/>
-                          • Implement escalation procedures for large overdue amounts<br/>
-                          • Offer payment plans for struggling clients<br/>
-                          • Consider credit checks for new high-value clients
+                          • Collect all outstanding amounts to reach Excellent status (5 points)<br/>
+                          • Focus on largest invoices first for maximum impact<br/>
+                          • For amounts &gt;€3,000, offer structured payment plans<br/>
+                          • Implement daily monitoring to catch new overdue amounts immediately<br/>
+                          • Establish clear credit policies to prevent large outstanding balances
                         </div>
                       </div>
                     </div>
@@ -440,6 +453,11 @@ export function CalculationDetailModal({
                     <div className="space-y-2">
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Measures business dependency on key clients using rolling 30-day data
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Rolling 30 days (including current day)<br/>
+                        <span className="font-medium">Formula:</span> Top client revenue ÷ Total revenue × 100<br/>
+                        <span className="font-medium">Scoring:</span> Lower concentration = Lower risk = Higher score
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>Diversified client base (&lt;40%)</span>
@@ -472,6 +490,11 @@ export function CalculationDetailModal({
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Measures revenue and stability trends using rolling 30-day windows
                       </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Current vs Previous 30 days<br/>
+                        <span className="font-medium">Components:</span> Revenue trend + Client concentration trend + Daily consistency trend<br/>
+                        <span className="font-medium">Scoring:</span> Improving trends = Lower risk = Higher score
+                      </div>
                       <div className="flex justify-between text-xs">
                         <span>All trends positive or stable</span>
                         <span className="text-green-600 font-medium">8/8 points (Low Risk)</span>
@@ -498,6 +521,11 @@ export function CalculationDetailModal({
                     <div className="space-y-2">
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Compares current 30 days billable revenue vs previous 30 days (days 31-60)
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Days 1-30 vs Days 31-60<br/>
+                        <span className="font-medium">Formula:</span> Current period billable revenue vs previous period<br/>
+                        <span className="font-medium">Scoring:</span> Growth = Lower risk, Decline = Higher risk
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>≥100% of previous 30 days</span>
@@ -592,6 +620,11 @@ export function CalculationDetailModal({
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Measures work pattern consistency and sustainability risk
                       </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Rolling 30 days (including current day)<br/>
+                        <span className="font-medium">Components:</span> Days/week deviation + Hours/day deviation<br/>
+                        <span className="font-medium">Scoring:</span> Closer to targets = Lower risk = Higher score
+                      </div>
                       <div className="flex justify-between text-xs">
                         <span>Matches target days/week AND hours/day</span>
                         <span className="text-green-600 font-medium">8/8 points (Low Risk)</span>
@@ -619,6 +652,11 @@ export function CalculationDetailModal({
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Penalizes deviation from target working days per week
                       </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Rolling 30 days (including current day)<br/>
+                        <span className="font-medium">Formula:</span> Estimated days/week from working day distribution<br/>
+                        <span className="font-medium">Scoring:</span> Exact match = 4 pts, deviations penalized
+                      </div>
                       <div className="flex justify-between text-xs">
                         <span>Matches target days/week</span>
                         <span className="text-green-600 font-medium">4/4 points (Optimal)</span>
@@ -644,6 +682,11 @@ export function CalculationDetailModal({
                     <div className="space-y-2">
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Penalizes deviation from target hours per day
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Rolling 30 days (including current day)<br/>
+                        <span className="font-medium">Formula:</span> Total hours ÷ Distinct working days = Daily average<br/>
+                        <span className="font-medium">Scoring:</span> Exact match = 4 pts, deviations penalized
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>Matches target hours/day</span>
@@ -671,6 +714,11 @@ export function CalculationDetailModal({
                     <div className="space-y-2">
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Measures effective hourly rate (revenue / billable hours) against target rate
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Rolling 30 days (including current day)<br/>
+                        <span className="font-medium">Formula:</span> Total billable revenue ÷ Total billable hours<br/>
+                        <span className="font-medium">Filter:</span> Billable time entries only
                       </div>
                       <div className="flex justify-between text-xs">
                         <span>≥Target rate</span>
@@ -701,34 +749,39 @@ export function CalculationDetailModal({
                   ) : metricId === 'hours_progress' ? (
                     <div className="space-y-2">
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
-                        Measures total tracked hours against MTD target (based on working days schedule, not calendar days)
+                        Measures total tracked hours against monthly target (using rolling 30-day window)
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-2 rounded text-xs mb-2">
+                        <span className="font-medium">Calculation Window:</span> Rolling 30 days (including current day)<br/>
+                        <span className="font-medium">Formula:</span> Total hours ÷ Monthly hours target × 6 points<br/>
+                        <span className="font-medium">Includes:</span> All time entries (billable + non-billable)
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>≥100% of MTD target</span>
+                        <span>≥100% of monthly target</span>
                         <span className="text-green-600 font-medium">6.0 points</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>90% of MTD target</span>
+                        <span>90% of monthly target</span>
                         <span className="text-blue-600 font-medium">5.4 points</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>80% of MTD target</span>
+                        <span>80% of monthly target</span>
                         <span className="text-blue-600 font-medium">4.8 points</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>70% of MTD target</span>
+                        <span>70% of monthly target</span>
                         <span className="text-yellow-600 font-medium">4.2 points</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>50% of MTD target</span>
+                        <span>50% of monthly target</span>
                         <span className="text-red-600 font-medium">3.0 points</span>
                       </div>
                       <div className="mt-3 pt-3 border-t">
                         <div className="text-xs font-medium mb-1">How to Improve:</div>
                         <div className="text-xs text-muted-foreground">
-                          • Configure accurate working days in settings<br/>
-                          • Track time daily on all working days<br/>
-                          • Front-load hours early in your working schedule
+                          • Maintain consistent daily time tracking<br/>
+                          • Set realistic monthly hours targets in settings<br/>
+                          • Review target vs actual weekly to stay on track
                         </div>
                       </div>
                     </div>
@@ -793,33 +846,33 @@ export function CalculationDetailModal({
                       <div className="text-xs font-medium mb-2 text-muted-foreground">
                         Measures DRI (Days Ready to Invoice) - how quickly ready work becomes invoiced
                         <div className="mt-1 text-muted-foreground/90">
-                          DRI tracks average days from when work is ready to invoice until the actual invoice is created. Lower values mean faster invoicing cycles.
+                          DRI tracks days since the oldest unbilled work became ready to invoice. Based on client invoicing frequency (monthly/weekly/on-demand). Lower values mean faster invoicing cycles. Mirrors DIO thresholds.
                         </div>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>≤2 days</span>
-                        <span className="text-green-600 font-medium">10/10 points (Excellent)</span>
+                        <span>0 days</span>
+                        <span className="text-green-600 font-medium">15/15 points (Excellent)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>3-5 days</span>
-                        <span className="text-blue-600 font-medium">7.5/10 points (Good)</span>
+                        <span>1-7 days</span>
+                        <span className="text-blue-600 font-medium">12/15 points (Good)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>6-10 days</span>
-                        <span className="text-yellow-600 font-medium">5/10 points (Fair)</span>
+                        <span>8-15 days</span>
+                        <span className="text-yellow-600 font-medium">8/15 points (Fair)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>11-20 days</span>
-                        <span className="text-orange-600 font-medium">2.5/10 points (Poor)</span>
+                        <span>16-30 days</span>
+                        <span className="text-orange-600 font-medium">3/15 points (Poor)</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span>&gt;20 days</span>
-                        <span className="text-red-600 font-medium">0/10 points (Critical)</span>
+                        <span>&gt;30 days</span>
+                        <span className="text-red-600 font-medium">0/15 points (Critical)</span>
                       </div>
                       <div className="mt-3 pt-3 border-t">
                         <div className="text-xs font-medium mb-1">How to Improve:</div>
                         <div className="text-xs text-muted-foreground">
-                          • Invoice ready work within 24-48 hours<br/>
+                          • Invoice ready work immediately (same day)<br/>
                           • Set up automated invoicing workflows<br/>
                           • Review unbilled work daily<br/>
                           • Create invoicing calendar reminders
@@ -856,6 +909,74 @@ export function CalculationDetailModal({
                           • Use invoice templates<br/>
                           • Double-check before sending<br/>
                           • Track and address client feedback
+                        </div>
+                      </div>
+                    </div>
+                  ) : metricId === 'unbilled_volume_efficiency' ? (
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium mb-2 text-muted-foreground">
+                        Measures Volume of Unbilled Items - fewer ready-to-invoice items means better efficiency
+                        <div className="mt-1 text-muted-foreground/90">
+                          Tracks the count of work items ready to be invoiced. Mirrors Cash Flow volume efficiency thresholds.
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span>0 items</span>
+                        <span className="text-green-600 font-medium">5/5 points (Excellent)</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span>1-2 items</span>
+                        <span className="text-blue-600 font-medium">3/5 points (Good)</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span>3-4 items</span>
+                        <span className="text-yellow-600 font-medium">1/5 points (Fair)</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span>5+ items</span>
+                        <span className="text-red-600 font-medium">0/5 points (Poor)</span>
+                      </div>
+                      <div className="mt-3 pt-3 border-t">
+                        <div className="text-xs font-medium mb-1">How to Improve:</div>
+                        <div className="text-xs text-muted-foreground">
+                          • Clear all ready-to-invoice items immediately<br/>
+                          • Review unbilled work queue daily<br/>
+                          • Set up automated invoice generation<br/>
+                          • Create client-specific invoicing schedules
+                        </div>
+                      </div>
+                    </div>
+                  ) : metricId === 'unbilled_amount_control' ? (
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium mb-2 text-muted-foreground">
+                        Measures Value of Unbilled Work - lower ready-to-invoice amounts mean better cash flow
+                        <div className="mt-1 text-muted-foreground/90">
+                          Tracks the total value of work ready to be invoiced. Mirrors Cash Flow absolute amount thresholds.
+                        </div>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span>€0</span>
+                        <span className="text-green-600 font-medium">5/5 points (Excellent)</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span>€1-€3,000</span>
+                        <span className="text-blue-600 font-medium">3/5 points (Good)</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span>€3,001-€6,000</span>
+                        <span className="text-yellow-600 font-medium">1/5 points (Fair)</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span>€6,000+</span>
+                        <span className="text-red-600 font-medium">0/5 points (Poor)</span>
+                      </div>
+                      <div className="mt-3 pt-3 border-t">
+                        <div className="text-xs font-medium mb-1">How to Improve:</div>
+                        <div className="text-xs text-muted-foreground">
+                          • Prioritize high-value unbilled items<br/>
+                          • Invoice all ready work immediately<br/>
+                          • Implement value-based invoicing alerts<br/>
+                          • Review unbilled work by value daily
                         </div>
                       </div>
                     </div>
