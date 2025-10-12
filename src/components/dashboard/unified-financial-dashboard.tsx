@@ -377,7 +377,9 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
       currentDay,
       daysInMonth,
       monthProgress, // Keep for revenue (calendar-based is appropriate for revenue)
+      monthlyRevenueTarget,
       mtdRevenueTarget: monthlyRevenueTarget * monthProgress,
+      monthlyHoursTarget,
       mtdHoursTarget: Math.round(monthlyHoursTarget * workingDaysProgress), // Now uses working days!
       expectedWorkingDaysUpToYesterday,
       totalExpectedWorkingDays
@@ -461,9 +463,9 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
     profitTargets?.target_avg_subscription_fee && profitTargets.target_avg_subscription_fee > 0
   )
 
-  // MTD Comparison calculation using existing monthly data (as per optimization recommendation)
+  // MTD Comparison calculation using time-based billable revenue + subscriptions
   const mtdComparison = useMemo(() => {
-    if (!revenueTrend || revenueTrend.length < 2) {
+    if (!timeStats || !timeStats.thisMonth || !timeStats.previousMonthMTD) {
       return {
         current: 0,
         previous: 0,
@@ -473,15 +475,16 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
       }
     }
 
-    const currentMonth = revenueTrend[revenueTrend.length - 1]
-    const previousMonth = revenueTrend[revenueTrend.length - 2]
+    // Current month MTD: billable time revenue from time entries + MRR
+    const currentMonthBillableRevenue = timeStats.thisMonth.billableRevenue || 0
+    const currentMonthSubscriptionRevenue = (timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0)
+    const currentMTD = currentMonthBillableRevenue + currentMonthSubscriptionRevenue
 
-    // Calculate MTD portions (day X of 30 days = X/30 of monthly total)
-    const { currentDay, daysInMonth } = mtdCalculations
-    const mtdRatio = currentDay / daysInMonth
+    // Previous month MTD (same day range): billable time revenue from time entries + MRR
+    const previousMonthBillableRevenue = timeStats.previousMonthMTD.billableRevenue || 0
+    const previousMonthSubscriptionRevenue = (timeStats?.subscription?.monthlyActiveUsers?.previous || 0) * (timeStats?.subscription?.averageSubscriptionFee?.previous || 0)
+    const previousMTD = previousMonthBillableRevenue + previousMonthSubscriptionRevenue
 
-    const currentMTD = currentMonth.revenue * mtdRatio
-    const previousMTD = previousMonth.revenue * mtdRatio
     const difference = currentMTD - previousMTD
     const percentageChange = previousMTD > 0 ? (difference / previousMTD) * 100 : 0
 
@@ -492,11 +495,11 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
       trend: difference >= 0 ? 'positive' as const : 'negative' as const,
       percentageChange
     }
-  }, [revenueTrend, mtdCalculations])
+  }, [timeStats, mtdCalculations])
 
-  // Average Rate comparison calculation using previous month's total average
+  // Average Rate comparison calculation using billable hours only
   const rateComparison = useMemo(() => {
-    if (!revenueTrend || revenueTrend.length < 2 || !timeStats?.thisMonth.hours) {
+    if (!revenueTrend || revenueTrend.length < 2 || !timeStats?.thisMonth.billableHours) {
       return {
         current: 0,
         previous: 0,
@@ -509,9 +512,9 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
     const currentMonth = revenueTrend[revenueTrend.length - 1]
     const previousMonth = revenueTrend[revenueTrend.length - 2]
 
-    // Current rate = current time revenue / current hours
-    const currentRate = timeStats.thisMonth.hours > 0 ?
-      (dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours : 0
+    // Current rate = current billable revenue / current billable hours
+    const currentRate = timeStats.thisMonth.billableHours > 0 ?
+      (timeStats.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours : 0
 
     // Previous rate = previous month total time revenue / total hours
     const previousRate = previousMonth.totalHours > 0 ?
@@ -527,7 +530,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
       trend: difference >= 0 ? 'positive' as const : 'negative' as const,
       percentageChange
     }
-  }, [revenueTrend, timeStats, dashboardMetrics])
+  }, [revenueTrend, timeStats])
 
   // Get health scores from decision tree results
   const healthScores = useMemo(() => {
@@ -995,7 +998,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                               <DollarSign className="h-3.5 w-3.5 text-primary" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-left leading-none">Total Profit (MTD)</p>
+                              <p className="text-xs font-medium text-left leading-none">Total Profit (Rolling 30d)</p>
                               <p className="text-xs text-muted-foreground leading-none">
                                 {healthScores.profit >= 20 ? 'Crushing it!' :
                                  healthScores.profit >= 15 ? 'Strong performance' :
@@ -1073,7 +1076,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                               <Clock className="h-3.5 w-3.5 text-blue-500" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-left leading-none">Efficiency (MTD)</p>
+                              <p className="text-xs font-medium text-left leading-none">Efficiency (Rolling 30d)</p>
                               <p className="text-xs text-muted-foreground leading-none">
                                 {healthScores.efficiency >= 20 ? 'Peak productivity!' :
                                  healthScores.efficiency >= 15 ? 'Great momentum' :
@@ -1162,18 +1165,18 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                     </div>
                   </div>
                   <div className={`mobile-status-indicator ${
-                    (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 100 ? 'status-active' :
-                    (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 80 ? 'status-warning' : 'status-inactive'
+                    (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 100 ? 'status-active' :
+                    (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 80 ? 'status-warning' : 'status-inactive'
                   }`}>
-                    <span>{Math.round((((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100)}%</span>
+                    <span>{Math.round((((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100)}%</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold metric-number text-accent">
-                      {formatCurrency(Math.round((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))))}
+                      {formatCurrency(Math.round((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))))}
                     </span>
-                    <span className="text-sm text-muted-foreground">/ €{Math.round(mtdCalculations.mtdRevenueTarget / 1000)}K MTD <span className="text-xs opacity-75">(€12K)</span></span>
+                    <span className="text-sm text-muted-foreground">/ €{Math.round(mtdCalculations.mtdRevenueTarget / 1000)}K MTD <span className="text-xs opacity-75">(€{Math.round(mtdCalculations.monthlyRevenueTarget / 1000)}K)</span></span>
                   </div>
                   <div className="flex items-center gap-2 h-8 flex-col justify-center">
                     <div className="flex items-center gap-2">
@@ -1198,24 +1201,24 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   <div className="relative progress-bar">
                     <div
                       className={`progress-fill ${
-                        (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / 12000) * 100 >= 100 ? 'progress-fill-success' :
-                        (((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / 12000) * 100 >= 80 ? 'progress-fill-warning' : 'progress-fill-warning'
+                        (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.monthlyRevenueTarget) * 100 >= 100 ? 'progress-fill-success' :
+                        (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.monthlyRevenueTarget) * 100 >= 80 ? 'progress-fill-warning' : 'progress-fill-warning'
                       }`}
-                      style={{ width: `${Math.min((((dashboardMetrics?.totale_registratie || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / 12000) * 100, 100)}%` }}
+                      style={{ width: `${Math.min((((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.monthlyRevenueTarget) * 100, 100)}%` }}
                     />
                     {/* MTD Target Line */}
                     <div
                       className="absolute top-0 bottom-0 w-0.5 bg-primary opacity-90"
-                      style={{ left: `${Math.min((mtdCalculations.mtdRevenueTarget / 12000) * 100, 100)}%` }}
+                      style={{ left: `${Math.min((mtdCalculations.mtdRevenueTarget / mtdCalculations.monthlyRevenueTarget) * 100, 100)}%` }}
                       title={`MTD Target: ${formatCurrency(mtdCalculations.mtdRevenueTarget)}`}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
                   <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Time Value</p>
+                    <p className="text-xs text-muted-foreground">Time-based</p>
                     <p className="text-sm font-bold text-primary">
-                      {formatCurrency(dashboardMetrics?.totale_registratie || 0)}
+                      {formatCurrency(timeStats?.thisMonth?.billableRevenue || 0)}
                     </p>
                   </div>
                   <div className="text-center">
@@ -1237,22 +1240,22 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                     <div>
                       <h3 className="text-base font-semibold mobile-sharp-text">Hours</h3>
                       <p className="text-sm text-muted-foreground h-8 flex flex-col justify-center">
-                        <span>This month</span>
-                        <span>total</span>
+                        <span>Billable</span>
+                        <span>hours MTD</span>
                       </p>
                     </div>
                   </div>
                   <div className={`mobile-status-indicator ${
-                    ((timeStats?.thisMonth.hours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 100 ? 'status-active' :
-                    ((timeStats?.thisMonth.hours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 75 ? 'status-warning' : 'status-inactive'
+                    ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 100 ? 'status-active' :
+                    ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 75 ? 'status-warning' : 'status-inactive'
                   }`}>
-                    <span>{Math.round(((timeStats?.thisMonth.hours || 0) / mtdCalculations.mtdHoursTarget) * 100)}%</span>
+                    <span>{Math.round(((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100)}%</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold metric-number text-green-400">{formatHours(timeStats?.thisMonth.hours || 0)}</span>
-                    <span className="text-sm text-muted-foreground">/ {formatHours(mtdCalculations.mtdHoursTarget)} MTD <span className="text-xs opacity-75">({formatHours(160)})</span></span>
+                    <span className="text-2xl font-bold metric-number text-green-400">{formatHours(timeStats?.thisMonth.billableHours || 0)}</span>
+                    <span className="text-sm text-muted-foreground">/ {formatHours(mtdCalculations.mtdHoursTarget)} MTD <span className="text-xs opacity-75">({formatHours(mtdCalculations.monthlyHoursTarget)})</span></span>
                   </div>
                   <div className="flex items-center gap-2 h-8 flex-col justify-center">
                     <div className="flex items-center gap-2">
@@ -1274,23 +1277,23 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   <div className="relative progress-bar">
                     <div
                       className={`progress-fill ${
-                        ((timeStats?.thisMonth.hours || 0) / 160) * 100 >= 100 ? 'progress-fill-success' :
-                        ((timeStats?.thisMonth.hours || 0) / 160) * 100 >= 75 ? 'progress-fill-warning' : 'progress-fill-primary'
+                        ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.monthlyHoursTarget) * 100 >= 100 ? 'progress-fill-success' :
+                        ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.monthlyHoursTarget) * 100 >= 75 ? 'progress-fill-warning' : 'progress-fill-primary'
                       }`}
-                      style={{ width: `${Math.min(((timeStats?.thisMonth.hours || 0) / 160) * 100, 100)}%` }}
+                      style={{ width: `${Math.min(((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.monthlyHoursTarget) * 100, 100)}%` }}
                     />
                     {/* MTD Target Line */}
                     <div
                       className="absolute top-0 bottom-0 w-0.5 bg-green-500 opacity-90"
-                      style={{ left: `${Math.min((mtdCalculations.mtdHoursTarget / 160) * 100, 100)}%` }}
+                      style={{ left: `${Math.min((mtdCalculations.mtdHoursTarget / mtdCalculations.monthlyHoursTarget) * 100, 100)}%` }}
                       title={`MTD Target: ${formatHours(mtdCalculations.mtdHoursTarget)}`}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
                   <div className="text-center">
-                    <p className="text-xs text-muted-foreground">This Week</p>
-                    <p className="text-sm font-bold text-primary">{formatHours(timeStats?.thisWeek.hours || 0)}</p>
+                    <p className="text-xs text-muted-foreground">Non-billable</p>
+                    <p className="text-sm font-bold text-muted-foreground">{formatHours(timeStats?.thisMonth.nonBillableHours || 0)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Unbilled</p>
@@ -1315,16 +1318,16 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                     </div>
                   </div>
                   <div className={`mobile-status-indicator ${
-                    ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) >= 80 ? 'status-active' :
-                    ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) >= 60 ? 'status-warning' : 'status-inactive'
+                    ((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) >= 80 ? 'status-active' :
+                    ((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) >= 60 ? 'status-warning' : 'status-inactive'
                   }`}>
-                    <span>{Math.round((((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) / 100) * 100)}%</span>
+                    <span>{Math.round((((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) / 100) * 100)}%</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold metric-number text-blue-400">
-                      €{(timeStats?.thisMonth.hours || 0) > 0 ? ((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours).toFixed(1) : '0'}
+                      €{(timeStats?.thisMonth.billableHours || 0) > 0 ? ((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours).toFixed(1) : '0'}
                     </span>
                     <span className="text-sm text-muted-foreground">/ €{profitTargets?.target_hourly_rate || 100} target</span>
                   </div>
@@ -1351,21 +1354,21 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   <div className="relative progress-bar">
                     <div
                       className={`progress-fill ${
-                        ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) >= 80 ? 'progress-fill-success' :
-                        ((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0) >= 60 ? 'progress-fill-warning' : 'progress-fill-primary'
+                        ((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) >= 80 ? 'progress-fill-success' :
+                        ((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) >= 60 ? 'progress-fill-warning' : 'progress-fill-primary'
                       }`}
-                      style={{ width: `${Math.min(((timeStats?.thisMonth.hours || 0) > 0 ? Math.round((dashboardMetrics?.totale_registratie || 0) / timeStats.thisMonth.hours) : 0), 100)}%` }}
+                      style={{ width: `${Math.min(((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0), 100)}%` }}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
                   <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Hours</p>
-                    <p className="text-sm font-bold text-primary">{formatHours(timeStats?.thisMonth.hours || 0)}</p>
+                    <p className="text-xs text-muted-foreground">Billable Hours</p>
+                    <p className="text-sm font-bold text-primary">{formatHours(timeStats?.thisMonth.billableHours || 0)}</p>
                   </div>
                   <div className="text-center">
                     <p className="text-xs text-muted-foreground">Revenue</p>
-                    <p className="text-sm font-bold text-blue-400">{formatCurrency(dashboardMetrics?.totale_registratie || 0)}</p>
+                    <p className="text-sm font-bold text-blue-400">{formatCurrency(timeStats?.thisMonth.billableRevenue || 0)}</p>
                   </div>
                 </div>
               </div>
@@ -1577,7 +1580,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   <Target className="h-4 w-4 text-green-500" />
                 </div>
                 <p className="text-lg font-bold text-green-500">
-                  {timeStats ? Math.round((timeStats.thisMonth.hours / 160) * 100) : 0}%
+                  {timeStats ? Math.round((timeStats.thisMonth.hours / mtdCalculations.monthlyHoursTarget) * 100) : 0}%
                 </p>
                 <p className="text-xs text-muted-foreground">On track</p>
               </Card>
@@ -1824,7 +1827,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <DollarSign className="h-5 w-5 text-primary" />
-                      <h4 className="font-semibold">Profit Health (MTD)</h4>
+                      <h4 className="font-semibold">Profit Health (Rolling 30d)</h4>
                     </div>
                     <span className="text-lg font-bold text-primary">{healthScores.profit}/25</span>
                   </div>
@@ -1874,7 +1877,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Clock className="h-5 w-5 text-blue-500" />
-                      <h4 className="font-semibold">Efficiency Health (MTD)</h4>
+                      <h4 className="font-semibold">Efficiency Health (Rolling 30d)</h4>
                     </div>
                     <span className="text-lg font-bold text-blue-600">{healthScores.efficiency}/25</span>
                   </div>

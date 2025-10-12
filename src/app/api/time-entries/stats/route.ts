@@ -73,6 +73,22 @@ export async function GET() {
 
     if (thisMonthError) throw thisMonthError
 
+    // Query previous month MTD (same day range as current month for comparison)
+    // Example: If today is Sept 17, query Aug 1-17 (not full August)
+    const currentDay = now.getDate()
+    const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const previousMonthMTDEnd = new Date(now.getFullYear(), now.getMonth() - 1, Math.min(currentDay, new Date(now.getFullYear(), now.getMonth(), 0).getDate()))
+    previousMonthMTDEnd.setHours(23, 59, 59, 999)
+
+    const { data: previousMonthMTDEntries, error: previousMonthMTDError } = await supabaseAdmin
+      .from('time_entries')
+      .select('hours, hourly_rate, effective_hourly_rate, billable')
+      .eq('tenant_id', profile.tenant_id)
+      .gte('entry_date', previousMonthStart.toISOString().split('T')[0])
+      .lte('entry_date', previousMonthMTDEnd.toISOString().split('T')[0])
+
+    if (previousMonthMTDError) throw previousMonthMTDError
+
     // Query unbilled hours (billable but not invoiced) - filtered to current month
     const { data: unbilledEntries, error: unbilledError } = await supabaseAdmin
       .from('time_entries')
@@ -173,6 +189,25 @@ export async function GET() {
     const thisMonthNonBillableHours = thisMonthEntries?.filter(entry => entry.billable === false)
       .reduce((sum, entry) => sum + entry.hours, 0) || 0
 
+    // Calculate billable revenue for this month (time-based revenue from billable entries)
+    const thisMonthBillableRevenue = thisMonthEntries
+      ?.filter(entry => entry.billable === true || entry.billable === null)
+      .reduce((sum, entry) => {
+        const effectiveRate = entry.effective_hourly_rate || entry.hourly_rate || 0
+        return sum + (entry.hours * effectiveRate)
+      }, 0) || 0
+
+    // Calculate previous month MTD stats for comparison
+    const previousMonthMTDHours = previousMonthMTDEntries?.reduce((sum, entry) => sum + entry.hours, 0) || 0
+    const previousMonthMTDBillableHours = previousMonthMTDEntries?.filter(entry => entry.billable === true || entry.billable === null)
+      .reduce((sum, entry) => sum + entry.hours, 0) || 0
+    const previousMonthMTDBillableRevenue = previousMonthMTDEntries
+      ?.filter(entry => entry.billable === true || entry.billable === null)
+      .reduce((sum, entry) => {
+        const effectiveRate = entry.effective_hourly_rate || entry.hourly_rate || 0
+        return sum + (entry.hours * effectiveRate)
+      }, 0) || 0
+
     // Calculate unique projects and clients
     const uniqueProjects = new Set()
     const uniqueClients = new Set(projectStats?.filter(p => p.client_id).map(p => p.client_id))
@@ -260,8 +295,14 @@ export async function GET() {
         hours: Math.round(thisMonthHours * 10) / 10,
         revenue: Math.round(thisMonthRevenue * 100) / 100, // Round to 2 decimals
         billableHours: Math.round(thisMonthBillableHours * 10) / 10,
+        billableRevenue: Math.round(thisMonthBillableRevenue * 100) / 100,
         nonBillableHours: Math.round(thisMonthNonBillableHours * 10) / 10,
         distinctWorkingDays // Add distinct working days count
+      },
+      previousMonthMTD: {
+        hours: Math.round(previousMonthMTDHours * 10) / 10,
+        billableHours: Math.round(previousMonthMTDBillableHours * 10) / 10,
+        billableRevenue: Math.round(previousMonthMTDBillableRevenue * 100) / 100
       },
       unbilled: {
         hours: Math.round(unbilledHours * 10) / 10,
