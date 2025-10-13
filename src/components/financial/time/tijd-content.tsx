@@ -170,7 +170,8 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   useEffect(() => {
     if (timerRunning && startTime) {
       intervalRef.current = setInterval(() => {
-        const now = getCurrentDate()
+        // Use real Date() for timer calculation to ensure it increments even with hardcoded dates
+        const now = new Date()
         const currentSessionElapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000)
         const totalElapsed = currentSessionElapsed + pausedTime
 
@@ -277,6 +278,9 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
     }
 
     // For today's date: start the actual timer
+    // Use real Date() for timer tracking, getCurrentDate() is only for date-based operations
+    const now = new Date()
+
     setSelectedClientId(timerData.clientId)
     setSelectedClient(timerData.clientName)
     setSelectedProjectId(timerData.projectId)
@@ -285,17 +289,17 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
 
     const timerSession = {
       ...timerData,
-      startTime: getCurrentDate().toISOString(),
+      startTime: now.toISOString(),
       pausedTime: 0,
       isPaused: false
     }
     localStorage.setItem('activeTimerSession', JSON.stringify(timerSession))
 
-    setStartTime(getCurrentDate())
-    setTimerRunning(true)
-    setTimerPaused(false)
     setPausedTime(0)
-    setCurrentTime('00:00:01')
+    setTimerPaused(false)
+    setStartTime(now)
+    setTimerRunning(true)
+    setCurrentTime('00:00:00')
 
     // Clear timer dialog date
     setTimerDialogDate(undefined)
@@ -304,7 +308,8 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   const pauseTimer = () => {
     if (!startTime) return
 
-    const now = getCurrentDate()
+    // Use real Date() for timer calculation
+    const now = new Date()
     const currentSessionElapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000)
     setPausedTime(prev => prev + currentSessionElapsed)
 
@@ -329,7 +334,9 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   }
 
   const resumeTimer = () => {
-    setStartTime(getCurrentDate())
+    // Use real Date() for timer tracking
+    const now = new Date()
+    setStartTime(now)
     setTimerPaused(false)
     setTimerRunning(true)
 
@@ -337,7 +344,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
     if (timerSession) {
       try {
         const sessionData = JSON.parse(timerSession)
-        sessionData.startTime = getCurrentDate().toISOString()
+        sessionData.startTime = now.toISOString()
         sessionData.isPaused = false
         localStorage.setItem('activeTimerSession', JSON.stringify(sessionData))
       } catch (e) {
@@ -349,7 +356,9 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
   const stopAndSaveTimer = async () => {
     if (!startTime) return
 
-    const currentSessionElapsed = Math.floor((getCurrentDate().getTime() - startTime.getTime()) / 1000)
+    // Use real Date() for timer calculation
+    const now = new Date()
+    const currentSessionElapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000)
     const totalElapsedSeconds = currentSessionElapsed + pausedTime
     const elapsed = totalElapsedSeconds / 3600
 
@@ -391,10 +400,18 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
         })
 
         if (response.ok) {
+          const result = await response.json()
+          console.log('✅ Time entry saved successfully:', result)
+
           alert(`Tijd succesvol geregistreerd! ${hours} uur voor "${selectedClient}"`)
-          setTimeout(() => {
-            handleRefresh()
-          }, 100)
+
+          // Refresh immediately after successful save
+          handleRefresh()
+
+          // Dispatch event to notify other components (like ActiveTimerWidget on dashboard)
+          window.dispatchEvent(new CustomEvent('time-entry-created', {
+            detail: { clientName: selectedClient, hours }
+          }))
         } else {
           const error = await response.json()
           throw new Error(error.message || 'Failed to register time')

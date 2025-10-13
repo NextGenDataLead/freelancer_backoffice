@@ -177,12 +177,24 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
     fetchTimerData()
   }, [])
 
+  // Listen for time entry updates from other components
+  useEffect(() => {
+    const handleTimeEntryCreated = () => {
+      console.log('ActiveTimerWidget: Received time-entry-created event, refreshing widget data...')
+      refreshWidgetData()
+    }
+
+    window.addEventListener('time-entry-created', handleTimeEntryCreated)
+    return () => window.removeEventListener('time-entry-created', handleTimeEntryCreated)
+  }, [])
+
 
   // Timer update effect
   useEffect(() => {
     if (activeTimer?.isRunning) {
       intervalRef.current = setInterval(() => {
-        const now = getCurrentDate()
+        // Use real Date() for timer calculation to ensure it increments even with hardcoded dates
+        const now = new Date()
         const sessionStartTime = new Date(activeTimer.startTime)
         const currentSessionElapsed = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
         const totalElapsed = currentSessionElapsed + (activeTimer.pausedTime || 0)
@@ -231,9 +243,11 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
     hourlyRate: number
     selectedDate?: Date
   }) => {
+    // Use real Date() for timer tracking
+    const now = new Date()
     const timerSession = {
       ...timerData,
-      startTime: getCurrentDate().toISOString(),
+      startTime: now.toISOString(),
       pausedTime: 0,
       isPaused: false
     }
@@ -251,7 +265,8 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
   const handlePauseTimer = () => {
     if (!activeTimer) return
 
-    const now = getCurrentDate()
+    // Use real Date() for timer calculation
+    const now = new Date()
     const sessionStartTime = new Date(activeTimer.startTime)
     const currentSessionElapsed = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
     const newPausedTime = (activeTimer.pausedTime || 0) + currentSessionElapsed
@@ -287,9 +302,11 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
   const handleResumeTimer = () => {
     if (!activeTimer) return
 
+    // Use real Date() for timer tracking
+    const now = new Date()
     const updatedTimer = {
       ...activeTimer,
-      startTime: getCurrentDate().toISOString(),
+      startTime: now.toISOString(),
       isRunning: true,
       isPaused: false
     }
@@ -301,7 +318,7 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
     if (timerSession) {
       try {
         const sessionData = JSON.parse(timerSession)
-        sessionData.startTime = getCurrentDate().toISOString()
+        sessionData.startTime = now.toISOString()
         sessionData.isPaused = false
         localStorage.setItem('activeTimerSession', JSON.stringify(sessionData))
       } catch (e) {
@@ -313,7 +330,8 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
   const handleStopTimer = async () => {
     if (!activeTimer) return
 
-    const now = getCurrentDate()
+    // Use real Date() for timer calculation
+    const now = new Date()
     const sessionStartTime = new Date(activeTimer.startTime)
     const currentSessionElapsed = activeTimer.isRunning
       ? Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000)
@@ -344,6 +362,9 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
         })
 
         if (response.ok) {
+          const result = await response.json()
+          console.log('✅ Time entry saved successfully from widget:', result)
+
           // Show beautiful success notification
           addNotification({
             type: 'success',
@@ -352,15 +373,13 @@ export function ActiveTimerWidget({ className, onNavigateToTimer }: ActiveTimerW
             duration: 5000 // Auto-dismiss after 5 seconds
           })
 
-          // Refresh the widget data without full page reload
-          setTimeout(async () => {
-            await refreshWidgetData()
+          // Refresh the widget data immediately after successful save
+          await refreshWidgetData()
 
-            // Trigger a custom event to notify the financial dashboard to refresh
-            window.dispatchEvent(new CustomEvent('time-entry-created', {
-              detail: { clientName: activeTimer.clientName, hours }
-            }))
-          }, 500)
+          // Trigger a custom event to notify the financial dashboard to refresh
+          window.dispatchEvent(new CustomEvent('time-entry-created', {
+            detail: { clientName: activeTimer.clientName, hours }
+          }))
         } else {
           const error = await response.json()
           throw new Error(error.message || 'Failed to register time')

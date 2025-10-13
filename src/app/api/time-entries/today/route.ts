@@ -60,7 +60,7 @@ export async function GET() {
       throw todayError
     }
 
-    // Query recent entries (last 10, excluding today's entries)
+    // Query recent entries (last 10, including today's entries)
     const { data: recentEntries, error: recentError } = await supabaseAdmin
       .from('time_entries')
       .select(`
@@ -81,7 +81,6 @@ export async function GET() {
         )
       `)
       .eq('tenant_id', profile.tenant_id)
-      .lt('entry_date', today.toISOString().split('T')[0])
       .order('created_at', { ascending: false })
       .limit(10)
 

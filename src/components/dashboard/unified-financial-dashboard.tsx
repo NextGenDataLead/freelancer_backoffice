@@ -7,6 +7,7 @@ import { UserButton } from '@clerk/nextjs'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { ActiveTimerWidget } from './active-timer-widget'
 import { ClientHealthDashboard } from './client-health-dashboard'
 import { CashFlowForecast } from './cash-flow-forecast'
@@ -179,6 +180,14 @@ interface TodayStatsResponse {
 // Format helpers
 const formatCurrency = (amount: number) => `€${amount.toLocaleString()}`
 const formatHours = (hours: number) => `${hours}h`
+const formatDateRange = (start: Date, end: Date) => {
+  const formatDate = (date: Date) => {
+    const month = date.toLocaleDateString('en-US', { month: 'short' })
+    const day = date.getDate()
+    return `${month} ${day}`
+  }
+  return `${formatDate(start)} - ${formatDate(end)}`
+}
 
 interface UnifiedFinancialDashboardProps {
   onTabChange?: (tabId: string) => void // Optional navigation handler
@@ -385,6 +394,24 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
       totalExpectedWorkingDays
     }
   }, [profitTargets]) // Add profitTargets dependency
+
+  // Calculate date ranges for display
+  const dateRanges = useMemo(() => {
+    const now = getCurrentDate()
+
+    // Rolling 30 days range
+    const rolling30Start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const rolling30End = now
+
+    // MTD range
+    const mtdStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const mtdEnd = now
+
+    return {
+      rolling30: formatDateRange(rolling30Start, rolling30End),
+      mtd: formatDateRange(mtdStart, mtdEnd)
+    }
+  }, [])
 
   // Process health scores using centralized decision tree engine
   useEffect(() => {
@@ -858,7 +885,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
           <div className="space-y-6">
             {/* Collapsible Business Health Score */}
             <Collapsible open={healthScoreOpen} onOpenChange={setHealthScoreOpen}>
-              <Card className="p-4">
+              <Card className="p-4 bg-blue-500/[0.02] border-blue-500/10">
                 <CollapsibleTrigger className="w-full">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -896,12 +923,33 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
 
                       <div className="text-left">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-bold text-lg">Business Health Score</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-lg">Business Health Score</h3>
+                            <Badge className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20">
+                              <BarChart3 className="h-3 w-3 mr-1" />
+                              Rolling 30d
+                            </Badge>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button className="text-muted-foreground hover:text-foreground transition-colors">
+                                  <HelpCircle className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="font-semibold mb-1">Long-term Health Monitor</p>
+                                <p className="text-xs">Tracks your business health over the last 30 days ({dateRanges.rolling30}). This provides stable trend analysis and filters out day-to-day fluctuations.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
                           {/* Streak indicator - gamification prep */}
                           <div className="px-2 py-1 bg-primary/10 rounded-full">
                             <span className="text-xs font-semibold text-primary">Day 15</span>
                           </div>
                         </div>
+                        {/* Date range display */}
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {dateRanges.rolling30} • Long-term trend tracking
+                        </p>
                         <p className={`text-sm font-medium ${
                           healthScores.totalRounded >= 85 ? 'text-green-600' :
                           healthScores.totalRounded >= 70 ? 'text-blue-600' :
@@ -998,7 +1046,17 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                               <DollarSign className="h-3.5 w-3.5 text-primary" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-left leading-none">Total Profit (Rolling 30d)</p>
+                              <div className="flex items-center gap-1">
+                                <p className="text-xs font-medium text-left leading-none">Total Profit (Rolling 30d)</p>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-3 w-3 text-muted-foreground opacity-50 hover:opacity-100 transition-opacity" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-xs">
+                                    <p className="text-xs">Based on last 30 days of revenue and costs. Different from Monthly Progress which tracks Sept 1-{getCurrentDate().getDate()} only.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
                               <p className="text-xs text-muted-foreground leading-none">
                                 {healthScores.profit >= 20 ? 'Crushing it!' :
                                  healthScores.profit >= 15 ? 'Strong performance' :
@@ -1076,7 +1134,17 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                               <Clock className="h-3.5 w-3.5 text-blue-500" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-left leading-none">Efficiency (Rolling 30d)</p>
+                              <div className="flex items-center gap-1">
+                                <p className="text-xs font-medium text-left leading-none">Efficiency (Rolling 30d)</p>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-3 w-3 text-muted-foreground opacity-50 hover:opacity-100 transition-opacity" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-xs">
+                                    <p className="text-xs">Tracks billable hours, work patterns, and productivity over the last 30 days. Different from Monthly Progress hours which only count this month.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
                               <p className="text-xs text-muted-foreground leading-none">
                                 {healthScores.efficiency >= 20 ? 'Peak productivity!' :
                                  healthScores.efficiency >= 15 ? 'Great momentum' :
@@ -1146,6 +1214,46 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                 </CollapsibleContent>
               </Card>
             </Collapsible>
+
+            {/* Visual Divider */}
+            <div className="relative my-8">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border/50"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-background px-4 text-xs text-muted-foreground uppercase tracking-wider">
+                  Monthly Metrics
+                </span>
+              </div>
+            </div>
+
+            {/* Monthly Progress Section Header */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-green-600" />
+                  <h2 className="text-xl font-bold">Monthly Progress</h2>
+                </div>
+                <Badge className="bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/20">
+                  <Calendar className="h-3 w-3 mr-1" />
+                  MTD
+                </Badge>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="text-muted-foreground hover:text-foreground transition-colors">
+                      <HelpCircle className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="font-semibold mb-1">Monthly Goal Tracker</p>
+                    <p className="text-xs">Tracks your progress toward monthly targets from the 1st to today ({dateRanges.mtd}). Use this for tactical daily decisions and monthly planning.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {dateRanges.mtd} • Track this month's goals
+              </p>
+            </div>
 
             {/* Dynamic Card Metrics System - Adapts to Business Model */}
             <div className={`grid grid-cols-1 sm:grid-cols-2 ${subscriptionEnabled ? 'xl:grid-cols-5' : 'xl:grid-cols-3'} gap-4 sm:gap-6`}>
