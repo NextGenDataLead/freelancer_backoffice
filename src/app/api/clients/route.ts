@@ -72,6 +72,16 @@ export async function GET(request: Request) {
       query = query.eq('country_code', validatedQuery.country_code)
     }
 
+    // Apply status filter (Enhancement #2)
+    // Supports single status or array of statuses (e.g., ['active', 'on_hold'])
+    if (validatedQuery.status && Array.isArray(validatedQuery.status) && validatedQuery.status.length > 0) {
+      if (validatedQuery.status.length === 1) {
+        query = query.eq('status', validatedQuery.status[0])
+      } else {
+        query = query.in('status', validatedQuery.status)
+      }
+    }
+
     // Apply pagination
     const from = (validatedQuery.page - 1) * validatedQuery.limit
     const to = from + validatedQuery.limit - 1

@@ -34,6 +34,7 @@ import {  Users,
 interface ClientHealthData {
   id: string
   name: string
+  paymentTerms?: number // Client's default payment terms in days
   revenue: {
     thisMonth: number
     lastMonth: number
@@ -53,7 +54,6 @@ interface ClientHealthData {
   engagement: {
     lastActivity: string
     hoursThisMonth: number
-    communicationScore: number // 1-10
   }
 }
 
@@ -102,7 +102,7 @@ function ClientHealthHelpModal() {
                   <li>Payment behavior and timing</li>
                   <li>Revenue consistency and growth</li>
                   <li>Project engagement levels</li>
-                  <li>Communication frequency</li>
+                  <li>Activity recency and hours worked</li>
                 </ul>
               </div>
 
@@ -166,7 +166,7 @@ function ClientHealthHelpModal() {
                 </h4>
                 <ul className="text-sm text-purple-600 mt-2 space-y-1">
                   <li>• Recent activity</li>
-                  <li>• Communication score</li>
+                  <li>• Billable hours</li>
                   <li>• Project involvement</li>
                 </ul>
               </div>
@@ -239,8 +239,7 @@ function ClientHealthHelpModal() {
               <ul className="text-sm text-muted-foreground ml-4 list-disc space-y-1">
                 <li><strong>Invoice Data:</strong> Payment timing, amounts, and overdue status</li>
                 <li><strong>Project Activity:</strong> Active projects, completion rates, and engagement</li>
-                <li><strong>Time Tracking:</strong> Billable hours and project involvement</li>
-                <li><strong>Communication History:</strong> Recent interactions and responsiveness</li>
+                <li><strong>Time Tracking:</strong> Billable hours, activity recency, and project involvement</li>
               </ul>
             </div>
           </div>
@@ -269,23 +268,40 @@ const calculateClientHealth = (client: ClientHealthData): ClientHealthScore => {
     riskFactors.push(`Revenue down ${Math.round((1-revenueChange)*100)}% this month`)
   }
 
-  // Payment behavior (25 points max)
+  // Payment behavior (25 points max) - Relative to client's payment terms
   let paymentTrend: 'improving' | 'declining' | 'stable' = 'stable'
 
-  if (client.payment.averageDays > 45) {
-    score -= 15
+  // Get client's payment terms (default to 30 days if not specified)
+  const clientPaymentTerms = client.paymentTerms || 30
+
+  // Calculate payment performance relative to their terms
+  const paymentPerformance = client.payment.averageDays / clientPaymentTerms
+
+  if (paymentPerformance <= 1.0) {
+    // At par or better (e.g., 28 days on 30-day terms)
+    paymentTrend = 'improving'
+    // No penalty - EXCELLENT
+  } else if (paymentPerformance <= 1.1) {
+    // Within 10% of terms (e.g., 33 days on 30-day terms)
+    paymentTrend = 'stable'
+    score -= 5
+    // Small penalty - GOOD
+  } else {
+    // More than 10% over terms (e.g., 40+ days on 30-day terms)
     paymentTrend = 'declining'
-    riskFactors.push(`Slow payments (${client.payment.averageDays} days average)`)
+    score -= 15
+    const percentageOver = Math.round((paymentPerformance - 1) * 100)
+    riskFactors.push(`Slow payments (${percentageOver}% over terms)`)
+    // Full penalty - POOR
   }
 
   if (client.payment.overdueAmount > 0) {
     score -= Math.min(client.payment.overdueCount * 5, 20)
     riskFactors.push(`€${client.payment.overdueAmount.toLocaleString()} overdue`)
-  } else {
-    paymentTrend = 'improving'
+    paymentTrend = 'declining'
   }
 
-  // Project activity (25 points max)
+  // Project activity (25 points max) - Updated for status system (Enhancement #2)
   if (client.projects.active === 0) {
     score -= 25
     riskFactors.push('No active projects')
@@ -293,6 +309,7 @@ const calculateClientHealth = (client: ClientHealthData): ClientHealthScore => {
     opportunities.push('Multiple active projects - stable relationship')
   }
 
+  // Penalty for on-hold projects
   if (client.projects.onHold > 0) {
     score -= client.projects.onHold * 5
     riskFactors.push(`${client.projects.onHold} projects on hold`)
@@ -312,11 +329,6 @@ const calculateClientHealth = (client: ClientHealthData): ClientHealthScore => {
   } else if (client.engagement.hoursThisMonth > 40) {
     engagementTrend = 'up'
     opportunities.push('High engagement this month')
-  }
-
-  if (client.engagement.communicationScore < 5) {
-    score -= 10
-    riskFactors.push('Poor communication score')
   }
 
   // Determine overall status
@@ -345,42 +357,47 @@ const mockClientData: ClientHealthData[] = [
   {
     id: '1',
     name: 'Acme Corporation',
+    paymentTerms: 30,
     revenue: { thisMonth: 8500, lastMonth: 7200, total: 45000 },
     payment: { averageDays: 28, overdueAmount: 0, overdueCount: 0, lastPayment: '2024-01-10' },
     projects: { active: 2, completed: 8, onHold: 0 },
-    engagement: { lastActivity: '2024-01-15', hoursThisMonth: 45, communicationScore: 8 }
+    engagement: { lastActivity: '2024-01-15', hoursThisMonth: 45 }
   },
   {
     id: '2',
     name: 'Beta Tech Solutions',
+    paymentTerms: 30,
     revenue: { thisMonth: 2100, lastMonth: 6800, total: 28000 },
     payment: { averageDays: 52, overdueAmount: 3200, overdueCount: 1, lastPayment: '2023-12-15' },
     projects: { active: 1, completed: 4, onHold: 1 },
-    engagement: { lastActivity: '2024-01-05', hoursThisMonth: 12, communicationScore: 4 }
+    engagement: { lastActivity: '2024-01-05', hoursThisMonth: 12 }
   },
   {
     id: '3',
     name: 'Gamma Industries',
+    paymentTerms: 30,
     revenue: { thisMonth: 5200, lastMonth: 4800, total: 31000 },
     payment: { averageDays: 21, overdueAmount: 0, overdueCount: 0, lastPayment: '2024-01-12' },
     projects: { active: 3, completed: 6, onHold: 0 },
-    engagement: { lastActivity: '2024-01-14', hoursThisMonth: 38, communicationScore: 9 }
+    engagement: { lastActivity: '2024-01-14', hoursThisMonth: 38 }
   },
   {
     id: '4',
     name: 'Delta Consulting',
+    paymentTerms: 30,
     revenue: { thisMonth: 1200, lastMonth: 1800, total: 15000 },
     payment: { averageDays: 35, overdueAmount: 0, overdueCount: 0, lastPayment: '2024-01-08' },
     projects: { active: 0, completed: 3, onHold: 0 },
-    engagement: { lastActivity: '2023-12-20', hoursThisMonth: 8, communicationScore: 6 }
+    engagement: { lastActivity: '2023-12-20', hoursThisMonth: 8 }
   },
   {
     id: '5',
     name: 'Echo Innovations',
+    paymentTerms: 30,
     revenue: { thisMonth: 4800, lastMonth: 4200, total: 22000 },
     payment: { averageDays: 18, overdueAmount: 0, overdueCount: 0, lastPayment: '2024-01-13' },
     projects: { active: 2, completed: 5, onHold: 0 },
-    engagement: { lastActivity: '2024-01-14', hoursThisMonth: 32, communicationScore: 7 }
+    engagement: { lastActivity: '2024-01-14', hoursThisMonth: 32 }
   }
 ]
 
@@ -402,8 +419,8 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
       try {
         setLoading(true)
 
-        // Fetch real client data
-        const response = await fetch('/api/clients')
+        // Fetch real client data - only active and on_hold clients (Enhancement #2)
+        const response = await fetch('/api/clients?status=active,on_hold')
         if (!response.ok) {
           throw new Error('Failed to fetch clients')
         }
@@ -451,9 +468,11 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
 
             const lastMonthRevenue = lastMonthEntries.reduce((sum: number, entry: any) => sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
 
-            // Calculate project counts
-            const activeProjects = projects.filter((p: any) => p.active === true).length
-            const inactiveProjects = projects.filter((p: any) => p.active === false).length
+            // Calculate project counts by status (Enhancement #2)
+            const activeProjects = projects.filter((p: any) => p.status === 'active').length
+            const onHoldProjects = projects.filter((p: any) => p.status === 'on_hold').length
+            const completedProjects = projects.filter((p: any) => p.status === 'completed').length
+            const prospectProjects = projects.filter((p: any) => p.status === 'prospect').length
 
             // Calculate overdue amounts from invoices (exclude cancelled invoices)
             const currentDate = getCurrentDate()
@@ -487,6 +506,7 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
             return {
               id: client.id,
               name: client.name,
+              paymentTerms: client.default_payment_terms || 30, // Client's payment terms from database
               revenue: {
                 thisMonth: thisMonthRevenue,
                 lastMonth: lastMonthRevenue,
@@ -500,13 +520,12 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
               },
               projects: {
                 active: activeProjects,
-                completed: inactiveProjects,
-                onHold: 0 // Not tracked in current schema
+                completed: completedProjects,
+                onHold: onHoldProjects // Now properly tracked (Enhancement #2)
               },
               engagement: {
                 lastActivity: thisMonthEntries.length > 0 ? thisMonthEntries[thisMonthEntries.length - 1].entry_date : getCurrentDate().toISOString().split('T')[0],
-                hoursThisMonth: thisMonthHours,
-                communicationScore: thisMonthHours > 10 ? 8 : thisMonthHours > 5 ? 6 : 4 // Simple scoring based on hours
+                hoursThisMonth: thisMonthHours
               }
             }
           })

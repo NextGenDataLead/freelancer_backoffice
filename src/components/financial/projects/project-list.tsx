@@ -3,17 +3,18 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
-import { 
-  FolderOpen, 
-  Edit, 
-  Trash2, 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  FolderOpen,
+  Edit,
+  Trash2,
   Plus,
   Euro,
   Clock,
   ChevronDown,
   ChevronRight
 } from 'lucide-react'
+import type { ProjectStatus } from '@/lib/types'
 
 // Types
 interface Client {
@@ -31,6 +32,7 @@ interface Project {
   hourly_rate?: number
   client_id: string
   active: boolean
+  status?: ProjectStatus
   created_at: string
   clients: Client
 }
@@ -88,17 +90,16 @@ export function ProjectList({
     }
   }, [expanded, client.id])
 
-  const handleStatusToggle = async (project: Project) => {
+  const handleProjectStatusChange = async (project: Project, newStatus: ProjectStatus) => {
     const projectId = project.id
-    const newActiveStatus = !project.active
-    
+
     setUpdatingProjects(prev => new Set(prev).add(projectId))
-    
+
     try {
       const response = await fetch(`/api/projects/${projectId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: newActiveStatus })
+        body: JSON.stringify({ status: newStatus })
       })
 
       if (!response.ok) {
@@ -107,9 +108,9 @@ export function ProjectList({
       }
 
       // Update local state
-      setProjects(prev => prev.map(p => 
-        p.id === projectId 
-          ? { ...p, active: newActiveStatus }
+      setProjects(prev => prev.map(p =>
+        p.id === projectId
+          ? { ...p, status: newStatus, active: ['active', 'on_hold', 'prospect'].includes(newStatus) }
           : p
       ))
 
@@ -296,13 +297,23 @@ export function ProjectList({
                 </div>
 
                 <div className="flex items-center gap-2 ml-4">
-                  {/* Active Toggle */}
-                  <Switch
-                    checked={project.active}
-                    onCheckedChange={() => handleStatusToggle(project)}
+                  {/* Status Dropdown */}
+                  <Select
+                    value={project.status || 'active'}
                     disabled={isUpdating}
-                    className="scale-75"
-                  />
+                    onValueChange={(value) => handleProjectStatusChange(project, value as ProjectStatus)}
+                  >
+                    <SelectTrigger className="h-7 w-28 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="prospect">Prospect</SelectItem>
+                      <SelectItem value="active">Actief</SelectItem>
+                      <SelectItem value="on_hold">On Hold</SelectItem>
+                      <SelectItem value="completed">Afgerond</SelectItem>
+                      <SelectItem value="cancelled">Geannuleerd</SelectItem>
+                    </SelectContent>
+                  </Select>
 
                   {/* Actions */}
                   <div className="flex gap-1">

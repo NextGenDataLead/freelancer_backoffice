@@ -47,10 +47,28 @@ export const ExpenseCategorySchema = z.enum([
 ] as const);
 
 export const BusinessTypeSchema = z.enum([
-  'sole_trader', 
-  'partnership', 
-  'bv', 
+  'sole_trader',
+  'partnership',
+  'bv',
   'other'
+] as const);
+
+// Client Status Schema (Enhancement #2)
+export const ClientStatusSchema = z.enum([
+  'prospect',
+  'active',
+  'on_hold',
+  'completed',
+  'deactivated'
+] as const);
+
+// Project Status Schema (Enhancement #2)
+export const ProjectStatusSchema = z.enum([
+  'prospect',
+  'active',
+  'on_hold',
+  'completed',
+  'cancelled'
 ] as const);
 
 // ====================
@@ -392,7 +410,17 @@ export const ClientsQuerySchema = PaginationSchema.extend({
   search: z.string().optional(),
   is_business: z.coerce.boolean().optional(),
   is_supplier: z.coerce.boolean().optional(),
-  country_code: z.string().length(2).optional()
+  country_code: z.string().length(2).optional(),
+  // Support filtering by status (Enhancement #2)
+  // Can be single status or comma-separated list (e.g., "active,on_hold")
+  status: z.string().optional().transform((val) => {
+    if (!val) return undefined;
+    // Split comma-separated values and validate each
+    const statuses = val.split(',').map(s => s.trim());
+    return statuses.every(s => ['prospect', 'active', 'on_hold', 'completed', 'deactivated'].includes(s))
+      ? statuses
+      : undefined;
+  })
 });
 
 export const InvoicesQuerySchema = PaginationSchema.extend({

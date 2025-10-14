@@ -4,6 +4,7 @@ import { UnifiedFinancialDashboard } from '@/components/dashboard/unified-financ
 import { FinancialTabs } from '@/components/financial/financial-tabs'
 import { ProfitTargetSetupModalV2 } from '@/components/financial/profit-targets/profit-target-setup-modal-v2'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { UserButton } from '@clerk/nextjs'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useProfitTargets } from '@/hooks/use-profit-targets'
@@ -74,7 +75,8 @@ export default function FinancialDashboard() {
         {/* Tab Navigation */}
         <div className="border-b border-border/50 bg-background/80 backdrop-blur-sm sticky top-0 z-40">
           <div className="container mx-auto px-4 sm:px-6">
-            <TabsList className="grid w-full max-w-4xl mx-auto grid-cols-3 sm:grid-cols-6 h-auto p-1 bg-transparent">
+            <div className="flex items-center justify-between gap-4">
+              <TabsList className="grid w-full max-w-4xl grid-cols-3 sm:grid-cols-6 h-auto p-1 bg-transparent">
               <TabsTrigger
                 value="dashboard"
                 className="flex items-center gap-1.5 px-2 sm:px-3 py-2 text-xs sm:text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm"
@@ -124,6 +126,21 @@ export default function FinancialDashboard() {
                 <span className="sm:hidden">Tax</span>
               </TabsTrigger>
             </TabsList>
+
+            {/* User Avatar */}
+            <div className="flex-shrink-0">
+              <UserButton
+                appearance={{
+                  elements: {
+                    userButtonAvatarBox: "w-8 h-8",
+                    userButtonPopoverCard: "border border-border",
+                    userButtonPopoverActionButton: "hover:bg-accent",
+                  }
+                }}
+                afterSignOutUrl="/sign-in"
+              />
+            </div>
+          </div>
           </div>
         </div>
 

@@ -22,7 +22,17 @@ const ProjectsQuerySchema = z.object({
   limit: z.string().optional().default('20').transform(val => Math.min(parseInt(val, 10), 100)),
   search: z.string().optional(),
   client_id: z.string().uuid().optional(),
-  active: z.string().optional().transform(val => val === 'true' ? true : val === 'false' ? false : undefined)
+  active: z.string().optional().transform(val => val === 'true' ? true : val === 'false' ? false : undefined),
+  // Support filtering by status (Enhancement #2)
+  // Can be single status or comma-separated list (e.g., "active,on_hold")
+  status: z.string().optional().transform((val) => {
+    if (!val) return undefined;
+    // Split comma-separated values and validate each
+    const statuses = val.split(',').map(s => s.trim());
+    return statuses.every(s => ['prospect', 'active', 'on_hold', 'completed', 'cancelled'].includes(s))
+      ? statuses
+      : undefined;
+  })
 })
 
 /**
@@ -79,6 +89,16 @@ export async function GET(request: Request) {
 
     if (validatedQuery.active !== undefined) {
       query = query.eq('active', validatedQuery.active)
+    }
+
+    // Apply status filter (Enhancement #2)
+    // Supports single status or array of statuses (e.g., ['active', 'on_hold'])
+    if (validatedQuery.status && Array.isArray(validatedQuery.status) && validatedQuery.status.length > 0) {
+      if (validatedQuery.status.length === 1) {
+        query = query.eq('status', validatedQuery.status[0])
+      } else {
+        query = query.in('status', validatedQuery.status)
+      }
     }
 
     // Apply pagination

@@ -6,12 +6,15 @@ import { useRouter } from 'next/navigation'
 import { UserButton } from '@clerk/nextjs'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
-import { ActiveTimerWidget } from './active-timer-widget'
 import { ClientHealthDashboard } from './client-health-dashboard'
 import { CashFlowForecast } from './cash-flow-forecast'
 import { FinancialCharts } from '../financial/charts/financial-charts'
+import { QuickActionsBar } from './quick-actions-bar'
+import { CompactBusinessHealth } from './compact-business-health'
+import { CompactMetricCard } from './compact-metric-card'
 import { useProfitTargets } from '@/hooks/use-profit-targets'
 import { smartRulesEngine, type BusinessData, type SmartAlert } from '@/lib/smart-rules-engine'
 import { healthScoreEngine, type HealthScoreInputs, type HealthScoreOutputs } from '@/lib/health-score-engine'
@@ -210,6 +213,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
   const [error, setError] = useState<string | null>(null)
   const [smartAlerts, setSmartAlerts] = useState<SmartAlert[]>([])
   const [healthScoreOpen, setHealthScoreOpen] = useState(false)
+  const [analyticsOpen, setAnalyticsOpen] = useState(false)
   const [showExplanation, setShowExplanation] = useState<string | null>(null)
   const [showHealthReport, setShowHealthReport] = useState(false)
   const [healthScoreResults, setHealthScoreResults] = useState<HealthScoreOutputs | null>(null)
@@ -733,6 +737,11 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
     router.push('/dashboard/financieel?tab=uitgaven&action=add_expense')
   }
 
+  const handleViewTax = () => {
+    // Navigate to tax/reporting section (we'll implement this later)
+    router.push('/dashboard/financieel?tab=belasting')
+  }
+
   const handleSmartAction = (alert: SmartAlert, actionIndex: number) => {
     const action = alert.actions[actionIndex]
     console.log(`🎯 Smart action triggered:`, action)
@@ -858,789 +867,164 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 sm:px-6 py-6 space-y-8">
 
-        {/* Compact Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight">Financial Command Center</h1>
-            <p className="text-sm text-muted-foreground">
-              Your unified business intelligence dashboard
-            </p>
-          </div>
-          <UserButton
-            appearance={{
-              elements: {
-                userButtonAvatarBox: "w-8 h-8",
-                userButtonPopoverCard: "border border-border",
-                userButtonPopoverActionButton: "hover:bg-accent",
-              }
-            }}
-            afterSignOutUrl="/sign-in"
+        {/* Quick Actions Bar - Priority Actions (Sticky) */}
+        <TooltipProvider>
+          <QuickActionsBar
+            onStartTimer={handleStartTimer}
+            onLogExpense={handleLogExpense}
+            onCreateInvoice={handleCreateInvoice}
+            onViewTax={handleViewTax}
+            unbilledAmount={dashboardMetrics?.factureerbaar || 0}
+            taxQuarterStatus={75} // TODO: Calculate actual tax quarter progress
           />
-        </div>
+        </TooltipProvider>
 
         {/* Cohesive 3-Section Layout */}
         <div className="space-y-8">
 
-          {/* Section 1: Collapsible Business Health Score + Key Metrics */}
+          {/* Section 1: Compact Business Health + Monthly Metrics */}
           <div className="space-y-6">
-            {/* Collapsible Business Health Score */}
-            <Collapsible open={healthScoreOpen} onOpenChange={setHealthScoreOpen}>
-              <Card className="p-4 bg-blue-500/[0.02] border-blue-500/10">
-                <CollapsibleTrigger className="w-full">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      {/* Animated Health Icon */}
-                      <div className={`relative p-3 rounded-xl transition-all duration-300 border-2 ${
-                        healthScores.totalRounded >= 85 ? 'bg-gradient-to-br from-green-500/20 to-green-600/30 border-green-500/40' :
-                        healthScores.totalRounded >= 70 ? 'bg-gradient-to-br from-blue-500/20 to-blue-600/30 border-blue-500/40' :
-                        healthScores.totalRounded >= 50 ? 'bg-gradient-to-br from-orange-500/20 to-orange-600/30 border-orange-500/40' :
-                        'bg-gradient-to-br from-red-500/20 to-red-600/30 border-red-500/40'
-                      }`}
-                      style={{
-                        animation: healthScores.totalRounded < 70
-                          ? 'pulse 1s ease-in-out 3' // Pulse 3 times (3 seconds total)
-                          : undefined
-                      }}>
-                        <Activity className={`h-6 w-6 transition-colors duration-300 ${
-                          healthScores.totalRounded >= 85 ? 'text-green-500' :
-                          healthScores.totalRounded >= 70 ? 'text-blue-500' :
-                          healthScores.totalRounded >= 50 ? 'text-orange-500' : 'text-red-500'
-                        }`} />
+            {/* Compact Business Health Score */}
+            <TooltipProvider>
+              <CompactBusinessHealth
+                healthScores={healthScores}
+                dateRange={dateRanges.rolling30}
+                onShowHealthReport={() => setShowHealthReport(true)}
+                onShowExplanation={setShowExplanation}
+              />
+            </TooltipProvider>
 
-                        {/* Achievement Ring */}
-                        <div className="absolute -top-1 -right-1">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
-                            healthScores.totalRounded >= 85 ? 'bg-green-500 text-white' :
-                            healthScores.totalRounded >= 70 ? 'bg-blue-500 text-white' :
-                            healthScores.totalRounded >= 50 ? 'bg-orange-500 text-white' : 'bg-red-500 text-white'
-                          }`}>
-                            {healthScores.totalRounded >= 85 ? '👑' :
-                             healthScores.totalRounded >= 70 ? '⭐' :
-                             healthScores.totalRounded >= 50 ? '📊' : '⚠️'}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="text-left">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-lg">Business Health Score</h3>
-                            <Badge className="bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border-blue-500/20">
-                              <BarChart3 className="h-3 w-3 mr-1" />
-                              Rolling 30d
-                            </Badge>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button className="text-muted-foreground hover:text-foreground transition-colors">
-                                  <HelpCircle className="h-4 w-4" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs">
-                                <p className="font-semibold mb-1">Long-term Health Monitor</p>
-                                <p className="text-xs">Tracks your business health over the last 30 days ({dateRanges.rolling30}). This provides stable trend analysis and filters out day-to-day fluctuations.</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          {/* Streak indicator - gamification prep */}
-                          <div className="px-2 py-1 bg-primary/10 rounded-full">
-                            <span className="text-xs font-semibold text-primary">Day 15</span>
-                          </div>
-                        </div>
-                        {/* Date range display */}
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {dateRanges.rolling30} • Long-term trend tracking
-                        </p>
-                        <p className={`text-sm font-medium ${
-                          healthScores.totalRounded >= 85 ? 'text-green-600' :
-                          healthScores.totalRounded >= 70 ? 'text-blue-600' :
-                          healthScores.totalRounded >= 50 ? 'text-orange-600' : 'text-red-600'
-                        }`}>
-                          {healthScores.totalRounded >= 85 ? '🚀 Crushing your targets! Keep it up!' :
-                           healthScores.totalRounded >= 70 ? '💪 Strong performance this month' :
-                           healthScores.totalRounded >= 50 ? '📈 Room for improvement - you got this!' :
-                           '🎯 Let\'s turn this around together!'
-                          }
-                        </p>
-
-                        {/* Next milestone indicator */}
-                        <div className="mt-1">
-                          {healthScores.totalRounded < 85 && (
-                            <p className="text-xs text-muted-foreground">
-                              {85 - healthScores.totalRounded} points to next level
-                              {healthScores.totalRounded >= 70 ? ' 👑' : healthScores.totalRounded >= 50 ? ' ⭐' : ' 📊'}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      {/* Central Health Report Button */}
-                      <button
-                        onClick={() => setShowHealthReport(true)}
-                        className="group relative px-6 py-3 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border-2 border-primary/20 hover:border-primary/40 transition-all duration-300 hover:scale-105 hover:shadow-lg"
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className="p-1.5 rounded-lg bg-primary/20 group-hover:bg-primary/30 transition-colors">
-                            <FileText className="h-4 w-4 text-primary" />
-                          </div>
-                          <div className="text-left">
-                            <div className="text-sm font-semibold text-primary">Health Report</div>
-                            <div className="text-xs text-muted-foreground">Full Analysis</div>
-                          </div>
-                        </div>
-                        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl" />
-                      </button>
-
-                      {/* Enhanced Score Display */}
-                      <div className="text-right">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className={`text-4xl font-black tracking-tight transition-all duration-500 ${
-                            healthScores.totalRounded >= 85 ? 'text-green-500 drop-shadow-lg' :
-                            healthScores.totalRounded >= 70 ? 'text-blue-500 drop-shadow-lg' :
-                            healthScores.totalRounded >= 50 ? 'text-orange-500 drop-shadow-lg' : 'text-red-500 drop-shadow-lg'
-                          }`}>
-                            {healthScores.totalRounded}
-                          </div>
-                          <div className="text-xl text-muted-foreground font-medium">/100</div>
-                        </div>
-
-                        {/* Achievement Badge */}
-                        <Badge className={`text-xs font-bold px-3 py-1 ${
-                          healthScores.totalRounded >= 85 ? 'bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg' :
-                          healthScores.totalRounded >= 70 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' :
-                          healthScores.totalRounded >= 50 ? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg' :
-                          'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg'
-                        }`}>
-                          {healthScores.totalRounded >= 85 ? '👑 LEGEND' :
-                           healthScores.totalRounded >= 70 ? '⭐ CHAMPION' :
-                           healthScores.totalRounded >= 50 ? '📊 BUILDER' : '🎯 STARTER'
-                          }
-                        </Badge>
-                      </div>
-
-                      {/* Expand/Collapse with better animation */}
-                      <div className="flex items-center">
-                        <div className={`p-2 rounded-full transition-all duration-300 ${
-                          healthScoreOpen ? 'bg-primary/10 rotate-180' : 'bg-muted/50 hover:bg-primary/10'
-                        }`}>
-                          <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-300" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CollapsibleTrigger>
-
-                <CollapsibleContent className="space-y-6 mt-6">
-                  {/* Enhanced Health Metrics - More Engaging & Gamified */}
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4 md:gap-3">
-                    {/* Profit Score Card */}
-                    <div
-                      onClick={() => setShowExplanation('profit')}
-                      className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 p-3 transition-all duration-300 hover:from-primary/10 hover:to-primary/20 hover:scale-105 hover:shadow-lg border border-primary/20 hover:border-primary/40 cursor-pointer"
-                    >
-                      <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1 rounded-lg bg-primary/20 group-hover:bg-primary/30 transition-colors">
-                              <DollarSign className="h-3.5 w-3.5 text-primary" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1">
-                                <p className="text-xs font-medium text-left leading-none">Total Profit (Rolling 30d)</p>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Info className="h-3 w-3 text-muted-foreground opacity-50 hover:opacity-100 transition-opacity" />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-xs">
-                                    <p className="text-xs">Based on last 30 days of revenue and costs. Different from Monthly Progress which tracks Sept 1-{getCurrentDate().getDate()} only.</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-                              <p className="text-xs text-muted-foreground leading-none">
-                                {healthScores.profit >= 20 ? 'Crushing it!' :
-                                 healthScores.profit >= 15 ? 'Strong performance' :
-                                 healthScores.profit >= 10 ? 'Room to grow' : 'Needs attention'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-lg font-bold text-primary">{healthScores.profit}</span>
-                              <span className="text-xs text-muted-foreground">/25</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="w-full bg-primary/20 rounded-full h-1 overflow-hidden">
-                          <div
-                            className="bg-gradient-to-r from-primary to-primary/80 h-1 rounded-full transition-all duration-700 ease-out"
-                            style={{ width: `${(healthScores.profit / 25) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    </div>
-
-                    {/* Cash Flow Score Card */}
-                    <div
-                      onClick={() => setShowExplanation('cashflow')}
-                      className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-green-500/5 to-green-500/10 p-3 transition-all duration-300 hover:from-green-500/10 hover:to-green-500/20 hover:scale-105 hover:shadow-lg border border-green-500/20 hover:border-green-500/40 cursor-pointer"
-                    >
-                      <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1 rounded-lg bg-green-500/20 group-hover:bg-green-500/30 transition-colors">
-                              <Activity className="h-3.5 w-3.5 text-green-500" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-left leading-none">Cash Flow</p>
-                              <p className="text-xs text-muted-foreground leading-none">
-                                {healthScores.cashflow >= 20 ? 'Money flowing!' :
-                                 healthScores.cashflow >= 15 ? 'Healthy collections' :
-                                 healthScores.cashflow >= 10 ? 'Some delays' : 'Collection issues'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-lg font-bold text-green-600">{healthScores.cashflow}</span>
-                              <span className="text-xs text-muted-foreground">/25</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="w-full bg-green-500/20 rounded-full h-1 overflow-hidden">
-                          <div
-                            className="bg-gradient-to-r from-green-500 to-green-400 h-1 rounded-full transition-all duration-700 ease-out"
-                            style={{ width: `${(healthScores.cashflow / 25) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    </div>
-
-                    {/* Efficiency Score Card */}
-                    <div
-                      onClick={() => setShowExplanation('efficiency')}
-                      className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-500/5 to-blue-500/10 p-3 transition-all duration-300 hover:from-blue-500/10 hover:to-blue-500/20 hover:scale-105 hover:shadow-lg border border-blue-500/20 hover:border-blue-500/40 cursor-pointer"
-                    >
-                      <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1 rounded-lg bg-blue-500/20 group-hover:bg-blue-500/30 transition-colors">
-                              <Clock className="h-3.5 w-3.5 text-blue-500" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1">
-                                <p className="text-xs font-medium text-left leading-none">Efficiency (Rolling 30d)</p>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Info className="h-3 w-3 text-muted-foreground opacity-50 hover:opacity-100 transition-opacity" />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-xs">
-                                    <p className="text-xs">Tracks billable hours, work patterns, and productivity over the last 30 days. Different from Monthly Progress hours which only count this month.</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-                              <p className="text-xs text-muted-foreground leading-none">
-                                {healthScores.efficiency >= 20 ? 'Peak productivity!' :
-                                 healthScores.efficiency >= 15 ? 'Great momentum' :
-                                 healthScores.efficiency >= 10 ? 'Building steam' : 'Ramp up needed'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-lg font-bold text-blue-600">{healthScores.efficiency}</span>
-                              <span className="text-xs text-muted-foreground">/25</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="w-full bg-blue-500/20 rounded-full h-1 overflow-hidden">
-                          <div
-                            className="bg-gradient-to-r from-blue-500 to-blue-400 h-1 rounded-full transition-all duration-700 ease-out"
-                            style={{ width: `${(healthScores.efficiency / 25) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    </div>
-
-                    {/* Risk Management Score Card */}
-                    <div
-                      onClick={() => setShowExplanation('risk')}
-                      className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-500/5 to-purple-500/10 p-3 transition-all duration-300 hover:from-purple-500/10 hover:to-purple-500/20 hover:scale-105 hover:shadow-lg border border-purple-500/20 hover:border-purple-500/40 cursor-pointer"
-                    >
-                      <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1 rounded-lg bg-purple-500/20 group-hover:bg-purple-500/30 transition-colors">
-                              <Users className="h-3.5 w-3.5 text-purple-500" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-left leading-none">Risk Management</p>
-                              <p className="text-xs text-muted-foreground leading-none">
-                                {healthScores.risk >= 20 ? 'Well protected!' :
-                                 healthScores.risk >= 15 ? 'Manageable risks' :
-                                 healthScores.risk >= 10 ? 'Some concerns' : 'High risk areas'}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-lg font-bold text-purple-600">{healthScores.risk}</span>
-                              <span className="text-xs text-muted-foreground">/25</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="w-full bg-purple-500/20 rounded-full h-1 overflow-hidden">
-                          <div
-                            className="bg-gradient-to-r from-purple-500 to-purple-400 h-1 rounded-full transition-all duration-700 ease-out"
-                            style={{ width: `${(healthScores.risk / 25) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                    </div>
-                  </div>
-
-                </CollapsibleContent>
-              </Card>
-            </Collapsible>
-
-            {/* Visual Divider */}
-            <div className="relative my-8">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border/50"></div>
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-background px-4 text-xs text-muted-foreground uppercase tracking-wider">
-                  Monthly Metrics
-                </span>
-              </div>
-            </div>
-
-            {/* Monthly Progress Section Header */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
+            {/* Monthly Progress - Compact Cards */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-green-600" />
-                  <h2 className="text-xl font-bold">Monthly Progress</h2>
+                  <h3 className="text-base font-semibold">Monthly Progress</h3>
+                  <Badge className="bg-green-500/10 text-green-600 text-xs">
+                    <Calendar className="h-3 w-3 mr-1" />
+                    MTD
+                  </Badge>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3 w-3 text-green-600/50 hover:text-green-600 cursor-help transition-colors" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs" side="top">
+                      <p className="text-xs font-semibold mb-1">Month-to-Date Progress</p>
+                      <p className="text-xs">Monthly Progress tracks your current month ({dateRanges.mtd}) toward tactical monthly goals. Metrics reset at the start of each month for fresh monthly targets.</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-                <Badge className="bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/20">
-                  <Calendar className="h-3 w-3 mr-1" />
-                  MTD
-                </Badge>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button className="text-muted-foreground hover:text-foreground transition-colors">
-                      <HelpCircle className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs">
-                    <p className="font-semibold mb-1">Monthly Goal Tracker</p>
-                    <p className="text-xs">Tracks your progress toward monthly targets from the 1st to today ({dateRanges.mtd}). Use this for tactical daily decisions and monthly planning.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {dateRanges.mtd} • Track this month's goals
-              </p>
-            </div>
-
-            {/* Dynamic Card Metrics System - Adapts to Business Model */}
-            <div className={`grid grid-cols-1 sm:grid-cols-2 ${subscriptionEnabled ? 'xl:grid-cols-5' : 'xl:grid-cols-3'} gap-4 sm:gap-6`}>
-              {/* Card 1: Revenue MTD */}
-              <div className="mobile-card-glass space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-accent/20 rounded-lg">
-                      <Euro className="h-5 w-5 text-accent chart-glow-orange" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold mobile-sharp-text">Revenue</h3>
-                      <p className="text-sm text-muted-foreground h-8 flex flex-col justify-center">
-                        <span>Total revenue</span>
-                        <span>MTD</span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className={`mobile-status-indicator ${
-                    (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 100 ? 'status-active' :
-                    (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 80 ? 'status-warning' : 'status-inactive'
-                  }`}>
-                    <span>{Math.round((((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100)}%</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold metric-number text-accent">
-                      {formatCurrency(Math.round((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))))}
-                    </span>
-                    <span className="text-sm text-muted-foreground">/ €{Math.round(mtdCalculations.mtdRevenueTarget / 1000)}K MTD <span className="text-xs opacity-75">(€{Math.round(mtdCalculations.monthlyRevenueTarget / 1000)}K)</span></span>
-                  </div>
-                  <div className="flex items-center gap-2 h-8 flex-col justify-center">
-                    <div className="flex items-center gap-2">
-                      {mtdComparison.trend === 'positive' ? (
-                        <TrendingUp className="h-4 w-4 text-green-400" />
-                      ) : mtdComparison.trend === 'negative' ? (
-                        <TrendingDown className="h-4 w-4 text-red-400" />
-                      ) : (
-                        <TrendingUp className="h-4 w-4 text-orange-400" />
-                      )}
-                      <span className={`text-sm font-medium ${
-                        mtdComparison.trend === 'positive' ? 'text-green-400' :
-                        mtdComparison.trend === 'negative' ? 'text-red-400' : 'text-orange-400'
-                      }`}>
-                        {mtdComparison.percentageChange >= 0 ? '+' : ''}{mtdComparison.percentageChange.toFixed(1)}%
-                      </span>
-                      <span className="text-sm text-muted-foreground">vs prev MTD</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="relative progress-bar">
-                    <div
-                      className={`progress-fill ${
-                        (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.monthlyRevenueTarget) * 100 >= 100 ? 'progress-fill-success' :
-                        (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.monthlyRevenueTarget) * 100 >= 80 ? 'progress-fill-warning' : 'progress-fill-warning'
-                      }`}
-                      style={{ width: `${Math.min((((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.monthlyRevenueTarget) * 100, 100)}%` }}
-                    />
-                    {/* MTD Target Line */}
-                    <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-primary opacity-90"
-                      style={{ left: `${Math.min((mtdCalculations.mtdRevenueTarget / mtdCalculations.monthlyRevenueTarget) * 100, 100)}%` }}
-                      title={`MTD Target: ${formatCurrency(mtdCalculations.mtdRevenueTarget)}`}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Time-based</p>
-                    <p className="text-sm font-bold text-primary">
-                      {formatCurrency(timeStats?.thisMonth?.billableRevenue || 0)}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Subscriptions</p>
-                    <p className="text-sm font-bold text-emerald-500">
-                      {formatCurrency(Math.round((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0)))}
-                    </p>
-                  </div>
-                </div>
+                <p className="text-xs text-muted-foreground">{dateRanges.mtd}</p>
               </div>
 
-              {/* Card 2: Hours Tracking */}
-              <div className="mobile-card-glass space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-success/20 rounded-lg">
-                      <Clock className="h-5 w-5 text-green-400 chart-glow-green" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold mobile-sharp-text">Hours</h3>
-                      <p className="text-sm text-muted-foreground h-8 flex flex-col justify-center">
-                        <span>Billable</span>
-                        <span>hours MTD</span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className={`mobile-status-indicator ${
-                    ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 100 ? 'status-active' :
-                    ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 75 ? 'status-warning' : 'status-inactive'
-                  }`}>
-                    <span>{Math.round(((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100)}%</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold metric-number text-green-400">{formatHours(timeStats?.thisMonth.billableHours || 0)}</span>
-                    <span className="text-sm text-muted-foreground">/ {formatHours(mtdCalculations.mtdHoursTarget)} MTD <span className="text-xs opacity-75">({formatHours(mtdCalculations.monthlyHoursTarget)})</span></span>
-                  </div>
-                  <div className="flex items-center gap-2 h-8 flex-col justify-center">
-                    <div className="flex items-center gap-2">
-                      {(timeStats?.thisWeek.trend === 'positive') ? (
-                        <TrendingUp className="h-4 w-4 text-green-400" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-red-400" />
-                      )}
-                      <span className={`text-sm font-medium ${
-                        (timeStats?.thisWeek.trend === 'positive') ? 'text-green-400' : 'text-red-400'
-                      }`}>
-                        {(timeStats?.thisWeek.difference || 0) >= 0 ? '+' : ''}{(timeStats?.thisWeek.difference || 0).toFixed(1)}h
-                      </span>
-                      <span className="text-sm text-muted-foreground">this week</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="relative progress-bar">
-                    <div
-                      className={`progress-fill ${
-                        ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.monthlyHoursTarget) * 100 >= 100 ? 'progress-fill-success' :
-                        ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.monthlyHoursTarget) * 100 >= 75 ? 'progress-fill-warning' : 'progress-fill-primary'
-                      }`}
-                      style={{ width: `${Math.min(((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.monthlyHoursTarget) * 100, 100)}%` }}
-                    />
-                    {/* MTD Target Line */}
-                    <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-green-500 opacity-90"
-                      style={{ left: `${Math.min((mtdCalculations.mtdHoursTarget / mtdCalculations.monthlyHoursTarget) * 100, 100)}%` }}
-                      title={`MTD Target: ${formatHours(mtdCalculations.mtdHoursTarget)}`}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Non-billable</p>
-                    <p className="text-sm font-bold text-muted-foreground">{formatHours(timeStats?.thisMonth.nonBillableHours || 0)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Unbilled</p>
-                    <p className="text-sm font-bold text-orange-400">{formatHours(timeStats?.unbilled.hours || 0)}</p>
-                  </div>
-                </div>
-              </div>
+              <div className={`grid grid-cols-1 sm:grid-cols-2 ${subscriptionEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3`}>
+                {/* Revenue Card */}
+                <CompactMetricCard
+                  icon={Euro}
+                  iconColor="bg-accent/20 text-accent"
+                  title="Revenue MTD"
+                  value={formatCurrency(Math.round((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))))}
+                  subtitle={`/ €${Math.round(mtdCalculations.monthlyRevenueTarget / 1000)}K`}
+                  progress={(((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.monthlyRevenueTarget) * 100}
+                  progressColor="bg-accent"
+                  targetLine={(mtdCalculations.mtdRevenueTarget / mtdCalculations.monthlyRevenueTarget) * 100}
+                  badge={{
+                    label: `${Math.round((((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100)}%`,
+                    variant: (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 100 ? 'success' :
+                             (((timeStats?.thisMonth?.billableRevenue || 0) + ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0))) / mtdCalculations.mtdRevenueTarget) * 100 >= 80 ? 'warning' : 'danger'
+                  }}
+                  trendComparison={{
+                    icon: mtdComparison.trend === 'positive' ? TrendingUp : TrendingDown,
+                    value: `${mtdComparison.difference >= 0 ? '+' : ''}€${(Math.abs(mtdComparison.difference) / 1000).toFixed(1)}K (${mtdComparison.percentageChange >= 0 ? '+' : ''}${mtdComparison.percentageChange.toFixed(1)}%)`,
+                    label: 'vs prev MTD',
+                    isPositive: mtdComparison.trend === 'positive'
+                  }}
+                  splitMetrics={{
+                    label1: 'Time-based',
+                    value1: formatCurrency(timeStats?.thisMonth?.billableRevenue || 0),
+                    label2: 'Subscriptions',
+                    value2: formatCurrency(Math.round((timeStats?.subscription?.monthlyActiveUsers?.current || 0) * (timeStats?.subscription?.averageSubscriptionFee?.current || 0)))
+                  }}
+                />
 
-              {/* Card 3: Average Hourly Rate */}
-              <div className="mobile-card-glass space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-500/20 rounded-lg">
-                      <DollarSign className="h-5 w-5 text-blue-400 chart-glow-blue" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold mobile-sharp-text">Avg Rate</h3>
-                      <p className="text-sm text-muted-foreground h-8 flex flex-col justify-center">
-                        <span>Hourly</span>
-                        <span>consultancy</span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className={`mobile-status-indicator ${
-                    ((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) >= 80 ? 'status-active' :
-                    ((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) >= 60 ? 'status-warning' : 'status-inactive'
-                  }`}>
-                    <span>{Math.round((((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) / 100) * 100)}%</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold metric-number text-blue-400">
-                      €{(timeStats?.thisMonth.billableHours || 0) > 0 ? ((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours).toFixed(1) : '0'}
-                    </span>
-                    <span className="text-sm text-muted-foreground">/ €{profitTargets?.target_hourly_rate || 100} target</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 h-8 flex-col justify-center">
-                  <div className="flex items-center gap-2">
-                    {rateComparison.trend === 'positive' ? (
-                      <TrendingUp className="h-4 w-4 text-green-400" />
-                    ) : rateComparison.trend === 'negative' ? (
-                      <TrendingDown className="h-4 w-4 text-red-400" />
-                    ) : (
-                      <TrendingUp className="h-4 w-4 text-orange-400" />
-                    )}
-                    <span className={`text-sm font-medium ${
-                      rateComparison.trend === 'positive' ? 'text-green-400' :
-                      rateComparison.trend === 'negative' ? 'text-red-400' : 'text-orange-400'
-                    }`}>
-                      {rateComparison.percentageChange >= 0 ? '+' : ''}{rateComparison.percentageChange.toFixed(1)}%
-                    </span>
-                    <span className="text-sm text-muted-foreground">vs prev month</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="relative progress-bar">
-                    <div
-                      className={`progress-fill ${
-                        ((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) >= 80 ? 'progress-fill-success' :
-                        ((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) >= 60 ? 'progress-fill-warning' : 'progress-fill-primary'
-                      }`}
-                      style={{ width: `${Math.min(((timeStats?.thisMonth.billableHours || 0) > 0 ? Math.round((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0), 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Billable Hours</p>
-                    <p className="text-sm font-bold text-primary">{formatHours(timeStats?.thisMonth.billableHours || 0)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Revenue</p>
-                    <p className="text-sm font-bold text-blue-400">{formatCurrency(timeStats?.thisMonth.billableRevenue || 0)}</p>
-                  </div>
-                </div>
-              </div>
+                {/* Hours Card */}
+                <CompactMetricCard
+                  icon={Clock}
+                  iconColor="bg-green-500/20 text-green-600"
+                  title="Hours MTD"
+                  value={`${timeStats?.thisMonth.billableHours || 0}h`}
+                  subtitle={`/ ${Math.round(mtdCalculations.mtdHoursTarget)}h`}
+                  progress={((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100}
+                  progressColor="bg-green-500"
+                  badge={{
+                    label: `${Math.round(((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100)}%`,
+                    variant: ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 100 ? 'success' :
+                             ((timeStats?.thisMonth.billableHours || 0) / mtdCalculations.mtdHoursTarget) * 100 >= 75 ? 'warning' : 'danger'
+                  }}
+                  trendComparison={{
+                    icon: (timeStats?.thisWeek.trend === 'positive') ? TrendingUp : TrendingDown,
+                    value: `${(timeStats?.thisWeek.difference || 0) >= 0 ? '+' : ''}${(timeStats?.thisWeek.difference || 0).toFixed(1)}h`,
+                    label: 'this week',
+                    isPositive: timeStats?.thisWeek.trend === 'positive'
+                  }}
+                  splitMetrics={{
+                    label1: 'Non-billable',
+                    value1: `${timeStats?.thisMonth.nonBillableHours || 0}h`,
+                    label2: 'Unbilled',
+                    value2: `${timeStats?.unbilled.hours || 0}h`
+                  }}
+                />
 
-              {/* Card 4: Monthly Active Users - Only show if subscription enabled */}
-              {subscriptionEnabled && (
-              <div className="mobile-card-glass space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-500/20 rounded-lg">
-                      <Users className="h-5 w-5 text-purple-400 chart-glow-purple" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold mobile-sharp-text">MAU</h3>
-                      <p className="text-sm text-muted-foreground h-8 flex flex-col justify-center">
-                        <span>Active</span>
-                        <span>users</span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className={`mobile-status-indicator ${
-                    ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100 >= 100 ? 'status-active' :
-                    ((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100 >= 80 ? 'status-warning' : 'status-inactive'
-                  }`}>
-                    <span>{Math.round(((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100)}%</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold metric-number text-purple-400">
-                      {(timeStats?.subscription?.monthlyActiveUsers?.current || 0).toLocaleString()}
-                    </span>
-                    <span className="text-sm text-muted-foreground">/ 15 target</span>
-                  </div>
-                  <div className="flex items-center gap-2 h-8 flex-col justify-center">
-                    <div className="flex items-center gap-2">
-                      {(timeStats?.subscription?.monthlyActiveUsers?.trend === 'positive') ? (
-                        <TrendingUp className="h-4 w-4 text-green-400" />
-                      ) : (timeStats?.subscription?.monthlyActiveUsers?.trend === 'negative') ? (
-                        <TrendingDown className="h-4 w-4 text-red-400" />
-                      ) : (
-                        <Activity className="h-4 w-4 text-orange-400" />
-                      )}
-                      <span className={`text-sm font-medium ${
-                        (timeStats?.subscription?.monthlyActiveUsers?.trend === 'positive') ? 'text-green-400' :
-                        (timeStats?.subscription?.monthlyActiveUsers?.trend === 'negative') ? 'text-red-400' : 'text-orange-400'
-                      }`}>
-                        {(timeStats?.subscription?.monthlyActiveUsers?.growth || 0) >= 0 ? '+' : ''}
-                        {Math.round(timeStats?.subscription?.monthlyActiveUsers?.growth || 0)}%
-                      </span>
-                      <span className="text-sm text-muted-foreground">vs last month</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="relative progress-bar">
-                    <div
-                      className={`progress-fill ${
-                        (timeStats?.subscription?.monthlyActiveUsers?.trend === 'positive') ? 'progress-fill-success' :
-                        (timeStats?.subscription?.monthlyActiveUsers?.trend === 'neutral') ? 'progress-fill-warning' : 'progress-fill-primary'
-                      }`}
-                      style={{ width: `${Math.min(((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Current</p>
-                    <p className="text-sm font-bold text-purple-400">{(timeStats?.subscription?.monthlyActiveUsers?.current || 0).toLocaleString()}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Previous</p>
-                    <p className="text-sm font-bold text-muted-foreground">{(timeStats?.subscription?.monthlyActiveUsers?.previous || 0).toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-              )}
+                {/* Avg Rate Card */}
+                <CompactMetricCard
+                  icon={Target}
+                  iconColor="bg-blue-500/20 text-blue-600"
+                  title="Avg Rate"
+                  value={`€${(timeStats?.thisMonth.billableHours || 0) > 0 ? ((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours).toFixed(0) : '0'}`}
+                  subtitle={`/ €${profitTargets?.target_hourly_rate || 100} target`}
+                  progress={((timeStats?.thisMonth.billableHours || 0) > 0 ? ((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) / (profitTargets?.target_hourly_rate || 100) * 100}
+                  progressColor="bg-blue-500"
+                  badge={{
+                    label: `${Math.round((((timeStats?.thisMonth.billableHours || 0) > 0 ? ((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) / (profitTargets?.target_hourly_rate || 100)) * 100)}%`,
+                    variant: (((timeStats?.thisMonth.billableHours || 0) > 0 ? ((timeStats?.thisMonth.billableRevenue || 0) / timeStats.thisMonth.billableHours) : 0) / (profitTargets?.target_hourly_rate || 100)) * 100 >= 100 ? 'success' : 'warning'
+                  }}
+                  trendComparison={{
+                    icon: rateComparison.trend === 'positive' ? TrendingUp : rateComparison.trend === 'negative' ? TrendingDown : TrendingUp,
+                    value: `${rateComparison.percentageChange >= 0 ? '+' : ''}${rateComparison.percentageChange.toFixed(1)}%`,
+                    label: 'vs prev month',
+                    isPositive: rateComparison.trend === 'positive'
+                  }}
+                  splitMetrics={{
+                    label1: 'Billable Hours',
+                    value1: `${timeStats?.thisMonth.billableHours || 0}h`,
+                    label2: 'Revenue',
+                    value2: formatCurrency(timeStats?.thisMonth.billableRevenue || 0)
+                  }}
+                />
 
-              {/* Card 5: Average Subscription Fee - Only show if subscription enabled */}
-              {subscriptionEnabled && (
-              <div className="mobile-card-glass space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-emerald-500/20 rounded-lg">
-                      <Target className="h-5 w-5 text-emerald-400 chart-glow-emerald" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold mobile-sharp-text">Avg Fee</h3>
-                      <p className="text-sm text-muted-foreground h-8 flex flex-col justify-center">
-                        <span>Subscription</span>
-                        <span>per user</span>
-                      </p>
-                    </div>
-                  </div>
-                  <div className={`mobile-status-indicator ${
-                    ((timeStats?.subscription?.averageSubscriptionFee?.current || 0) / 75) * 100 >= 100 ? 'status-active' :
-                    ((timeStats?.subscription?.averageSubscriptionFee?.current || 0) / 75) * 100 >= 80 ? 'status-warning' : 'status-inactive'
-                  }`}>
-                    <span>{Math.round(((timeStats?.subscription?.averageSubscriptionFee?.current || 0) / 75) * 100)}%</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold metric-number text-emerald-400">
-                      €{(timeStats?.subscription?.averageSubscriptionFee?.current || 0).toFixed(1)}
-                    </span>
-                    <span className="text-sm text-muted-foreground">/ €75 target</span>
-                  </div>
-                  <div className="flex items-center gap-2 h-8 flex-col justify-center">
-                    <div className="flex items-center gap-2">
-                      {(timeStats?.subscription?.averageSubscriptionFee?.trend === 'positive') ? (
-                        <TrendingUp className="h-4 w-4 text-green-400" />
-                      ) : (timeStats?.subscription?.averageSubscriptionFee?.trend === 'negative') ? (
-                        <TrendingDown className="h-4 w-4 text-red-400" />
-                      ) : (
-                        <Activity className="h-4 w-4 text-orange-400" />
-                      )}
-                      <span className={`text-sm font-medium ${
-                        (timeStats?.subscription?.averageSubscriptionFee?.trend === 'positive') ? 'text-green-400' :
-                        (timeStats?.subscription?.averageSubscriptionFee?.trend === 'negative') ? 'text-red-400' : 'text-orange-400'
-                      }`}>
-                        {(timeStats?.subscription?.averageSubscriptionFee?.growth || 0) >= 0 ? '+' : ''}
-                        {Math.round(timeStats?.subscription?.averageSubscriptionFee?.growth || 0)}%
-                      </span>
-                      <span className="text-sm text-muted-foreground">vs last month</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="relative progress-bar">
-                    <div
-                      className={`progress-fill ${
-                        (timeStats?.subscription?.averageSubscriptionFee?.trend === 'positive') ? 'progress-fill-success' :
-                        (timeStats?.subscription?.averageSubscriptionFee?.trend === 'neutral') ? 'progress-fill-warning' : 'progress-fill-primary'
-                      }`}
-                      style={{ width: `${Math.min(((timeStats?.subscription?.averageSubscriptionFee?.current || 0) / 75) * 100, 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-border/20">
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Current</p>
-                    <p className="text-sm font-bold text-emerald-400">€{(timeStats?.subscription?.averageSubscriptionFee?.current || 0).toFixed(1)}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-muted-foreground">Previous</p>
-                    <p className="text-sm font-bold text-muted-foreground">€{(timeStats?.subscription?.averageSubscriptionFee?.previous || 0).toFixed(1)}</p>
-                  </div>
-                </div>
+                {/* Subscription Card - Only if enabled */}
+                {subscriptionEnabled && (
+                  <CompactMetricCard
+                    icon={Users}
+                    iconColor="bg-purple-500/20 text-purple-600"
+                    title="Active Users"
+                    value={timeStats?.subscription?.monthlyActiveUsers?.current || 0}
+                    subtitle="/ 15 target"
+                    progress={((timeStats?.subscription?.monthlyActiveUsers?.current || 0) / 15) * 100}
+                    progressColor="bg-purple-500"
+                    badge={{
+                      label: `${Math.round((timeStats?.subscription?.monthlyActiveUsers?.growth || 0))}%`,
+                      variant: (timeStats?.subscription?.monthlyActiveUsers?.trend === 'positive') ? 'success' : 'warning'
+                    }}
+                  />
+                )}
+
               </div>
-              )}
             </div>
           </div>
 
-          {/* Section 2: Management Dashboard - 3 Column Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-
-            {/* Active Timer Widget */}
-            <div className="flex h-full">
-              <ActiveTimerWidget
-                onNavigateToTimer={() => router.push('/dashboard/financieel?tab=tijd')}
-                className="w-full"
-              />
-            </div>
+          {/* Section 2: Management Dashboard - 2 Column Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
 
             {/* Client Health Dashboard */}
             <div className="flex h-full">
@@ -1660,13 +1044,20 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
           </div>
 
           {/* Section 3: Analysis & Charts */}
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
+          <Collapsible open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold">Financial Analysis</h2>
                 <p className="text-sm text-muted-foreground">Performance insights and trends</p>
               </div>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" size="sm">
+                  {analyticsOpen ? '▲ Hide' : '▼ Show'} Charts & Analysis
+                </Button>
+              </CollapsibleTrigger>
             </div>
+
+            <CollapsibleContent className="space-y-6">
 
             {/* 4-Column Analytics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1727,7 +1118,8 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
               </div>
               <FinancialCharts />
             </Card>
-          </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         {/* Enhanced Health Score Explanation Modal */}

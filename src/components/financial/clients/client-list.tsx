@@ -13,11 +13,12 @@ import {
 } from '@/components/ui/table'
 import { Plus, Edit, Trash2, Building2, User, MapPin, Mail, Phone, Euro, FolderOpen, TrendingUp, TrendingDown, AlertTriangle, Clock } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ProjectList } from '@/components/financial/projects/project-list'
 import { ProjectForm } from '@/components/financial/projects/project-form'
-import type { ClientWithInvoices } from '@/lib/types/financial'
+import type { Client } from '@/lib/types/financial'
+import type { ClientStatus } from '@/lib/types'
 import { getCurrentDate } from '@/lib/current-date'
 
 // Health data interface for table insights
@@ -33,18 +34,19 @@ interface ClientHealthInsight {
 
 interface ClientListProps {
   onAddClient?: () => void
-  onEditClient?: (client: ClientWithInvoices) => void
-  onDeleteClient?: (client: ClientWithInvoices) => void
+  onEditClient?: (client: Client) => void
+  onDeleteClient?: (client: Client) => void
 }
 
 // Enhanced client type with project management fields
-interface EnhancedClient extends ClientWithInvoices {
+interface EnhancedClient extends Client {
   active?: boolean
+  status?: ClientStatus
   hourly_rate?: number
 }
 
 interface ClientsResponse {
-  data: ClientWithInvoices[]
+  data: Client[]
   pagination: {
     total: number
     page: number
@@ -333,17 +335,16 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
     }
   }, [clients])
 
-  const handleClientStatusToggle = async (client: EnhancedClient) => {
+  const handleClientStatusChange = async (client: EnhancedClient, newStatus: ClientStatus) => {
     const clientId = client.id
-    const newActiveStatus = !client.active
-    
+
     setUpdatingClients(prev => new Set(prev).add(clientId))
-    
+
     try {
       const response = await fetch(`/api/clients/${clientId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: newActiveStatus })
+        body: JSON.stringify({ status: newStatus })
       })
 
       if (!response.ok) {
@@ -352,9 +353,9 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
       }
 
       // Update local state
-      setClients(prev => prev.map(c => 
-        c.id === clientId 
-          ? { ...c, active: newActiveStatus }
+      setClients(prev => prev.map(c =>
+        c.id === clientId
+          ? { ...c, status: newStatus, active: ['active', 'on_hold'].includes(newStatus) }
           : c
       ))
 
@@ -471,14 +472,14 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
     }).format(amount)
   }
 
-  const getClientType = (client: ClientWithInvoices) => {
+  const getClientType = (client: EnhancedClient) => {
     if (client.is_business) {
       return client.company_name || client.name
     }
     return `${client.name} (Particulier)`
   }
 
-  const getLocationText = (client: ClientWithInvoices) => {
+  const getLocationText = (client: EnhancedClient) => {
     const parts = []
     if (client.city) parts.push(client.city)
     if (client.country_code && client.country_code !== 'NL') {
@@ -715,12 +716,22 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
                     
                     <TableCell>
                       <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={client.active !== false}
+                        <Select
+                          value={client.status || 'active'}
                           disabled={isUpdating}
-                          onCheckedChange={() => handleClientStatusToggle(client)}
-                          className="h-4 w-7"
-                        />
+                          onValueChange={(value) => handleClientStatusChange(client, value as ClientStatus)}
+                        >
+                          <SelectTrigger className="h-8 w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="prospect">Prospect</SelectItem>
+                            <SelectItem value="active">Actief</SelectItem>
+                            <SelectItem value="on_hold">On Hold</SelectItem>
+                            <SelectItem value="completed">Afgerond</SelectItem>
+                            <SelectItem value="deactivated">Gedeactiveerd</SelectItem>
+                          </SelectContent>
+                        </Select>
                         {isUpdating && (
                           <div className="h-3 w-3 animate-spin rounded-full border border-muted-foreground border-t-foreground"></div>
                         )}
