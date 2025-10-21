@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { getCurrentDate } from '@/lib/current-date'
 import {
   Dialog,
   DialogContent,
@@ -76,7 +77,7 @@ function CashFlowHelpModal() {
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>Cash Flow Forecast Explained</DialogTitle>
           <DialogDescription>
-            Understanding your financial runway and minimum balance projections
+            Understanding your cash flow projections and financial runway
           </DialogDescription>
         </DialogHeader>
 
@@ -87,21 +88,21 @@ function CashFlowHelpModal() {
 
             <div className="grid md:grid-cols-2 gap-6">
               <div className="border-l-4 border-blue-500 pl-4">
-                <h4 className="font-medium text-blue-700">Minimum Balance</h4>
+                <h4 className="font-medium text-blue-700">Net Cash Flow</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  The lowest amount your account balance will reach during the forecast period. This helps you:
+                  The difference between money coming in (inflows) and going out (outflows) each day. This helps you:
                 </p>
                 <ul className="text-sm text-muted-foreground mt-2 ml-4 list-disc space-y-1">
-                  <li>Plan for potential cash shortfalls</li>
-                  <li>Ensure you maintain minimum operating capital</li>
-                  <li>Avoid overdraft fees or payment delays</li>
+                  <li>Identify days with positive or negative cash flow</li>
+                  <li>Plan for large expenses or payments</li>
+                  <li>Understand your daily cash position</li>
                 </ul>
               </div>
 
               <div className="border-l-4 border-green-500 pl-4">
                 <h4 className="font-medium text-green-700">Runway (Days)</h4>
                 <p className="text-sm text-muted-foreground mt-1">
-                  How many days your business can operate before running out of money. This shows:
+                  How many days your business can operate with current cash flow patterns. This shows:
                 </p>
                 <ul className="text-sm text-muted-foreground mt-2 ml-4 list-disc space-y-1">
                   <li>Time available to secure new revenue</li>
@@ -124,7 +125,7 @@ function CashFlowHelpModal() {
                 </h4>
                 <p className="text-sm text-green-600 mt-1">
                   Best-case scenario where payments arrive early, collections improve, and expenses stay low.
-                  Applies a 20% positive adjustment to your projected balance.
+                  Applies a 20% positive adjustment to your projected cash flow.
                 </p>
               </div>
 
@@ -321,22 +322,22 @@ const generateMockCashFlow = (
   // Generate insights
   const insights: CashFlowAnalysis['insights'] = []
 
-  if (scenarios.pessimistic.minBalance < 1000) {
+  if (scenarios.pessimistic.runwayDays < 30) {
     insights.push({
       type: 'critical',
       message: `Cash flow risk in ${scenarios.pessimistic.runwayDays} days`,
       action: 'Accelerate overdue invoice collection'
     })
-  } else if (scenarios.realistic.minBalance < 3000) {
+  } else if (scenarios.realistic.runwayDays < 60) {
     insights.push({
       type: 'warning',
-      message: `Minimum balance may drop to €${Math.round(scenarios.realistic.minBalance).toLocaleString()}`,
+      message: `Cash flow may tighten in ${scenarios.realistic.runwayDays} days`,
       action: 'Consider short-term financing options'
     })
   } else {
     insights.push({
       type: 'positive',
-      message: `Healthy cash flow with €${Math.round(scenarios.realistic.minBalance).toLocaleString()} minimum balance`
+      message: `Healthy cash flow runway for ${scenarios.realistic.runwayDays > 90 ? '90+' : scenarios.realistic.runwayDays} days`
     })
   }
 
@@ -360,8 +361,14 @@ const generateMockCashFlow = (
   }
 }
 
-const formatCurrency = (amount: number) => `€${amount.toLocaleString()}`
-const formatDays = (days: number) => `${days} days`
+const formatCurrency = (amount: number | undefined | null) => {
+  if (amount === undefined || amount === null || isNaN(amount)) return '€0'
+  return `€${amount.toLocaleString()}`
+}
+const formatDays = (days: number | undefined | null) => {
+  if (days === undefined || days === null || isNaN(days)) return '0 days'
+  return `${days} days`
+}
 
 interface CashFlowForecastProps {
   className?: string
@@ -418,21 +425,33 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
 
   if (loading || !cashFlowAnalysis) {
     return (
-      <Card className={`mobile-card-glass ${className}`}>
-        <div className="p-4 space-y-4">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-10 h-10 bg-muted rounded-lg animate-pulse"></div>
-            <div>
-              <div className="h-4 w-24 bg-muted animate-pulse rounded mb-2"></div>
-              <div className="h-3 w-32 bg-muted animate-pulse rounded"></div>
+      <div className={`glass-card ${className}`}>
+        <div className="space-y-4">
+          <div className="card-header">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-lg animate-pulse" style={{
+                background: 'rgba(148, 163, 184, 0.2)'
+              }}></div>
+              <div>
+                <div className="h-4 w-24 rounded mb-2 animate-pulse" style={{
+                  background: 'rgba(148, 163, 184, 0.2)'
+                }}></div>
+                <div className="h-3 w-32 rounded animate-pulse" style={{
+                  background: 'rgba(148, 163, 184, 0.15)'
+                }}></div>
+              </div>
             </div>
           </div>
           <div className="space-y-3">
-            <div className="h-16 bg-muted animate-pulse rounded"></div>
-            <div className="h-12 bg-muted animate-pulse rounded"></div>
+            <div className="h-16 rounded animate-pulse" style={{
+              background: 'rgba(148, 163, 184, 0.15)'
+            }}></div>
+            <div className="h-12 rounded animate-pulse" style={{
+              background: 'rgba(148, 163, 184, 0.15)'
+            }}></div>
           </div>
         </div>
-      </Card>
+      </div>
     )
   }
 
@@ -440,98 +459,110 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
   const nextWeekForecasts = cashFlowAnalysis.forecasts.slice(0, 7)
 
   return (
-    <Card className={`mobile-card-glass ${className}`}>
-      <div className="p-4 space-y-4">
+    <div className={`glass-card ${className}`}>
+      <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="card-header">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-green-500/20 rounded-lg">
-              <BarChart3 className="h-5 w-5 text-green-500" />
+            <div className="p-2 rounded-lg" style={{
+              background: 'linear-gradient(120deg, rgba(52, 211, 153, 0.22), rgba(16, 185, 129, 0.18))',
+              border: '1px solid rgba(52, 211, 153, 0.35)'
+            }}>
+              <BarChart3 className="h-5 w-5" style={{ color: 'rgba(52, 211, 153, 0.9)' }} />
             </div>
             <div>
-              <h3 className="text-base font-semibold">Cash Flow Forecast</h3>
-              <p className="text-xs text-muted-foreground">Next 90 days</p>
+              <h3 className="card-header__title">Cash Flow Forecast</h3>
+              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Next 90 days</p>
             </div>
           </div>
           <CashFlowHelpModal />
         </div>
 
-        {/* Scenario Selection */}
-        <div className="flex gap-1">
+        {/* Scenario Selection - Glassmorphic toggle */}
+        <div className="time-toggle" role="tablist" aria-label="Forecast scenario">
           {(['optimistic', 'realistic', 'pessimistic'] as const).map((scenarioType) => (
             <button
               key={scenarioType}
               onClick={() => setSelectedScenario(scenarioType)}
-              className={`px-3 py-2 text-xs rounded-md transition-colors flex-1 ${
-                selectedScenario === scenarioType
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
+              className={selectedScenario === scenarioType ? 'is-active' : ''}
+              type="button"
+              role="tab"
+              aria-selected={selectedScenario === scenarioType}
             >
               {scenarioType.charAt(0).toUpperCase() + scenarioType.slice(1)}
             </button>
           ))}
         </div>
 
-        {/* Key Metrics */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className={`text-center p-3 rounded-lg border ${
-            scenario.minBalance < 1000 ? 'bg-red-50 border-red-200' :
-            scenario.minBalance < 3000 ? 'bg-orange-50 border-orange-200' :
-            'bg-green-50 border-green-200'
-          }`}>
-            <p className={`text-lg font-bold ${
-              scenario.minBalance < 1000 ? 'text-red-600' :
-              scenario.minBalance < 3000 ? 'text-orange-600' :
-              'text-green-600'
-            }`}>
-              {formatCurrency(scenario.minBalance)}
-            </p>
-            <p className="text-xs text-muted-foreground">Minimum Balance</p>
-          </div>
-          <div className={`text-center p-3 rounded-lg border ${
-            scenario.runwayDays < 30 ? 'bg-red-50 border-red-200' :
-            scenario.runwayDays < 60 ? 'bg-orange-50 border-orange-200' :
-            'bg-green-50 border-green-200'
-          }`}>
-            <p className={`text-lg font-bold ${
-              scenario.runwayDays < 30 ? 'text-red-600' :
-              scenario.runwayDays < 60 ? 'text-orange-600' :
-              'text-green-600'
-            }`}>
+        {/* Key Metrics - Glassmorphic cards */}
+        <div className="grid grid-cols-1 gap-3">
+          <div className="text-center p-3 rounded-lg" style={{
+            background: scenario.runwayDays < 30
+              ? 'rgba(239, 68, 68, 0.15)'
+              : scenario.runwayDays < 60
+                ? 'rgba(251, 146, 60, 0.15)'
+                : 'rgba(52, 211, 153, 0.15)',
+            border: scenario.runwayDays < 30
+              ? '1px solid rgba(239, 68, 68, 0.25)'
+              : scenario.runwayDays < 60
+                ? '1px solid rgba(251, 146, 60, 0.25)'
+                : '1px solid rgba(52, 211, 153, 0.25)',
+            backdropFilter: 'blur(8px)'
+          }}>
+            <p className="text-lg font-bold" style={{
+              color: scenario.runwayDays < 30
+                ? 'rgba(239, 68, 68, 0.95)'
+                : scenario.runwayDays < 60
+                  ? 'rgba(251, 146, 60, 0.95)'
+                  : 'rgba(52, 211, 153, 0.95)'
+            }}>
               {scenario.runwayDays > 90 ? '90+' : scenario.runwayDays}
             </p>
-            <p className="text-xs text-muted-foreground">Runway (days)</p>
+            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Runway (days)</p>
           </div>
         </div>
 
-        {/* Insights */}
+        {/* Insights - Glassmorphic style */}
         <div>
-          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
             <Info className="h-4 w-4" />
             Key Insights
           </h4>
           <div className="space-y-2">
             {cashFlowAnalysis.insights.slice(0, 2).map((insight, index) => (
-              <div key={index} className={`p-2 rounded-lg text-sm ${
-                insight.type === 'positive' ? 'bg-green-50 border border-green-200' :
-                insight.type === 'warning' ? 'bg-orange-50 border border-orange-200' :
-                'bg-red-50 border border-red-200'
-              }`}>
+              <div key={index} className="p-2 rounded-lg text-sm" style={{
+                background: insight.type === 'positive'
+                  ? 'rgba(52, 211, 153, 0.12)'
+                  : insight.type === 'warning'
+                    ? 'rgba(251, 146, 60, 0.12)'
+                    : 'rgba(239, 68, 68, 0.12)',
+                border: insight.type === 'positive'
+                  ? '1px solid rgba(52, 211, 153, 0.25)'
+                  : insight.type === 'warning'
+                    ? '1px solid rgba(251, 146, 60, 0.25)'
+                    : '1px solid rgba(239, 68, 68, 0.25)',
+                backdropFilter: 'blur(8px)'
+              }}>
                 <div className="flex items-start gap-2">
-                  {insight.type === 'positive' ? <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" /> :
-                   insight.type === 'warning' ? <AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5" /> :
-                   <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5" />}
+                  {insight.type === 'positive' ? (
+                    <CheckCircle className="h-4 w-4 mt-0.5" style={{ color: 'rgba(52, 211, 153, 0.95)' }} />
+                  ) : insight.type === 'warning' ? (
+                    <AlertTriangle className="h-4 w-4 mt-0.5" style={{ color: 'rgba(251, 146, 60, 0.95)' }} />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 mt-0.5" style={{ color: 'rgba(239, 68, 68, 0.95)' }} />
+                  )}
                   <div>
-                    <p className={`font-medium ${
-                      insight.type === 'positive' ? 'text-green-700' :
-                      insight.type === 'warning' ? 'text-orange-700' :
-                      'text-red-700'
-                    }`}>
+                    <p className="font-medium" style={{
+                      color: insight.type === 'positive'
+                        ? 'rgba(52, 211, 153, 0.95)'
+                        : insight.type === 'warning'
+                          ? 'rgba(251, 146, 60, 0.95)'
+                          : 'rgba(239, 68, 68, 0.95)'
+                    }}>
                       {insight.message}
                     </p>
                     {insight.action && (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
                         💡 {insight.action}
                       </p>
                     )}
@@ -542,47 +573,60 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
           </div>
         </div>
 
-        {/* Next Week Overview */}
+        {/* Next Week Overview - Glassmorphic */}
         <div>
-          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
             <Calendar className="h-4 w-4" />
             Next 7 Days
           </h4>
           <div className="space-y-1">
             {nextWeekForecasts.map((forecast, index) => {
               const date = new Date(forecast.date)
-              const isToday = date.toDateString() === new Date().toDateString()
+              const currentDate = getCurrentDate()
+              const isToday = date.toDateString() === currentDate.toDateString()
 
               return (
-                <div key={forecast.date} className={`flex items-center justify-between text-xs p-2 rounded ${
-                  isToday ? 'bg-primary/5 border border-primary/20' : 'hover:bg-muted/30'
-                }`}>
+                <div key={forecast.date} className="flex items-center justify-between text-xs p-2 rounded" style={{
+                  background: isToday ? 'rgba(96, 165, 250, 0.08)' : 'transparent',
+                  border: isToday ? '1px solid rgba(96, 165, 250, 0.22)' : '1px solid transparent',
+                  transition: 'background 0.2s ease'
+                }}>
                   <div className="flex items-center gap-2">
-                    <span className={`font-medium ${isToday ? 'text-primary' : ''}`}>
+                    <span className="font-medium" style={{
+                      color: isToday ? 'rgba(96, 165, 250, 0.95)' : 'var(--color-text-secondary)'
+                    }}>
                       {date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}
                     </span>
                     {isToday && (
-                      <Badge className="bg-primary/10 text-primary text-xs">Today</Badge>
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{
+                        background: 'rgba(96, 165, 250, 0.18)',
+                        border: '1px solid rgba(96, 165, 250, 0.3)',
+                        color: 'rgba(96, 165, 250, 0.95)',
+                        fontWeight: 600
+                      }}>Today</span>
                     )}
                   </div>
                   <div className="flex items-center gap-3">
                     {forecast.inflows > 0 && (
-                      <span className="text-green-600 flex items-center gap-1">
+                      <span className="flex items-center gap-1" style={{ color: 'rgba(52, 211, 153, 0.95)' }}>
                         <TrendingUp className="h-3 w-3" />
                         {formatCurrency(forecast.inflows)}
                       </span>
                     )}
                     {forecast.outflows > 0 && (
-                      <span className="text-red-600 flex items-center gap-1">
+                      <span className="flex items-center gap-1" style={{ color: 'rgba(239, 68, 68, 0.95)' }}>
                         <TrendingDown className="h-3 w-3" />
                         {formatCurrency(forecast.outflows)}
                       </span>
                     )}
-                    <span className={`font-medium ${
-                      forecast.netFlow > 0 ? 'text-green-600' :
-                      forecast.netFlow < 0 ? 'text-red-600' : 'text-gray-600'
-                    }`}>
-                      {formatCurrency(forecast.runningBalance)}
+                    <span className="font-medium" style={{
+                      color: forecast.netFlow > 0
+                        ? 'rgba(52, 211, 153, 0.95)'
+                        : forecast.netFlow < 0
+                          ? 'rgba(239, 68, 68, 0.95)'
+                          : 'var(--color-text-muted)'
+                    }}>
+                      {forecast.netFlow >= 0 ? '+' : ''}{formatCurrency(forecast.netFlow)}
                     </span>
                   </div>
                 </div>
@@ -591,22 +635,135 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
           </div>
         </div>
 
-        {/* Major Upcoming Events */}
+        {/* Expense Breakdown - NEW */}
+        {(cashFlowAnalysis as any).expenseBreakdown && (
+          <div>
+            <h4 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
+              <TrendingDown className="h-4 w-4" />
+              Uitgaven Analyse
+            </h4>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="text-center p-2 rounded" style={{
+                background: 'rgba(96, 165, 250, 0.12)',
+                border: '1px solid rgba(96, 165, 250, 0.22)'
+              }}>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Terugkerend</p>
+                <p className="text-sm font-bold" style={{ color: 'rgba(96, 165, 250, 0.95)' }}>
+                  {formatCurrency((cashFlowAnalysis as any).expenseBreakdown.recurring)}
+                </p>
+              </div>
+              <div className="text-center p-2 rounded" style={{
+                background: 'rgba(139, 92, 246, 0.12)',
+                border: '1px solid rgba(139, 92, 246, 0.22)'
+              }}>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Daggemiddelde</p>
+                <p className="text-sm font-bold" style={{ color: 'rgba(139, 92, 246, 0.95)' }}>
+                  {formatCurrency((cashFlowAnalysis as any).expenseBreakdown.daily_average)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tax Breakdown - NEW */}
+        {(cashFlowAnalysis as any).taxBreakdown && (
+          <div>
+            <h4 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
+              <DollarSign className="h-4 w-4" />
+              BTW Overzicht
+            </h4>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs p-2 rounded" style={{
+                background: 'rgba(239, 68, 68, 0.12)',
+                border: '1px solid rgba(239, 68, 68, 0.22)'
+              }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Verschuldigd</span>
+                <span className="font-bold" style={{ color: 'rgba(239, 68, 68, 0.95)' }}>
+                  {formatCurrency((cashFlowAnalysis as any).taxBreakdown.vat_owed)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs p-2 rounded" style={{
+                background: 'rgba(52, 211, 153, 0.12)',
+                border: '1px solid rgba(52, 211, 153, 0.22)'
+              }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Aftrekbaar</span>
+                <span className="font-bold" style={{ color: 'rgba(52, 211, 153, 0.95)' }}>
+                  {formatCurrency((cashFlowAnalysis as any).taxBreakdown.vat_deductible)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs p-2 rounded" style={{
+                background: 'rgba(251, 146, 60, 0.12)',
+                border: '1px solid rgba(251, 146, 60, 0.22)'
+              }}>
+                <div>
+                  <p className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>Te betalen</p>
+                  {(cashFlowAnalysis as any).taxBreakdown.next_payment_date && (
+                    <p style={{ color: 'var(--color-text-muted)' }}>
+                      {new Date((cashFlowAnalysis as any).taxBreakdown.next_payment_date).toLocaleDateString('nl-NL', {
+                        day: 'numeric',
+                        month: 'short'
+                      })}
+                    </p>
+                  )}
+                </div>
+                <span className="font-bold" style={{ color: 'rgba(251, 146, 60, 0.95)' }}>
+                  {formatCurrency((cashFlowAnalysis as any).taxBreakdown.net_vat)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Data Quality Indicator - NEW */}
+        {(cashFlowAnalysis as any).dataQuality && (
+          <div className="text-xs p-2 rounded" style={{
+            background: (cashFlowAnalysis as any).dataQuality.has_recurring_templates && (cashFlowAnalysis as any).dataQuality.has_expense_history
+              ? 'rgba(52, 211, 153, 0.08)'
+              : 'rgba(251, 146, 60, 0.08)',
+            border: (cashFlowAnalysis as any).dataQuality.has_recurring_templates && (cashFlowAnalysis as any).dataQuality.has_expense_history
+              ? '1px solid rgba(52, 211, 153, 0.22)'
+              : '1px solid rgba(251, 146, 60, 0.22)'
+          }}>
+            <div className="flex items-center gap-1">
+              {(cashFlowAnalysis as any).dataQuality.has_recurring_templates && (cashFlowAnalysis as any).dataQuality.has_expense_history ? (
+                <>
+                  <CheckCircle className="h-3 w-3" style={{ color: 'rgba(52, 211, 153, 0.95)' }} />
+                  <span style={{ color: 'var(--color-text-secondary)' }}>Voorspelling gebaseerd op echte data</span>
+                </>
+              ) : (
+                <>
+                  <Info className="h-3 w-3" style={{ color: 'rgba(251, 146, 60, 0.95)' }} />
+                  <span style={{ color: 'var(--color-text-secondary)' }}>
+                    {!(cashFlowAnalysis as any).dataQuality.has_recurring_templates && 'Voeg terugkerende uitgaven toe voor betere voorspelling'}
+                    {!(cashFlowAnalysis as any).dataQuality.has_expense_history && 'Registreer uitgaven voor nauwkeurigere voorspelling'}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Major Upcoming Events - Glassmorphic */}
         {cashFlowAnalysis.nextMilestones.length > 0 && (
           <div>
-            <h4 className="text-sm font-medium mb-2">Major Events</h4>
+            <h4 className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Major Events</h4>
             <div className="space-y-1">
               {cashFlowAnalysis.nextMilestones.slice(0, 2).map((milestone, index) => (
-                <div key={index} className="flex items-center justify-between text-xs p-2 bg-muted/30 rounded">
+                <div key={index} className="flex items-center justify-between text-xs p-2 rounded" style={{
+                  background: 'rgba(15, 23, 42, 0.45)',
+                  border: '1px solid rgba(148, 163, 184, 0.16)'
+                }}>
                   <div>
-                    <p className="font-medium">{milestone.description}</p>
-                    <p className="text-muted-foreground">
+                    <p className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>{milestone.description}</p>
+                    <p style={{ color: 'var(--color-text-muted)' }}>
                       {new Date(milestone.date).toLocaleDateString()}
                     </p>
                   </div>
-                  <span className={`font-bold ${
-                    milestone.type === 'major_payment' ? 'text-green-600' : 'text-orange-600'
-                  }`}>
+                  <span className="font-bold" style={{
+                    color: milestone.type === 'major_payment'
+                      ? 'rgba(52, 211, 153, 0.95)'
+                      : 'rgba(251, 146, 60, 0.95)'
+                  }}>
                     {formatCurrency(milestone.amount)}
                   </span>
                 </div>
@@ -615,6 +772,6 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
           </div>
         )}
       </div>
-    </Card>
+    </div>
   )
 }

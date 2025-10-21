@@ -39,9 +39,15 @@ async function getMonthSubscriptionRevenue(tenantId: string, monthStart: Date, m
 
 /**
  * GET /api/financial/revenue-trend
- * Gets Year-to-Date (YTD) revenue trend data for Financial Charts
+ * Gets revenue trend data with configurable granularity
+ * Query params:
+ *   - granularity: 'daily' | 'weekly' | 'monthly' (default: 'monthly')
+ *   - period: '31d' | '3m' | '12m' (default: '12m')
  */
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const granularity = searchParams.get('granularity') || 'monthly'
+  const period = searchParams.get('period') || '12m'
   try {
     // Get authenticated user profile
     const profile = await getCurrentUserProfile()
@@ -50,40 +56,96 @@ export async function GET() {
       return NextResponse.json(ApiErrors.Unauthorized, { status: ApiErrors.Unauthorized.status })
     }
 
-    // Get Year-to-Date period based on available data (data-driven approach)
+    // Determine date range based on period parameter
+    const referenceDate = getCurrentDate()
+    let startDate: Date
+    let endDate = new Date(referenceDate)
 
-    // First find the date range of available time entries
-    const { data: dateRange, error: dateRangeError } = await supabaseAdmin
-      .from('time_entries')
-      .select('entry_date')
-      .eq('tenant_id', profile.tenant_id)
-      .order('entry_date', { ascending: false })
-      .limit(1)
-
-    if (dateRangeError) {
-      console.error('Error fetching time entry date range:', dateRangeError)
+    switch (period) {
+      case '31d':
+        startDate = new Date(referenceDate)
+        startDate.setDate(startDate.getDate() - 30)
+        break
+      case '3m':
+        startDate = new Date(referenceDate)
+        startDate.setMonth(startDate.getMonth() - 3)
+        break
+      case '12m':
+      default:
+        startDate = new Date(referenceDate)
+        startDate.setFullYear(startDate.getFullYear() - 1)
+        break
     }
 
-    // Use latest entry date to determine the "current" year, or fall back to today
-    const referenceDate = dateRange && dateRange.length > 0
-      ? new Date(dateRange[0].entry_date)
-      : getCurrentDate()
+    // Generate time periods based on granularity
+    const periods: Array<{
+      date: Date
+      name: string
+      fullName: string
+      startDate: Date
+      endDate: Date
+    }> = []
 
-    const currentYear = referenceDate.getFullYear()
-    const yearStart = new Date(currentYear, 0, 1) // January 1st of the year with data
-    const currentMonth = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1)
+    if (granularity === 'daily') {
+      // Generate daily periods
+      const currentDate = new Date(startDate)
+      while (currentDate <= endDate) {
+        const dayStart = new Date(currentDate)
+        dayStart.setHours(0, 0, 0, 0)
+        const dayEnd = new Date(currentDate)
+        dayEnd.setHours(23, 59, 59, 999)
 
-    // Generate array of months from January to the month containing the latest data
-    const months = []
-    for (let i = 0; i <= referenceDate.getMonth(); i++) {
-      const monthDate = new Date(currentYear, i, 1)
-      months.push({
-        date: monthDate,
-        name: monthDate.toLocaleDateString('en-US', { month: 'short' }),
-        fullName: monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-        startDate: new Date(monthDate.getFullYear(), monthDate.getMonth(), 1),
-        endDate: new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999)
-      })
+        periods.push({
+          date: new Date(currentDate),
+          name: currentDate.getDate().toString(),
+          fullName: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          startDate: dayStart,
+          endDate: dayEnd
+        })
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
+    } else if (granularity === 'weekly') {
+      // Generate weekly periods
+      const currentDate = new Date(startDate)
+      // Start from beginning of week (Sunday)
+      currentDate.setDate(currentDate.getDate() - currentDate.getDay())
+
+      let weekNumber = 1
+      while (currentDate <= endDate) {
+        const weekStart = new Date(currentDate)
+        weekStart.setHours(0, 0, 0, 0)
+        const weekEnd = new Date(currentDate)
+        weekEnd.setDate(weekEnd.getDate() + 6)
+        weekEnd.setHours(23, 59, 59, 999)
+
+        periods.push({
+          date: new Date(currentDate),
+          name: `W${weekNumber}`,
+          fullName: `Week ${weekNumber} (${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`,
+          startDate: weekStart,
+          endDate: weekEnd
+        })
+        currentDate.setDate(currentDate.getDate() + 7)
+        weekNumber++
+      }
+    } else {
+      // Generate monthly periods
+      const currentDate = new Date(startDate)
+      currentDate.setDate(1) // Start of month
+
+      while (currentDate <= endDate) {
+        const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+        const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59, 999)
+
+        periods.push({
+          date: new Date(currentDate),
+          name: currentDate.toLocaleDateString('en-US', { month: 'short' }),
+          fullName: currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          startDate: monthStart,
+          endDate: monthEnd
+        })
+        currentDate.setMonth(currentDate.getMonth() + 1)
+      }
     }
 
     // Query time entries for revenue calculation
@@ -97,72 +159,81 @@ export async function GET() {
         billable
       `)
       .eq('tenant_id', profile.tenant_id)
-      .gte('entry_date', yearStart.toISOString().split('T')[0])
-      .lte('entry_date', referenceDate.toISOString().split('T')[0])
+      .gte('entry_date', startDate.toISOString().split('T')[0])
+      .lte('entry_date', endDate.toISOString().split('T')[0])
 
     if (timeError) {
       console.error('Error fetching time entries for revenue trend:', timeError)
       throw timeError
     }
 
-    // Query invoices for actual revenue (optional - if available)
-    const { data: invoices, error: invoiceError } = await supabaseAdmin
-      .from('invoices')
+    // Query expenses for actual expense data
+    const { data: expenses, error: expenseError } = await supabaseAdmin
+      .from('expenses')
       .select(`
-        total_amount,
-        status,
-        invoice_date,
-        due_date
+        amount,
+        expense_date,
+        status
       `)
       .eq('tenant_id', profile.tenant_id)
-      .gte('invoice_date', yearStart.toISOString().split('T')[0])
-      .lte('invoice_date', referenceDate.toISOString().split('T')[0])
+      .gte('expense_date', startDate.toISOString().split('T')[0])
+      .lte('expense_date', endDate.toISOString().split('T')[0])
+      .in('status', ['approved', 'processed', 'reimbursed'])
 
-    if (invoiceError) {
-      console.error('Error fetching invoices for revenue trend:', invoiceError)
-      // Don't throw - invoices are optional
+    if (expenseError) {
+      console.error('Error fetching expenses for revenue trend:', expenseError)
+      // Don't throw - expenses are optional
     }
 
-    // Calculate revenue trend data with subscription revenue
-    const revenueData = await Promise.all(months.map(async (month) => {
+    // Calculate revenue trend data with subscription revenue and actual expenses
+    const revenueData = await Promise.all(periods.map(async (period) => {
       // Calculate revenue from time entries
-      const monthTimeEntries = timeEntries?.filter(entry => {
+      const periodTimeEntries = timeEntries?.filter(entry => {
         const entryDate = new Date(entry.entry_date)
-        return entryDate >= month.startDate && entryDate <= month.endDate
+        return entryDate >= period.startDate && entryDate <= period.endDate
       }) || []
 
-      const timeRevenue = monthTimeEntries.reduce((sum, entry) => {
+      const timeRevenue = periodTimeEntries.reduce((sum, entry) => {
         const effectiveRate = entry.effective_hourly_rate || entry.hourly_rate || 0
         return sum + (entry.hours * effectiveRate)
       }, 0)
 
       // Calculate billable vs non-billable revenue
-      const billableRevenue = monthTimeEntries
+      const billableRevenue = periodTimeEntries
         .filter(entry => entry.billable)
         .reduce((sum, entry) => {
           const effectiveRate = entry.effective_hourly_rate || entry.hourly_rate || 0
           return sum + (entry.hours * effectiveRate)
         }, 0)
 
-      // Calculate subscription revenue for this month
-      const monthSubscriptions = await getMonthSubscriptionRevenue(profile.tenant_id, month.startDate, month.endDate)
+      // Calculate subscription revenue for this period
+      const periodSubscriptions = await getMonthSubscriptionRevenue(profile.tenant_id, period.startDate, period.endDate)
 
       // Total business revenue = Time entries revenue + Subscription revenue
-      const totalRevenue = timeRevenue + monthSubscriptions
+      const totalRevenue = timeRevenue + periodSubscriptions
 
-      // Calculate expenses (simplified - could be enhanced with actual expense tracking)
-      const totalHours = monthTimeEntries.reduce((sum, entry) => sum + entry.hours, 0)
-      const estimatedExpenses = totalHours * 15 // Assume €15/hour operational cost
+      // Calculate actual expenses from expense records
+      const periodExpenses = expenses?.filter(expense => {
+        const expenseDate = new Date(expense.expense_date)
+        return expenseDate >= period.startDate && expenseDate <= period.endDate
+      }) || []
+
+      const actualExpenses = periodExpenses.reduce((sum, expense) => {
+        return sum + parseFloat(expense.amount.toString())
+      }, 0)
+
+      // Calculate total hours
+      const totalHours = periodTimeEntries.reduce((sum, entry) => sum + entry.hours, 0)
 
       return {
-        month: month.name,
-        fullName: month.fullName,
+        month: period.name,
+        fullName: period.fullName,
         revenue: Math.round(totalRevenue * 100) / 100, // Total business revenue
         timeRevenue: Math.round(timeRevenue * 100) / 100, // Revenue from time entries
-        subscriptionRevenue: Math.round(monthSubscriptions * 100) / 100, // Revenue from subscriptions
+        subscriptionRevenue: Math.round(periodSubscriptions * 100) / 100, // Revenue from subscriptions
         billableRevenue: Math.round(billableRevenue * 100) / 100,
-        expenses: Math.round(estimatedExpenses * 100) / 100,
-        profit: Math.round((totalRevenue - estimatedExpenses) * 100) / 100,
+        expenses: Math.round(actualExpenses * 100) / 100, // Actual expenses from database
+        profit: Math.round((totalRevenue - actualExpenses) * 100) / 100,
         totalHours: Math.round(totalHours * 10) / 10,
         averageRate: totalHours > 0 ? Math.round((timeRevenue / totalHours) * 100) / 100 : 0
       }

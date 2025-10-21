@@ -5,6 +5,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * GET /api/financial/client-revenue
@@ -20,7 +21,7 @@ export async function GET() {
     }
 
     // Get current date and calculate 3-month period (matching revenue-trend scope)
-    const now = new Date()
+    const now = new Date(getCurrentDate().getTime())
     const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     const threeMonthsAgo = new Date(currentMonth)
     threeMonthsAgo.setMonth(currentMonth.getMonth() - 2)

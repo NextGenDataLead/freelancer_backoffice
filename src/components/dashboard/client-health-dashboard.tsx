@@ -589,26 +589,37 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
 
   if (loading) {
     return (
-      <Card className={`mobile-card-glass ${className}`}>
-        <div className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="h-5 w-32 bg-muted animate-pulse rounded"></div>
-            <div className="h-4 w-16 bg-muted animate-pulse rounded"></div>
+      <div className={`glass-card ${className}`}>
+        <div className="space-y-4">
+          <div className="card-header">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-lg animate-pulse" style={{
+                background: 'rgba(148, 163, 184, 0.2)'
+              }}></div>
+              <div>
+                <div className="h-5 w-32 rounded animate-pulse" style={{
+                  background: 'rgba(148, 163, 184, 0.2)'
+                }}></div>
+              </div>
+            </div>
           </div>
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="p-3 rounded-lg border animate-pulse">
+            <div key={i} className="p-3 rounded-lg animate-pulse" style={{
+              background: 'rgba(15, 23, 42, 0.45)',
+              border: '1px solid rgba(148, 163, 184, 0.16)'
+            }}>
               <div className="flex justify-between items-start mb-2">
-                <div className="h-4 w-24 bg-muted rounded"></div>
-                <div className="h-5 w-12 bg-muted rounded"></div>
+                <div className="h-4 w-24 rounded" style={{ background: 'rgba(148, 163, 184, 0.2)' }}></div>
+                <div className="h-5 w-12 rounded" style={{ background: 'rgba(148, 163, 184, 0.2)' }}></div>
               </div>
               <div className="space-y-2">
-                <div className="h-3 w-full bg-muted rounded"></div>
-                <div className="h-3 w-3/4 bg-muted rounded"></div>
+                <div className="h-3 w-full rounded" style={{ background: 'rgba(148, 163, 184, 0.15)' }}></div>
+                <div className="h-3 w-3/4 rounded" style={{ background: 'rgba(148, 163, 184, 0.15)' }}></div>
               </div>
             </div>
           ))}
         </div>
-      </Card>
+      </div>
     )
   }
 
@@ -618,33 +629,44 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
   const topClient = clientHealthScores.length > 0 ? clientHealthScores[0] : null
 
   return (
-    <Card className={`mobile-card-glass ${className}`}>
-      <div className="p-4 space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+    <div className={`glass-card ${className}`}>
+      <div className="space-y-4">
+        {/* Header - Glassmorphic */}
+        <div className="card-header">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-purple-500/20 rounded-lg">
-              <Users className="h-5 w-5 text-purple-500" />
+            <div className="p-2 rounded-lg" style={{
+              background: 'linear-gradient(120deg, rgba(139, 92, 246, 0.22), rgba(124, 58, 237, 0.18))',
+              border: '1px solid rgba(139, 92, 246, 0.35)'
+            }}>
+              <Users className="h-5 w-5" style={{ color: 'rgba(139, 92, 246, 0.9)' }} />
             </div>
-            <h3 className="text-base font-semibold">Client Health</h3>
-            {atRiskClients > 0 && (
-              <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">
-                {atRiskClients} at risk
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              <h3 className="card-header__title">Client Health</h3>
+              {atRiskClients > 0 && (
+                <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                  color: 'rgba(239, 68, 68, 0.95)'
+                }}>
+                  {atRiskClients} at risk
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <ClientHealthHelpModal />
             <button
               onClick={() => setSortBy(sortBy === 'score' ? 'risk' : sortBy === 'risk' ? 'revenue' : 'score')}
-              className="px-2 py-1 text-xs rounded-md bg-muted text-muted-foreground hover:bg-muted/80 hover:text-primary flex items-center gap-1 transition-colors"
+              className="action-chip secondary"
+              style={{ padding: '6px 12px', fontSize: '0.75rem' }}
             >
               <ArrowUpDown className="h-3 w-3" />
               {sortBy === 'score' ? 'Score' : sortBy === 'risk' ? 'Risk' : 'Revenue'}
             </button>
             <button
               onClick={onViewAllClients}
-              className="px-2 py-1 text-xs rounded-md bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground flex items-center gap-1 transition-colors"
+              className="action-chip"
+              style={{ padding: '6px 12px', fontSize: '0.75rem' }}
             >
               View All
               <ChevronRight className="h-3 w-3" />
@@ -652,35 +674,61 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
           </div>
         </div>
 
-        {/* Quick Stats */}
+        {/* Quick Stats - Glassmorphic */}
         <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm font-bold text-blue-600">{clientHealthScores.length}</p>
-            <p className="text-xs text-blue-600">Active</p>
+          <div className="p-2 rounded-lg" style={{
+            background: 'rgba(59, 130, 246, 0.15)',
+            border: '1px solid rgba(59, 130, 246, 0.25)',
+            backdropFilter: 'blur(8px)'
+          }}>
+            <p className="text-sm font-bold" style={{ color: 'rgba(59, 130, 246, 0.95)' }}>
+              {clientHealthScores.length}
+            </p>
+            <p className="text-xs" style={{ color: 'rgba(59, 130, 246, 0.85)' }}>Active</p>
           </div>
-          <div className="p-2 bg-green-50 rounded-lg border border-green-200">
-            <p className="text-sm font-bold text-green-600">{formatCurrency(totalRevenue)}</p>
-            <p className="text-xs text-green-600">Revenue</p>
+          <div className="p-2 rounded-lg" style={{
+            background: 'rgba(52, 211, 153, 0.15)',
+            border: '1px solid rgba(52, 211, 153, 0.25)',
+            backdropFilter: 'blur(8px)'
+          }}>
+            <p className="text-sm font-bold" style={{ color: 'rgba(52, 211, 153, 0.95)' }}>
+              {formatCurrency(totalRevenue)}
+            </p>
+            <p className="text-xs" style={{ color: 'rgba(52, 211, 153, 0.85)' }}>Revenue</p>
           </div>
-          <div className={`p-2 rounded-lg border ${
-            atRiskClients > 0 ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'
-          }`}>
-            <p className={`text-sm font-bold ${atRiskClients > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+          <div className="p-2 rounded-lg" style={{
+            background: atRiskClients > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+            border: atRiskClients > 0 ? '1px solid rgba(239, 68, 68, 0.25)' : '1px solid rgba(148, 163, 184, 0.25)',
+            backdropFilter: 'blur(8px)'
+          }}>
+            <p className="text-sm font-bold" style={{
+              color: atRiskClients > 0 ? 'rgba(239, 68, 68, 0.95)' : 'var(--color-text-muted)'
+            }}>
               {atRiskClients}
             </p>
-            <p className={`text-xs ${atRiskClients > 0 ? 'text-red-600' : 'text-gray-600'}`}>At Risk</p>
+            <p className="text-xs" style={{
+              color: atRiskClients > 0 ? 'rgba(239, 68, 68, 0.85)' : 'var(--color-text-muted)'
+            }}>At Risk</p>
           </div>
         </div>
 
-        {/* Top Clients */}
+        {/* Top Clients - Glassmorphic */}
         <div>
-          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+          <h4 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
             <Building2 className="h-4 w-4" />
             Top Clients by {sortBy === 'score' ? 'Health Score' : sortBy === 'risk' ? 'Risk Level' : 'Revenue'}
           </h4>
           <div className="space-y-2">
             {clientHealthScores.slice(0, 4).map((clientScore, index) => (
-              <div key={clientScore.client.id} className="p-3 rounded-lg border border-border/30 hover:border-primary/30 transition-colors">
+              <div key={clientScore.client.id} className="p-3 rounded-lg transition-all duration-200" style={{
+                background: 'rgba(15, 23, 42, 0.45)',
+                border: '1px solid rgba(148, 163, 184, 0.16)',
+                cursor: 'pointer'
+              }} onMouseEnter={(e) => {
+                e.currentTarget.style.border = '1px solid rgba(96, 165, 250, 0.35)'
+              }} onMouseLeave={(e) => {
+                e.currentTarget.style.border = '1px solid rgba(148, 163, 184, 0.16)'
+              }}>
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -690,7 +738,7 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
                         <span className="text-xs font-medium">{clientScore.score}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
                       <div className="flex items-center gap-1">
                         <DollarSign className="h-3 w-3" />
                         {formatCurrency(clientScore.client.revenue.thisMonth)}
@@ -705,21 +753,34 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
                       </div>
                     </div>
                   </div>
-                  <Badge className={`text-xs ${getStatusColor(clientScore.status)}`}>
+                  <span className="text-xs px-2 py-1 rounded-md font-semibold" style={{
+                    background: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.15)' :
+                               clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.15)' :
+                               clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.15)' :
+                               'rgba(239, 68, 68, 0.15)',
+                    border: clientScore.status === 'excellent' ? '1px solid rgba(52, 211, 153, 0.25)' :
+                           clientScore.status === 'good' ? '1px solid rgba(59, 130, 246, 0.25)' :
+                           clientScore.status === 'warning' ? '1px solid rgba(251, 146, 60, 0.25)' :
+                           '1px solid rgba(239, 68, 68, 0.25)',
+                    color: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.95)' :
+                          clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.95)' :
+                          clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.95)' :
+                          'rgba(239, 68, 68, 0.95)'
+                  }}>
                     {clientScore.status.toUpperCase()}
-                  </Badge>
+                  </span>
                 </div>
 
                 {/* Risk Factors or Opportunities */}
                 {(clientScore.riskFactors.length > 0 || clientScore.opportunities.length > 0) && (
                   <div className="mt-2">
                     {clientScore.riskFactors.length > 0 && (
-                      <p className="text-xs text-red-600">
+                      <p className="text-xs" style={{ color: 'rgba(239, 68, 68, 0.95)' }}>
                         ⚠️ {clientScore.riskFactors[0]}
                       </p>
                     )}
                     {clientScore.opportunities.length > 0 && !clientScore.riskFactors.length && (
-                      <p className="text-xs text-green-600">
+                      <p className="text-xs" style={{ color: 'rgba(52, 211, 153, 0.95)' }}>
                         💡 {clientScore.opportunities[0]}
                       </p>
                     )}
@@ -730,19 +791,39 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="pt-2 border-t border-border/20">
+        {/* Quick Actions - Glassmorphic */}
+        <div className="pt-2" style={{ borderTop: '1px solid rgba(148, 163, 184, 0.12)' }}>
           <div className="flex gap-2">
             <button
               onClick={onViewAllClients}
-              className="flex-1 text-sm text-primary hover:bg-primary/10 py-2 px-3 rounded-lg transition-colors"
+              className="flex-1 text-sm py-2 px-3 rounded-lg transition-all duration-200"
+              style={{
+                color: 'rgba(96, 165, 250, 0.95)',
+                background: 'transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(96, 165, 250, 0.1)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
             >
               View All Clients
             </button>
             {atRiskClients > 0 && (
               <button
                 onClick={() => onViewAllClients?.()}
-                className="text-sm text-red-600 hover:bg-red-50 py-2 px-3 rounded-lg transition-colors"
+                className="text-sm py-2 px-3 rounded-lg transition-all duration-200"
+                style={{
+                  color: 'rgba(239, 68, 68, 0.95)',
+                  background: 'transparent'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                }}
               >
                 Review At-Risk
               </button>
@@ -750,6 +831,6 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
           </div>
         </div>
       </div>
-    </Card>
+    </div>
   )
 }

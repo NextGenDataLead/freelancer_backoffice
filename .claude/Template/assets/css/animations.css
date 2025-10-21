@@ -1,0 +1,48 @@
+@keyframes pulse-glow {
+  0% {
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
+}
+
+@keyframes float-soft {
+  0% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-6px) scale(1.01);
+  }
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+}
+
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-120%) rotate(12deg);
+  }
+  100% {
+    transform: translateX(120%) rotate(12deg);
+  }
+}
+
+.glow-orb {
+  position: absolute;
+  inset: -40%;
+  background: conic-gradient(from 120deg, rgba(56, 189, 248, 0.12), rgba(79, 70, 229, 0.24), rgba(94, 234, 212, 0.16), rgba(56, 189, 248, 0.12));
+  filter: blur(64px);
+  opacity: 0.75;
+  animation: pulse-glow 10s ease-in-out infinite;
+}
+
+.float-soft {
+  animation: float-soft 12s ease-in-out infinite;
+}

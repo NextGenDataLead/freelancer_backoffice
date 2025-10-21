@@ -1,0 +1,140 @@
+:root {
+  /* Colors */
+  --color-bg: #050b1b;
+  --color-surface: rgba(16, 24, 40, 0.8);
+  --color-surface-alt: rgba(15, 23, 42, 0.72);
+  --color-overlay: rgba(148, 163, 184, 0.08);
+  --color-border: rgba(148, 163, 184, 0.18);
+  --color-border-strong: rgba(148, 163, 184, 0.35);
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: rgba(226, 232, 240, 0.8);
+  --color-text-muted: rgba(148, 163, 184, 0.8);
+  --color-accent-green: #34d399;
+  --color-accent-blue: #60a5fa;
+  --color-accent-indigo: #6366f1;
+  --color-accent-cyan: #22d3ee;
+  --color-danger: #fb7185;
+  --color-success: #22c55e;
+  --color-warning: #fbbf24;
+
+  /* Border Radius */
+  --radius-card: 24px;
+  --radius-pill: 999px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+
+  /* Responsive Spacing - Mobile First */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+
+  /* Fluid Typography */
+  --font-size-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+  --font-size-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+  --font-size-base: clamp(1rem, 0.9rem + 0.5vw, 1.125rem);
+  --font-size-lg: clamp(1.125rem, 1rem + 0.625vw, 1.25rem);
+  --font-size-xl: clamp(1.25rem, 1.1rem + 0.75vw, 1.5rem);
+  --font-size-2xl: clamp(1.5rem, 1.3rem + 1vw, 2rem);
+  --font-size-3xl: clamp(1.875rem, 1.5rem + 1.5vw, 2.5rem);
+
+  /* Touch Targets - Mobile First */
+  --touch-target-min: 44px;
+  --touch-target-comfortable: 48px;
+  --touch-spacing: 12px;
+
+  /* Shadows */
+  --shadow-card: 0 24px 60px -32px rgba(15, 23, 42, 0.9);
+  --shadow-soft: 0 10px 40px -24px rgba(59, 130, 246, 0.65);
+  --shadow-sm: 0 2px 8px -2px rgba(15, 23, 42, 0.6);
+  --shadow-md: 0 4px 16px -4px rgba(15, 23, 42, 0.7);
+
+  /* Font Family - Using Google Fonts CDN (same as Test project) */
+  --font-primary: 'Outfit', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Transitions */
+  --transition-fast: 150ms ease-out;
+  --transition-normal: 250ms ease-out;
+  --transition-slow: 350ms ease-out;
+
+  /* Z-index Scale */
+  --z-base: 1;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-notification: 500;
+}
+
+/* Tablet Breakpoint: Adjust spacing */
+@media (min-width: 768px) {
+  :root {
+    --space-md: 16px;
+    --space-lg: 20px;
+    --space-xl: 28px;
+    --space-2xl: 32px;
+  }
+}
+
+/* Desktop Breakpoint: Full spacing */
+@media (min-width: 1024px) {
+  :root {
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-2xl: 40px;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-bg: #0b1228;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-primary);
+  background: radial-gradient(circle at 20% 0%, rgba(99, 102, 241, 0.2), transparent 40%),
+              radial-gradient(circle at 80% 0%, rgba(45, 212, 191, 0.12), transparent 45%),
+              linear-gradient(160deg, #040712 0%, #0b1228 50%, #020617 100%);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font-family: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}

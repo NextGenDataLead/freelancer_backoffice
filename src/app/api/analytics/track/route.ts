@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentDate } from '@/lib/current-date'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
     console.log('Analytics Event:', {
       event,
       properties,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(getCurrentDate().getTime()).toISOString(),
       ip: request.ip || 'unknown',
       headers: {
         'user-agent': request.headers.get('user-agent'),

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentDate } from '@/lib/current-date'
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,7 +11,7 @@ export async function POST(request: NextRequest) {
       value: metric.value,
       id: metric.id,
       rating: metric.rating,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date(getCurrentDate().getTime()).toISOString(),
       url: metric.url || request.headers.get('referer'),
       user_agent: request.headers.get('user-agent'),
     })

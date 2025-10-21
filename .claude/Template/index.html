@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NovaWave Finance — Dashboard</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+    <link rel="stylesheet" href="assets/css/theme.css" />
+    <link rel="stylesheet" href="assets/css/animations.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+
+    <script defer src="https://unpkg.com/lucide@latest"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="assets/js/utils.js"></script>
+    <script defer src="assets/js/chart.js"></script>
+    <script defer src="assets/js/interactions.js"></script>
+  </head>
+  <body>
+    <div class="backdrop-aura" aria-hidden="true"></div>
+
+    <div class="dashboard-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="sidebar__logo" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
+                <stop offset="50%" style="stop-color:#3b82f6;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+              </linearGradient>
+              <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#22d3ee;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+
+            <!-- Laptop/Monitor base -->
+            <rect x="8" y="16" width="32" height="20" rx="2" stroke="url(#logoGradient)" stroke-width="2.5" fill="none"/>
+
+            <!-- Screen content - code brackets -->
+            <path d="M 16 22 L 14 26 L 16 30" stroke="url(#accentGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M 32 22 L 34 26 L 32 30" stroke="url(#accentGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+            <!-- Center dot/cursor -->
+            <circle cx="24" cy="26" r="1.5" fill="url(#accentGradient)"/>
+
+            <!-- Laptop base/stand -->
+            <path d="M 6 36 L 12 36 L 12 38 L 36 38 L 36 36 L 42 36" stroke="url(#logoGradient)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+
+            <!-- Network nodes/connection dots -->
+            <circle cx="12" cy="10" r="2" fill="url(#accentGradient)" opacity="0.8"/>
+            <circle cx="24" cy="8" r="2" fill="url(#logoGradient)" opacity="0.8"/>
+            <circle cx="36" cy="10" r="2" fill="url(#accentGradient)" opacity="0.8"/>
+
+            <!-- Connection lines -->
+            <path d="M 13 11 L 22 9" stroke="url(#logoGradient)" stroke-width="1.5" opacity="0.5" stroke-linecap="round"/>
+            <path d="M 26 9 L 35 11" stroke="url(#logoGradient)" stroke-width="1.5" opacity="0.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <nav class="sidebar__nav">
+          <button type="button" class="is-active" data-nav="Home" aria-current="page" aria-label="Dashboard home">
+            <i data-lucide="home"></i>
+          </button>
+          <button type="button" data-nav="Blocks" aria-label="Blocks">
+            <i data-lucide="layout-dashboard"></i>
+          </button>
+          <button type="button" data-nav="Cards" aria-label="Cards">
+            <i data-lucide="credit-card"></i>
+          </button>
+          <button type="button" data-nav="Contacts" aria-label="Contacts">
+            <i data-lucide="users"></i>
+          </button>
+          <button type="button" data-nav="Settings" aria-label="Settings">
+            <i data-lucide="settings"></i>
+          </button>
+        </nav>
+      </aside>
+
+      <main class="main-panel" role="main">
+        <header class="topbar">
+          <div class="topbar__left">
+            <h1>Dashboard</h1>
+          </div>
+          <div class="topbar__center">
+            <button type="button" class="quick-action-btn timer-btn" aria-label="Start timer">
+              <i data-lucide="clock"></i>
+              <span>Timer</span>
+            </button>
+            <button type="button" class="quick-action-btn expense-btn" aria-label="Log expense">
+              <i data-lucide="receipt"></i>
+              <span>Expense</span>
+            </button>
+            <button type="button" class="quick-action-btn invoice-btn" aria-label="Create invoice">
+              <i data-lucide="file-text"></i>
+              <span>Invoice</span>
+              <span class="action-badge">€4.5K</span>
+            </button>
+            <button type="button" class="quick-action-btn tax-btn" aria-label="Tax reporting Q4 - 75% complete">
+              <i data-lucide="calendar-check"></i>
+              <span>Tax</span>
+              <div class="tax-indicator">
+                <span class="tax-quarter">Q4</span>
+                <div class="tax-gauge">
+                  <div class="tax-gauge-fill" style="width: 75%"></div>
+                </div>
+              </div>
+            </button>
+          </div>
+          <div class="topbar__right">
+            <button type="button" class="icon-button" aria-label="Messages">
+              <i data-lucide="mail"></i>
+            </button>
+            <button type="button" class="icon-button notification-button" aria-label="Notifications">
+              <i data-lucide="bell"></i>
+              <span class="notification-badge"></span>
+            </button>
+            <div class="avatar" role="button" tabindex="0" aria-label="Account menu">
+              <img src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=facearea&w=100&q=80" alt="Jack Dawson" />
+              <div class="topbar__meta">
+                <strong>Jack Dawson</strong>
+                <span>@jack_dawson</span>
+              </div>
+              <i data-lucide="chevron-down"></i>
+            </div>
+          </div>
+        </header>
+
+        <section class="main-grid" aria-label="Dashboard content">
+          <!-- Left column: Total balance -->
+          <article class="glass-card" style="grid-column: span 6; grid-row: span 1;" aria-labelledby="total-balance-title">
+            <div class="card-header">
+              <h2 class="card-header__title" id="total-balance-title">Total balance</h2>
+              <div class="time-toggle" role="tablist" aria-label="Balance timeframe">
+                <button type="button" class="is-active" data-timeframe="1y" role="tab" aria-selected="true">1 year</button>
+                <button type="button" data-timeframe="6m" role="tab" aria-selected="false">6 month</button>
+                <button type="button" data-timeframe="3m" role="tab" aria-selected="false">3 month</button>
+                <button type="button" data-timeframe="1m" role="tab" aria-selected="false">1 month</button>
+              </div>
+            </div>
+            <div class="balance-chart" aria-hidden="false">
+              <canvas id="balanceChart" height="280" role="img" aria-label="Balance chart"></canvas>
+            </div>
+            <div class="metric" role="presentation">
+              <span>6 month average</span>
+              <strong>$8,000.00</strong>
+            </div>
+            <div class="chart-legends" role="presentation">
+              <span><span class="legend-bullet" style="background: rgba(148, 163, 184, 0.4);"></span>Available money</span>
+              <span><span class="legend-bullet" style="background: var(--color-success);"></span>Actual balance</span>
+            </div>
+          </article>
+
+          <!-- My cards -->
+          <article class="glass-card" style="grid-column: span 6; grid-row: span 1;" aria-labelledby="cards-title">
+            <div class="card-header">
+              <h2 class="card-header__title" id="cards-title">My cards</h2>
+              <button type="button" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;">+ Add new</button>
+            </div>
+            <div class="card-grid">
+              <div class="credit-card" style="grid-column: span 12;">
+                <span class="credit-card__status">Active</span>
+                <div class="credit-card__sum">$12,850.00</div>
+                <div style="display:flex; justify-content: space-between; align-items: flex-end; margin-top: 32px;">
+                  <div class="credit-card__chip" aria-hidden="true"></div>
+                  <div style="display:flex; gap: 10px;">
+                    <div class="promo-card__badge" style="width: 34px; height: 34px; background: #facc15;"></div>
+                    <div class="promo-card__badge" style="width: 34px; height: 34px; background: #ef4444;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="card-placeholder" style="grid-column: span 6;">
+                <span>••• Locked</span>
+              </div>
+              <div class="card-placeholder" style="grid-column: span 6;">
+                <span>••• Locked</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Recent transactions -->
+          <article class="glass-card" style="grid-column: span 6; grid-row: span 1;" aria-labelledby="transactions-title">
+            <div class="card-header">
+              <h2 class="card-header__title" id="transactions-title">Recent transaction</h2>
+              <div style="display:flex; gap: 8px;">
+                <button type="button" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;">Sort ↑↓</button>
+                <button type="button" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;">Month ▾</button>
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Transaction</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Type</th>
+                    <th scope="col" style="text-align:right;">Sum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <div class="transaction">
+                        <div class="transaction__icon" aria-hidden="true">🎧</div>
+                        <div>
+                          <strong>Spotify</strong>
+                          <span style="display:block; font-size:0.75rem; color:var(--color-text-muted);">17 Jan 2025, 02:00 PM</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="status-pill is-success">Completed</span></td>
+                    <td style="color:var(--color-text-muted);">Subscription</td>
+                    <td style="text-align:right; font-weight:600;">$9.99</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="transaction">
+                        <div class="transaction__icon" aria-hidden="true">🛒</div>
+                        <div>
+                          <strong>App Store</strong>
+                          <span style="display:block; font-size:0.75rem; color:var(--color-text-muted);">16 Jan 2025, 10:06 AM</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="status-pill is-danger">Canceled</span></td>
+                    <td style="color:var(--color-text-muted);">Subscription</td>
+                    <td style="text-align:right; font-weight:600;">$4.99</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="transaction">
+                        <div class="transaction__icon" aria-hidden="true">🥬</div>
+                        <div>
+                          <strong>GreenGrocers</strong>
+                          <span style="display:block; font-size:0.75rem; color:var(--color-text-muted);">16 Jan 2025, 02:00 PM</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="status-pill is-success">Completed</span></td>
+                    <td style="color:var(--color-text-muted);">Groceries</td>
+                    <td style="text-align:right; font-weight:600;">$4.99</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <!-- Categories (half width on right) -->
+          <article class="glass-card" style="grid-column: span 3; grid-row: span 1;" aria-labelledby="categories-title">
+            <div class="card-header">
+              <h2 class="card-header__title" id="categories-title">Categories</h2>
+              <button type="button" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;">See all</button>
+            </div>
+            <p style="margin:0; color:var(--color-text-muted);">Spent 8,450.00 USD</p>
+            <div class="progress-bar">
+              <div class="progress-bar__fill"></div>
+            </div>
+            <div class="category-list">
+              <div class="category-item">
+                <div class="category-item__label">
+                  <span class="category-item__dot" style="background: var(--color-accent-blue);"></span>
+                  <span>Utility payments</span>
+                </div>
+                <span>1200.00 USD →</span>
+              </div>
+              <div class="category-item">
+                <div class="category-item__label">
+                  <span class="category-item__dot" style="background: var(--color-success);"></span>
+                  <span>Groceries</span>
+                </div>
+                <span>845.00 USD →</span>
+              </div>
+              <div class="category-item">
+                <div class="category-item__label">
+                  <span class="category-item__dot" style="background: var(--color-warning);"></span>
+                  <span>Beauty and health</span>
+                </div>
+                <span>400.00 USD →</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Revolutionize Your Banking with AI (half width on right) -->
+          <article class="glass-card" style="grid-column: span 3; grid-row: span 1;" aria-labelledby="promo-title">
+            <div class="promo-card">
+              <div class="promo-card__badge float-soft" aria-hidden="true"></div>
+              <div>
+                <h2 class="promo-card__title" id="promo-title">Revolutionize Your Banking with AI</h2>
+                <p class="promo-card__body">Leverage the power of AI to manage your finances more efficiently.</p>
+              </div>
+              <button type="button" class="action-chip" data-action="customize" style="align-self:center;">Customize dashboard</button>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" data-toast hidden aria-live="polite" aria-atomic="true">
+      <span class="toast__status" aria-hidden="true"></span>
+      <span data-toast-message>Interaction saved</span>
+    </div>
+  </body>
+</html>

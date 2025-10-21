@@ -6,6 +6,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Query schema for unbilled time entries
 const UnbilledTimeEntriesQuerySchema = z.object({
@@ -195,7 +196,7 @@ export async function PUT(request: Request) {
     // Update the time entries
     const updateData: any = {
       invoiced: validatedData.mark_as_invoiced,
-      updated_at: new Date().toISOString()
+      updated_at: new Date(getCurrentDate().getTime()).toISOString()
     }
 
     if (validatedData.invoice_id) {

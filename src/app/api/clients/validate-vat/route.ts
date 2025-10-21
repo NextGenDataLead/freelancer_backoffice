@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { validateEUVATNumber } from '@/lib/validations/financial'
 import type { VATValidationResponse, FinancialApiResponse } from '@/lib/types/financial'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Validation schema for VAT validation request
 const VATValidationRequestSchema = z.object({
@@ -132,7 +133,7 @@ async function validateVATWithVIES(vatNumber: string, countryCode: string): Prom
       valid: data.isValid === true,
       company_name: data.name || undefined,
       company_address: data.address || undefined,
-      validation_date: new Date().toISOString()
+      validation_date: new Date(getCurrentDate().getTime()).toISOString()
     }
     
   } catch (error) {
@@ -150,4 +151,3 @@ async function validateVATWithVIES(vatNumber: string, countryCode: string): Prom
     }
   }
 }
-

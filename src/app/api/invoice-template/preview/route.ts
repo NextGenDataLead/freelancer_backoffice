@@ -16,6 +16,7 @@ import type {
   TemplatePreviewRequest,
   InvoiceTemplateConfig
 } from '@/lib/types/template'
+import { getCurrentDate } from '@/lib/current-date'
 
 // =============================================================================
 // VALIDATION SCHEMAS
@@ -266,8 +267,9 @@ function generateSampleContext(
   businessProfile: any,
   customSampleData?: any
 ): TemplateRenderContext {
-  const now = new Date()
-  const dueDate = new Date()
+  const currentDate = getCurrentDate()
+  const now = new Date(currentDate.getTime())
+  const dueDate = new Date(currentDate.getTime())
   dueDate.setDate(dueDate.getDate() + 30)
 
   // Debug: Check logo URL sources (similar to invoice generator)
@@ -371,7 +373,7 @@ async function generateRealContext(
  * Get default template configuration
  */
 function getDefaultTemplateConfig(tenantId: string, userId: string): InvoiceTemplateConfig {
-  const now = new Date()
+  const now = new Date(getCurrentDate().getTime())
   
   return {
     id: `default-${tenantId}`,

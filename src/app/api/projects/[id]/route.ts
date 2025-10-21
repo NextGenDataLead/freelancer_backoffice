@@ -7,6 +7,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Validation schema
 const UpdateProjectSchema = z.object({
@@ -111,7 +112,7 @@ export async function PATCH(
       .from('projects')
       .update({
         ...validatedData,
-        updated_at: new Date().toISOString()
+        updated_at: new Date(getCurrentDate().getTime()).toISOString()
       })
       .eq('id', projectId)
       .eq('tenant_id', profile.tenant_id)

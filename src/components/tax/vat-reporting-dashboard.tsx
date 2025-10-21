@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { 
   FileText, 
   Download, 
@@ -68,12 +69,43 @@ interface ICPDeclaration {
 }
 
 export function VATReportingDashboard() {
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
-  const [selectedQuarter, setSelectedQuarter] = useState(Math.floor((new Date().getMonth() + 3) / 3))
+  const searchParams = useSearchParams()
+
+  // Get initial year and quarter from query params or default to current
+  const getInitialYear = () => {
+    const yearParam = searchParams.get('year')
+    return yearParam ? parseInt(yearParam) : new Date().getFullYear()
+  }
+
+  const getInitialQuarter = () => {
+    const quarterParam = searchParams.get('quarter')
+    return quarterParam ? parseInt(quarterParam) : Math.floor((new Date().getMonth() + 3) / 3)
+  }
+
+  const [selectedYear, setSelectedYear] = useState(getInitialYear())
+  const [selectedQuarter, setSelectedQuarter] = useState(getInitialQuarter())
   const [btwForm, setBtwForm] = useState<GenerateBTWFormResponse | null>(null)
   const [icpDeclaration, setIcpDeclaration] = useState<ICPDeclaration | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Handle query parameter changes
+  useEffect(() => {
+    const yearParam = searchParams.get('year')
+    const quarterParam = searchParams.get('quarter')
+
+    if (yearParam) {
+      setSelectedYear(parseInt(yearParam))
+    }
+    if (quarterParam) {
+      setSelectedQuarter(parseInt(quarterParam))
+    }
+
+    // Clean up URL after reading params
+    if (yearParam || quarterParam) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [searchParams])
 
   const quarters = [
     { value: '1', label: 'Q1 (Jan-Mar)' },

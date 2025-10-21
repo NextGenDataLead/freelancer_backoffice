@@ -5,6 +5,7 @@ import {
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface MonthlyCashFlowData {
   date: string
@@ -44,7 +45,7 @@ export async function GET() {
     // Use latest entry date to determine the "current" year, or fall back to today
     const referenceDate = dateRange && dateRange.length > 0
       ? new Date(dateRange[0].entry_date)
-      : new Date()
+      : new Date(getCurrentDate().getTime())
 
     const currentYear = referenceDate.getFullYear()
 

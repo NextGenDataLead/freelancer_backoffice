@@ -10,6 +10,7 @@ import { ConsentAwareAnalytics } from '@/components/analytics/consent-aware-anal
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from 'sonner'
 import { NotificationToastContainer } from '@/components/notifications/notification-toast'
+import Script from 'next/script'
 // LiveChat and HelpSystem components not yet implemented
 import './globals.css'
 
@@ -74,6 +75,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <ClerkProvider
         signUpForceRedirectUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_UP_FORCE_REDIRECT_URL || "/onboarding"}
         signInForceRedirectUrl={process.env.NEXT_PUBLIC_CLERK_SIGN_IN_FORCE_REDIRECT_URL || "/dashboard"}
@@ -93,7 +102,7 @@ export default function RootLayout({
                 </RouteGuard>
               </AuthProvider>
               <CookieConsent />
-              <ConsentAwareAnalytics 
+              <ConsentAwareAnalytics
                 debug={process.env.NODE_ENV === 'development'}
               />
               <Toaster position="top-right" />
@@ -101,6 +110,13 @@ export default function RootLayout({
               {/* LiveChat and HelpSystem components not yet implemented */}
             </QueryProvider>
           </ThemeProvider>
+          {/* Scripts for NovaWave template (financieel-v2) */}
+          <Script src="https://unpkg.com/lucide@latest" strategy="beforeInteractive" />
+          <Script src="https://cdn.jsdelivr.net/npm/chart.js" strategy="beforeInteractive" />
+          <Script src="/js/utils.js" strategy="afterInteractive" />
+          <Script src="/js/chart.js" strategy="afterInteractive" />
+          <Script src="/js/interactions.js" strategy="afterInteractive" />
+          <Script src="/js/mobile-interactions.js" strategy="afterInteractive" />
         </body>
       </ClerkProvider>
     </html>

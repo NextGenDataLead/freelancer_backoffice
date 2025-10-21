@@ -45,6 +45,7 @@ import { CreateExpenseSchema } from '@/lib/validations/financial'
 import type { ExpenseWithSupplier, Client } from '@/lib/types/financial'
 import { z } from 'zod'
 import { SupplierValidationPanel } from '@/components/financial/expenses/supplier-validation-panel'
+import { DueRecurringExpensesCarousel } from '@/components/financial/expenses/due-recurring-expenses-carousel'
 
 interface ExpenseFormProps {
   expense?: ExpenseWithSupplier
@@ -364,6 +365,12 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false }:
           </div>
         </CardContent>
       </Card>
+
+      {/* Due Recurring Expenses Carousel */}
+      <DueRecurringExpensesCarousel onExpenseCreated={() => {
+        // Optionally refresh page or show notification
+        console.log('Expenses created from recurring template')
+      }} />
 
       {/* Expense Form */}
       <Card>

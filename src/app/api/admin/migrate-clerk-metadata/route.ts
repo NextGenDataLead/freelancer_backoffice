@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth, clerkClient } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentDate } from '@/lib/current-date'
 
 // Admin-only endpoint to migrate Clerk metadata to Supabase
 // This implements Phase 2 of the data architecture migration plan
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
 
             // Update Supabase profile if there's data to migrate
             if (needsUpdate) {
-              updateData.updated_at = new Date().toISOString()
+              updateData.updated_at = new Date(getCurrentDate().getTime()).toISOString()
 
               const { error: updateError } = await supabaseAdmin
                 .from('profiles')

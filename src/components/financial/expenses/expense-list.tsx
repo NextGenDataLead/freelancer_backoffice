@@ -85,6 +85,7 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
 
       if (!response.ok) {
         const error = await response.json()
+        console.error('API Error Response:', error)
         throw new Error(error.message || 'Failed to update expense approval')
       }
 

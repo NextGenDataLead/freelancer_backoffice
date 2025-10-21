@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useExpenseMetrics } from '@/hooks/use-expense-metrics'
 import { formatEuropeanCurrency } from '@/lib/utils/formatEuropeanNumber'
 import { Button } from '@/components/ui/button'
@@ -8,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ExpenseList } from '@/components/financial/expenses/expense-list'
 import { ExpenseForm } from '@/components/financial/expenses/expense-form'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Euro, Plus, ArrowLeft, Receipt, Camera, TrendingDown } from 'lucide-react'
+import { Euro, Plus, ArrowLeft, Receipt, TrendingDown, Repeat } from 'lucide-react'
 import Link from 'next/link'
 
 interface ExpensesContentProps {
@@ -17,17 +18,38 @@ interface ExpensesContentProps {
 }
 
 export function ExpensesContent({ showHeader = true, className = '' }: ExpensesContentProps) {
+  const searchParams = useSearchParams()
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingExpense, setEditingExpense] = useState<any>(null)
-  const { metrics, loading, error } = useExpenseMetrics()
+  const { metrics, loading } = useExpenseMetrics()
 
-  const handleExpenseCreated = (expense: any) => {
+  // Handle action query parameter
+  useEffect(() => {
+    const action = searchParams.get('action')
+    if (action === 'add_expense' || action === 'create') {
+      setShowCreateForm(true)
+      // Clean up URL without refreshing
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [searchParams])
+
+  // Listen for custom event to open modal
+  useEffect(() => {
+    const handleOpenExpenseModal = () => {
+      setShowCreateForm(true)
+    }
+
+    window.addEventListener('open-expense-modal', handleOpenExpenseModal)
+    return () => window.removeEventListener('open-expense-modal', handleOpenExpenseModal)
+  }, [])
+
+  const handleExpenseCreated = () => {
     setShowCreateForm(false)
     // Refresh the list - this would normally trigger a refetch
     window.location.reload()
   }
 
-  const handleExpenseUpdated = (expense: any) => {
+  const handleExpenseUpdated = () => {
     setEditingExpense(null)
     // Refresh the list
     window.location.reload()
@@ -79,24 +101,12 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
           </div>
 
           <div className="flex space-x-2">
-            <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
-                  <Camera className="h-4 w-4 mr-2" />
-                  Scan Bonnetje
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Nieuwe Uitgave - OCR Scan</DialogTitle>
-                </DialogHeader>
-                <ExpenseForm
-                  onSuccess={handleExpenseCreated}
-                  onCancel={() => setShowCreateForm(false)}
-                  enableOCR={true}
-                />
-              </DialogContent>
-            </Dialog>
+            <Link href="/dashboard/financieel-v2/terugkerende-uitgaven">
+              <Button variant="outline">
+                <Repeat className="h-4 w-4 mr-2" />
+                Terugkerende Uitgaven
+              </Button>
+            </Link>
 
             <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
               <DialogTrigger asChild>
@@ -127,20 +137,20 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
           </div>
 
           <div className="flex space-x-2">
-            <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Nieuwe Uitgave - OCR Scan</DialogTitle>
-                </DialogHeader>
-                <ExpenseForm
-                  onSuccess={handleExpenseCreated}
-                  onCancel={() => setShowCreateForm(false)}
-                  enableOCR={true}
-                />
-              </DialogContent>
-            </Dialog>
+            <Link href="/dashboard/financieel-v2/terugkerende-uitgaven">
+              <Button variant="outline" size="sm">
+                <Repeat className="h-4 w-4 mr-2" />
+                Terugkerende Uitgaven
+              </Button>
+            </Link>
 
             <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nieuwe Uitgave
+                </Button>
+              </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Nieuwe Uitgave Toevoegen</DialogTitle>

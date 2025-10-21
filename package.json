@@ -47,6 +47,7 @@
     "@tanstack/react-query-devtools": "^5.84.1",
     "@types/multer": "^2.0.0",
     "@vercel/blob": "^1.1.1",
+    "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "color": "^4.2.3",

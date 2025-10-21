@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InvoiceList } from '@/components/financial/invoices/invoice-list'
@@ -19,6 +20,8 @@ interface InvoicesContentProps {
 }
 
 export function InvoicesContent({ showHeader = true, className = '' }: InvoicesContentProps) {
+  const searchParams = useSearchParams()
+
   // Core state management
   const [editingInvoice, setEditingInvoice] = useState<any>(null)
   const [viewingInvoice, setViewingInvoice] = useState<any>(null)
@@ -32,6 +35,18 @@ export function InvoicesContent({ showHeader = true, className = '' }: InvoicesC
   // Action modal states
   const [showRemindersModal, setShowRemindersModal] = useState(false)
   const [showVATOverview, setShowVATOverview] = useState(false)
+
+  // Handle action query parameter to open comprehensive wizard
+  useEffect(() => {
+    const action = searchParams.get('action')
+    const unbilledAmount = searchParams.get('unbilled_amount')
+
+    if (action === 'create') {
+      setShowComprehensiveWizard(true)
+      // Clean up URL without refreshing
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [searchParams])
 
   const handleInvoiceCreated = (invoice: any) => {
     setShowManualInvoiceForm(false)

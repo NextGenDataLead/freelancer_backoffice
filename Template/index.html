@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes" />
+    <meta name="theme-color" content="#050b1b" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>NovaWave Finance — Dashboard</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+    <link rel="stylesheet" href="assets/css/theme.css" />
+    <link rel="stylesheet" href="assets/css/animations.css" />
+    <link rel="stylesheet" href="assets/css/components.css" />
+
+    <script defer src="https://unpkg.com/lucide@latest"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="assets/js/utils.js"></script>
+    <script defer src="assets/js/chart.js"></script>
+    <script defer src="assets/js/interactions.js"></script>
+    <script defer src="assets/js/mobile-interactions.js"></script>
+  </head>
+  <body>
+    <div class="backdrop-aura" aria-hidden="true"></div>
+
+    <!-- Mobile Overlay -->
+    <div class="mobile-overlay" aria-hidden="true"></div>
+
+    <!-- Pull to Refresh Indicator -->
+    <div class="pull-to-refresh" aria-live="polite">
+      <i data-lucide="arrow-down"></i> Pull to refresh
+    </div>
+
+    <div class="dashboard-shell">
+      <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+        <div class="sidebar__logo" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
+                <stop offset="50%" style="stop-color:#3b82f6;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+              </linearGradient>
+              <linearGradient id="accentGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#22d3ee;stop-opacity:1" />
+                <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+              </linearGradient>
+            </defs>
+
+            <!-- Laptop/Monitor base -->
+            <rect x="8" y="16" width="32" height="20" rx="2" stroke="url(#logoGradient)" stroke-width="2.5" fill="none"/>
+
+            <!-- Screen content - code brackets -->
+            <path d="M 16 22 L 14 26 L 16 30" stroke="url(#accentGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M 32 22 L 34 26 L 32 30" stroke="url(#accentGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+            <!-- Center dot/cursor -->
+            <circle cx="24" cy="26" r="1.5" fill="url(#accentGradient)"/>
+
+            <!-- Laptop base/stand -->
+            <path d="M 6 36 L 12 36 L 12 38 L 36 38 L 36 36 L 42 36" stroke="url(#logoGradient)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+
+            <!-- Network nodes/connection dots -->
+            <circle cx="12" cy="10" r="2" fill="url(#accentGradient)" opacity="0.8"/>
+            <circle cx="24" cy="8" r="2" fill="url(#logoGradient)" opacity="0.8"/>
+            <circle cx="36" cy="10" r="2" fill="url(#accentGradient)" opacity="0.8"/>
+
+            <!-- Connection lines -->
+            <path d="M 13 11 L 22 9" stroke="url(#logoGradient)" stroke-width="1.5" opacity="0.5" stroke-linecap="round"/>
+            <path d="M 26 9 L 35 11" stroke="url(#logoGradient)" stroke-width="1.5" opacity="0.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <nav class="sidebar__nav">
+          <button type="button" class="is-active" data-nav="Home" data-tooltip="Home" aria-current="page" aria-label="Dashboard home">
+            <i data-lucide="home"></i>
+            <span class="nav-label">Home</span>
+          </button>
+          <button type="button" data-nav="Blocks" data-tooltip="Blocks" aria-label="Blocks">
+            <i data-lucide="layout-dashboard"></i>
+            <span class="nav-label">Blocks</span>
+          </button>
+          <button type="button" data-nav="Cards" data-tooltip="Cards" aria-label="Cards">
+            <i data-lucide="credit-card"></i>
+            <span class="nav-label">Cards</span>
+          </button>
+          <button type="button" data-nav="Contacts" data-tooltip="Contacts" aria-label="Contacts">
+            <i data-lucide="users"></i>
+            <span class="nav-label">Contacts</span>
+          </button>
+          <button type="button" data-nav="Settings" data-tooltip="Settings" aria-label="Settings">
+            <i data-lucide="settings"></i>
+            <span class="nav-label">Settings</span>
+          </button>
+        </nav>
+      </aside>
+
+      <main class="main-panel" role="main">
+        <header class="topbar">
+          <div class="topbar__left">
+            <button type="button" class="hamburger-menu" aria-label="Toggle navigation menu" aria-expanded="false">
+              <span></span>
+              <span></span>
+              <span></span>
+            </button>
+            <h1>Dashboard</h1>
+          </div>
+          <div class="topbar__center">
+            <button type="button" class="quick-action-btn timer-btn" aria-label="Start timer">
+              <i data-lucide="clock"></i>
+              <span>Timer</span>
+            </button>
+            <button type="button" class="quick-action-btn expense-btn" aria-label="Log expense">
+              <i data-lucide="receipt"></i>
+              <span>Expense</span>
+            </button>
+            <button type="button" class="quick-action-btn invoice-btn" aria-label="Create invoice">
+              <i data-lucide="file-text"></i>
+              <span>Invoice</span>
+              <span class="action-badge">€4.5K</span>
+            </button>
+            <button type="button" class="quick-action-btn tax-btn" aria-label="Tax reporting Q4 - 75% complete">
+              <i data-lucide="calendar-check"></i>
+              <span>Tax</span>
+              <div class="tax-indicator">
+                <span class="tax-quarter">Q4</span>
+                <div class="tax-gauge">
+                  <div class="tax-gauge-fill" style="width: 75%"></div>
+                </div>
+              </div>
+            </button>
+          </div>
+          <div class="topbar__right">
+            <button type="button" class="icon-button" data-tooltip="Messages" aria-label="Messages">
+              <i data-lucide="mail"></i>
+            </button>
+            <button type="button" class="icon-button notification-button" data-tooltip="Notifications" aria-label="Notifications">
+              <i data-lucide="bell"></i>
+              <span class="notification-badge"></span>
+            </button>
+            <div class="avatar" role="button" tabindex="0" aria-label="Account menu">
+              <img src="https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=facearea&w=100&q=80" alt="Jack Dawson" />
+              <div class="topbar__meta">
+                <strong>Jack Dawson</strong>
+                <span>@jack_dawson</span>
+              </div>
+              <i data-lucide="chevron-down"></i>
+            </div>
+          </div>
+        </header>
+
+        <section class="main-grid" aria-label="Dashboard content">
+          <!-- Left column: My cards -->
+          <article class="glass-card" style="grid-column: span 6; grid-row: span 1;" aria-labelledby="cards-title">
+            <div class="card-header">
+              <h2 class="card-header__title" id="cards-title">My cards</h2>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" id="toggleCardsBtn" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;" data-card-count="6">
+                  Show 4
+                </button>
+                <button type="button" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;">+ Add new</button>
+              </div>
+            </div>
+            <div class="card-grid">
+              <div class="credit-card" style="grid-column: span 6; background: linear-gradient(135deg, rgba(99, 102, 241, 0.95), rgba(59, 130, 246, 0.95));">
+                <span class="credit-card__status">Active</span>
+                <div class="credit-card__sum">$12,850.00</div>
+                <div style="display:flex; justify-content: space-between; align-items: flex-end; margin-top: 8px;">
+                  <div class="credit-card__chip" aria-hidden="true"></div>
+                  <div style="display:flex; gap: 6px;">
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #facc15;"></div>
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #ef4444;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="credit-card" style="grid-column: span 6; background: linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(124, 58, 237, 0.95));">
+                <span class="credit-card__status">Active</span>
+                <div class="credit-card__sum">$8,420.50</div>
+                <div style="display:flex; justify-content: space-between; align-items: flex-end; margin-top: 8px;">
+                  <div class="credit-card__chip" aria-hidden="true"></div>
+                  <div style="display:flex; gap: 6px;">
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #3b82f6;"></div>
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #8b5cf6;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="credit-card" style="grid-column: span 6; background: linear-gradient(135deg, rgba(16, 185, 129, 0.95), rgba(5, 150, 105, 0.95));">
+                <span class="credit-card__status">Active</span>
+                <div class="credit-card__sum">$5,230.75</div>
+                <div style="display:flex; justify-content: space-between; align-items: flex-end; margin-top: 8px;">
+                  <div class="credit-card__chip" aria-hidden="true"></div>
+                  <div style="display:flex; gap: 6px;">
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #10b981;"></div>
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #059669;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="credit-card" style="grid-column: span 6; background: linear-gradient(135deg, rgba(236, 72, 153, 0.95), rgba(219, 39, 119, 0.95));">
+                <span class="credit-card__status">Active</span>
+                <div class="credit-card__sum">$3,890.00</div>
+                <div style="display:flex; justify-content: space-between; align-items: flex-end; margin-top: 8px;">
+                  <div class="credit-card__chip" aria-hidden="true"></div>
+                  <div style="display:flex; gap: 6px;">
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #ec4899;"></div>
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #db2777;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="credit-card card-extra" style="grid-column: span 6; background: linear-gradient(135deg, rgba(251, 146, 60, 0.95), rgba(249, 115, 22, 0.95));">
+                <span class="credit-card__status">Active</span>
+                <div class="credit-card__sum">$2,150.25</div>
+                <div style="display:flex; justify-content: space-between; align-items: flex-end; margin-top: 8px;">
+                  <div class="credit-card__chip" aria-hidden="true"></div>
+                  <div style="display:flex; gap: 6px;">
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #fb923c;"></div>
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #f97316;"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="credit-card card-extra" style="grid-column: span 6; background: linear-gradient(135deg, rgba(6, 182, 212, 0.95), rgba(8, 145, 178, 0.95));">
+                <span class="credit-card__status">Active</span>
+                <div class="credit-card__sum">$1,750.00</div>
+                <div style="display:flex; justify-content: space-between; align-items: flex-end; margin-top: 8px;">
+                  <div class="credit-card__chip" aria-hidden="true"></div>
+                  <div style="display:flex; gap: 6px;">
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #06b6d4;"></div>
+                    <div class="promo-card__badge" style="width: 20px; height: 20px; background: #0891b2;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Right column: Total balance -->
+          <article class="glass-card" style="grid-column: span 6; grid-row: span 1;" aria-labelledby="total-balance-title">
+            <div class="card-header">
+              <h2 class="card-header__title" id="total-balance-title">Total balance</h2>
+              <div class="time-toggle" role="tablist" aria-label="Balance timeframe">
+                <button type="button" class="is-active" data-timeframe="1y" role="tab" aria-selected="true">1 year</button>
+                <button type="button" data-timeframe="6m" role="tab" aria-selected="false">6 month</button>
+                <button type="button" data-timeframe="3m" role="tab" aria-selected="false">3 month</button>
+                <button type="button" data-timeframe="1m" role="tab" aria-selected="false">1 month</button>
+              </div>
+            </div>
+            <div class="balance-chart" aria-hidden="false">
+              <canvas id="balanceChart" height="280" role="img" aria-label="Balance chart"></canvas>
+            </div>
+            <div class="metric" role="presentation">
+              <span>6 month average</span>
+              <strong>$8,000.00</strong>
+            </div>
+            <div class="chart-legends" role="presentation">
+              <span><span class="legend-bullet" style="background: rgba(148, 163, 184, 0.4);"></span>Available money</span>
+              <span><span class="legend-bullet" style="background: var(--color-success);"></span>Actual balance</span>
+            </div>
+          </article>
+
+          <!-- Recent transactions -->
+          <article class="glass-card" style="grid-column: span 5; grid-row: span 1;" aria-labelledby="transactions-title">
+            <div class="card-header">
+              <h2 class="card-header__title" id="transactions-title">Recent transaction</h2>
+              <div style="display:flex; gap: 8px;">
+                <button type="button" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;">Sort ↑↓</button>
+                <button type="button" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;">Month ▾</button>
+              </div>
+            </div>
+            <div class="table-wrapper">
+              <!-- Desktop Table View -->
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Transaction</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Type</th>
+                    <th scope="col" style="text-align:right;">Sum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <div class="transaction">
+                        <div class="transaction__icon" aria-hidden="true">🎧</div>
+                        <div>
+                          <strong>Spotify</strong>
+                          <span style="display:block; font-size:0.75rem; color:var(--color-text-muted);">17 Jan 2025, 02:00 PM</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="status-pill is-success">Completed</span></td>
+                    <td style="color:var(--color-text-muted);">Subscription</td>
+                    <td style="text-align:right; font-weight:600;">$9.99</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="transaction">
+                        <div class="transaction__icon" aria-hidden="true">🛒</div>
+                        <div>
+                          <strong>App Store</strong>
+                          <span style="display:block; font-size:0.75rem; color:var(--color-text-muted);">16 Jan 2025, 10:06 AM</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="status-pill is-danger">Canceled</span></td>
+                    <td style="color:var(--color-text-muted);">Subscription</td>
+                    <td style="text-align:right; font-weight:600;">$4.99</td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="transaction">
+                        <div class="transaction__icon" aria-hidden="true">🥬</div>
+                        <div>
+                          <strong>GreenGrocers</strong>
+                          <span style="display:block; font-size:0.75rem; color:var(--color-text-muted);">16 Jan 2025, 02:00 PM</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span class="status-pill is-success">Completed</span></td>
+                    <td style="color:var(--color-text-muted);">Groceries</td>
+                    <td style="text-align:right; font-weight:600;">$4.99</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <!-- Mobile Card View -->
+              <div class="mobile-transaction-list">
+                <div class="mobile-transaction-card">
+                  <div class="transaction">
+                    <div class="transaction__icon" aria-hidden="true">🎧</div>
+                    <div style="flex: 1;">
+                      <strong style="display: block; margin-bottom: 4px;">Spotify</strong>
+                      <span style="display:block; font-size:0.75rem; color:var(--color-text-muted); margin-bottom: 6px;">17 Jan 2025, 02:00 PM</span>
+                      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                        <span style="color:var(--color-text-muted); font-size: 0.85rem;">Subscription</span>
+                        <span class="status-pill is-success">Completed</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="font-weight:600; font-size: 1.1rem; white-space: nowrap;">$9.99</div>
+                </div>
+
+                <div class="mobile-transaction-card">
+                  <div class="transaction">
+                    <div class="transaction__icon" aria-hidden="true">🛒</div>
+                    <div style="flex: 1;">
+                      <strong style="display: block; margin-bottom: 4px;">App Store</strong>
+                      <span style="display:block; font-size:0.75rem; color:var(--color-text-muted); margin-bottom: 6px;">16 Jan 2025, 10:06 AM</span>
+                      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                        <span style="color:var(--color-text-muted); font-size: 0.85rem;">Subscription</span>
+                        <span class="status-pill is-danger">Canceled</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="font-weight:600; font-size: 1.1rem; white-space: nowrap;">$4.99</div>
+                </div>
+
+                <div class="mobile-transaction-card">
+                  <div class="transaction">
+                    <div class="transaction__icon" aria-hidden="true">🥬</div>
+                    <div style="flex: 1;">
+                      <strong style="display: block; margin-bottom: 4px;">GreenGrocers</strong>
+                      <span style="display:block; font-size:0.75rem; color:var(--color-text-muted); margin-bottom: 6px;">16 Jan 2025, 02:00 PM</span>
+                      <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                        <span style="color:var(--color-text-muted); font-size: 0.85rem;">Groceries</span>
+                        <span class="status-pill is-success">Completed</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="font-weight:600; font-size: 1.1rem; white-space: nowrap;">$4.99</div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Categories -->
+          <article class="glass-card" style="grid-column: span 5; grid-row: span 1;" aria-labelledby="categories-title">
+            <div class="card-header">
+              <h2 class="card-header__title" id="categories-title">Categories</h2>
+              <button type="button" class="action-chip secondary" style="padding: 6px 12px; font-size: 0.8rem;">See all</button>
+            </div>
+            <p style="margin:0; color:var(--color-text-muted);">Spent 8,450.00 USD</p>
+            <div class="progress-bar">
+              <div class="progress-bar__fill"></div>
+            </div>
+            <div class="category-list">
+              <div class="category-item">
+                <div class="category-item__label">
+                  <span class="category-item__dot" style="background: var(--color-accent-blue);"></span>
+                  <span>Utility payments</span>
+                </div>
+                <span>1200.00 USD →</span>
+              </div>
+              <div class="category-item">
+                <div class="category-item__label">
+                  <span class="category-item__dot" style="background: var(--color-success);"></span>
+                  <span>Groceries</span>
+                </div>
+                <span>845.00 USD →</span>
+              </div>
+              <div class="category-item">
+                <div class="category-item__label">
+                  <span class="category-item__dot" style="background: var(--color-warning);"></span>
+                  <span>Beauty and health</span>
+                </div>
+                <span>400.00 USD →</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Revolutionize Your Banking with AI -->
+          <article class="glass-card" style="grid-column: span 2; grid-row: span 1;" aria-labelledby="promo-title">
+            <div class="promo-card">
+              <div class="promo-card__badge float-soft" aria-hidden="true"></div>
+              <div>
+                <h2 class="promo-card__title" id="promo-title">Revolutionize Your Banking with AI</h2>
+                <p class="promo-card__body">Leverage the power of AI to manage your finances more efficiently.</p>
+              </div>
+              <button type="button" class="action-chip" data-action="customize" style="align-self:center;">Customize dashboard</button>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" data-toast hidden aria-live="polite" aria-atomic="true">
+      <span class="toast__status" aria-hidden="true"></span>
+      <span data-toast-message>Interaction saved</span>
+    </div>
+  </body>
+</html>

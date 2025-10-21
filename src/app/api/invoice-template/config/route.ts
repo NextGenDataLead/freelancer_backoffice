@@ -4,12 +4,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { 
-  supabaseAdmin, 
+import {
+  supabaseAdmin,
   getCurrentUserProfile,
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
+import { getCurrentDate } from '@/lib/current-date'
 import type { 
   InvoiceTemplateConfig, 
   CreateTemplateConfigRequest, 
@@ -163,7 +164,7 @@ export async function PUT(request: NextRequest) {
       .single()
 
     const updateData = validation.data
-    const now = new Date().toISOString()
+    const now = new Date(getCurrentDate().getTime()).toISOString()
 
     if (existingConfig) {
       // Update existing configuration

@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { getCurrentDate } from '@/lib/current-date'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -82,7 +83,7 @@ export async function POST(req: Request) {
       .from('profiles')
       .update({ 
         role: role,
-        updated_at: new Date().toISOString()
+        updated_at: new Date(getCurrentDate().getTime()).toISOString()
       })
       .eq('id', userProfile.id)
       .select('id, email, role, first_name, last_name')
