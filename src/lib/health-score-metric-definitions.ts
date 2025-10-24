@@ -810,6 +810,28 @@ export const METRIC_DEFINITIONS: Record<string, MetricDefinition> = {
     }
   },
 
+  recurring_expense_penalty: {
+    id: 'recurring_expense_penalty',
+    name: 'Recurring Expense Coverage',
+    category: 'cashflow',
+    description: 'Highlights when recurring expenses (rent, software, utilities) haven’t been recorded even though their scheduled dates have passed. Missing entries hide predictable outflows and skew cash flow insight.',
+    importance: 'Keeping recurring expenses up to date ensures cash flow forecasts, VAT obligations, and profitability figures include all predictable costs.',
+    calculation: 'Penalty tiers: 0 pts when all occurrences are recorded on time; -2 pts for 1-2 missed occurrences; -3.5 pts for 3-4 missed or ≥€1.5k outstanding; -5 pts for 5+ missed or ≥€2.5k outstanding.',
+    bestPractices: [
+      'Review the recurring expense due list weekly and record each occurrence promptly',
+      'Automate postings where possible (bank rules, scheduled entries)',
+      'Store evidence (invoice/receipt) with each occurrence for compliance',
+      'Assign ownership for reviewing and approving recurring expense postings',
+      'Reconcile templates monthly to confirm schedules and amounts are still accurate'
+    ],
+    benchmarks: {
+      excellent: '0 missed occurrences (all posted on/before due date)',
+      good: '1 missed occurrence resolved within 7 days',
+      fair: '2-3 missed occurrences or ~€1k outstanding',
+      poor: '4+ missed occurrences or >€2k outstanding'
+    }
+  },
+
   // ====== ADDITIONAL RISK METRICS ======
 
   invoice_processing_risk: {

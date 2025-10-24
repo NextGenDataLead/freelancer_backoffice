@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -21,7 +20,8 @@ import {
   Building2,
   Calendar,
   Euro,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { ExpenseWithSupplier } from '@/lib/types/financial'
@@ -49,12 +49,14 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [approvingExpenses, setApprovingExpenses] = useState<Set<string>>(new Set())
+  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null)
+  const [verifyingExpenses, setVerifyingExpenses] = useState<Set<string>>(new Set())
 
-  const fetchExpenses = async (page: number = 1) => {
+  const fetchExpenses = useCallback(async (page: number = 1) => {
     try {
       setLoading(true)
       const response = await fetch(`/api/expenses?page=${page}&limit=20`)
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch expenses')
       }
@@ -68,11 +70,20 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   const handleApprovalToggle = async (expense: ExpenseWithSupplier) => {
     const expenseId = expense.id
     const newApprovedStatus = expense.status !== 'approved'
+
+    // If removing approval, show confirmation dialog
+    if (!newApprovedStatus) {
+      const confirmed = window.confirm(
+        `Weet je zeker dat je de goedkeuring van uitgave "${expense.description}" wilt intrekken?\n\n` +
+        `Dit kan impact hebben op rapportages en administratie.`
+      )
+      if (!confirmed) return
+    }
 
     setApprovingExpenses(prev => new Set(prev).add(expenseId))
 
@@ -90,15 +101,15 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
       }
 
       // Update the expense in the local state
-      setExpenses(prev => prev.map(exp => 
-        exp.id === expenseId 
+      setExpenses(prev => prev.map(exp =>
+        exp.id === expenseId
           ? { ...exp, status: newApprovedStatus ? 'approved' : 'draft' }
           : exp
       ))
 
       // Show success message
       console.log(`Expense ${newApprovedStatus ? 'approved' : 'unapproved'} successfully`)
-      
+
     } catch (error) {
       console.error('Error updating expense approval:', error)
       alert(error instanceof Error ? error.message : 'Failed to update approval')
@@ -111,9 +122,95 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
     }
   }
 
+  const handleVerificationToggle = async (expense: ExpenseWithSupplier) => {
+    const expenseId = expense.id
+    const newVerifiedStatus = expense.manual_verification_required // If it requires verification, we're verifying it
+
+    setVerifyingExpenses(prev => new Set(prev).add(expenseId))
+
+    try {
+      const response = await fetch(`/api/expenses/${expenseId}/verify`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verified: newVerifiedStatus })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        console.error('API Error Response:', error)
+        throw new Error(error.message || 'Failed to update expense verification')
+      }
+
+      // Refresh the expense list to get updated verification status
+      await fetchExpenses(currentPage)
+
+    } catch (error) {
+      console.error('Error updating expense verification:', error)
+      alert(error instanceof Error ? error.message : 'Failed to update verification')
+    } finally {
+      setVerifyingExpenses(prev => {
+        const updated = new Set(prev)
+        updated.delete(expenseId)
+        return updated
+      })
+    }
+  }
+
   useEffect(() => {
     fetchExpenses()
-  }, [])
+  }, [fetchExpenses])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleRefresh = () => fetchExpenses()
+    window.addEventListener('expense:created', handleRefresh)
+    window.addEventListener('expense:deleted', handleRefresh)
+
+    return () => {
+      window.removeEventListener('expense:created', handleRefresh)
+      window.removeEventListener('expense:deleted', handleRefresh)
+    }
+  }, [fetchExpenses])
+
+  const handleDeleteExpense = async (expense: ExpenseWithSupplier) => {
+    if (deletingExpenseId) return
+    const confirmed = window.confirm(`Weet je zeker dat je de uitgave "${expense.description}" wilt verwijderen? Dit kan niet ongedaan gemaakt worden.`)
+    if (!confirmed) return
+
+    setDeletingExpenseId(expense.id)
+
+    try {
+      const response = await fetch(`/api/expenses/${expense.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}))
+        throw new Error(error.message || 'Verwijderen van uitgave is mislukt')
+      }
+
+      const result = await response.json().catch(() => ({}))
+
+      const nextPage = expenses.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage
+      await fetchExpenses(nextPage)
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('expense:deleted', {
+          detail: {
+            expenseId: expense.id,
+            templateId: result?.metricsRefreshHint?.templateId,
+            source: 'expense_list'
+          }
+        }))
+      }
+    } catch (error) {
+      console.error('Expense delete error:', error)
+      alert(error instanceof Error ? error.message : 'Verwijderen van uitgave is mislukt')
+    } finally {
+      setDeletingExpenseId(null)
+    }
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('nl-NL', {
@@ -152,103 +249,93 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
   }
 
   const getVerificationBadge = (expense: ExpenseWithSupplier) => {
+    const isVerifying = verifyingExpenses.has(expense.id)
+
     if (!expense.manual_verification_required) {
       return (
-        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 gap-1">
-          <CheckCircle className="h-3 w-3" />
+        <button
+          onClick={() => handleVerificationToggle(expense)}
+          disabled={isVerifying}
+          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 gap-1 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {isVerifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
           Geverifieerd
-        </span>
+        </button>
       )
     }
 
     if (expense.verified_at) {
       return (
-        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 gap-1">
-          <CheckCircle className="h-3 w-3" />
+        <button
+          onClick={() => handleVerificationToggle(expense)}
+          disabled={isVerifying}
+          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 gap-1 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors cursor-pointer disabled:opacity-50"
+        >
+          {isVerifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
           Handmatig
-        </span>
+        </button>
       )
     }
 
     return (
-      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 gap-1">
-        <AlertCircle className="h-3 w-3" />
+      <button
+        onClick={() => handleVerificationToggle(expense)}
+        disabled={isVerifying}
+        className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 gap-1 hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors cursor-pointer disabled:opacity-50"
+      >
+        {isVerifying ? <Loader2 className="h-3 w-3 animate-spin" /> : <AlertCircle className="h-3 w-3" />}
         Te controleren
-      </span>
+      </button>
     )
   }
 
   if (loading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Uitgaven</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center space-x-4">
-                <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
-                <div className="h-4 bg-muted animate-pulse rounded flex-1"></div>
-                <div className="h-4 bg-muted animate-pulse rounded w-20"></div>
-                <div className="h-4 bg-muted animate-pulse rounded w-20"></div>
-              </div>
-            ))}
+      <div className="space-y-4">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center space-x-4">
+            <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
+            <div className="h-4 bg-muted animate-pulse rounded flex-1"></div>
+            <div className="h-4 bg-muted animate-pulse rounded w-20"></div>
+            <div className="h-4 bg-muted animate-pulse rounded w-20"></div>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
     )
   }
 
   if (error) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Uitgaven</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center text-red-600 dark:text-red-400">
-            Fout bij laden van uitgaven: {error}
-          </div>
-          <Button onClick={() => fetchExpenses()} className="mt-4">
-            Opnieuw proberen
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="text-center py-12">
+        <div className="text-red-600 dark:text-red-400 mb-4">
+          Fout bij laden van uitgaven: {error}
+        </div>
+        <Button onClick={() => fetchExpenses()}>
+          Opnieuw proberen
+        </Button>
+      </div>
     )
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
-        <div>
-          <CardTitle>Uitgaven</CardTitle>
-          <p className="text-sm text-muted-foreground mt-2">
-            Beheer je zakelijke uitgaven en bonnen
+    <>
+      {expenses.length === 0 ? (
+        <div className="text-center py-12">
+          <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">Nog geen uitgaven</h3>
+          <p className="text-muted-foreground mb-4">
+            Voeg je eerste uitgave toe om je kosten bij te houden
           </p>
-        </div>
-        <Button onClick={onAddExpense}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nieuwe uitgave
-        </Button>
-      </CardHeader>
-      
-      <CardContent>
-        {expenses.length === 0 ? (
-          <div className="text-center py-12">
-            <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nog geen uitgaven</h3>
-            <p className="text-muted-foreground mb-4">
-              Voeg je eerste uitgave toe om je kosten bij te houden
-            </p>
+          {onAddExpense && (
             <Button onClick={onAddExpense}>
               <Plus className="h-4 w-4 mr-2" />
               Eerste uitgave toevoegen
             </Button>
-          </div>
-        ) : (
-          <>
-            <Table>
+          )}
+        </div>
+      ) : (
+        <>
+          <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-16">Goedkeuring</TableHead>
@@ -292,7 +379,7 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
                         <Building2 className="h-3 w-3 text-muted-foreground" />
                         <div>
                           <div className="font-medium text-sm">
-                            {expense.supplier?.company_name || expense.supplier?.name || 'Onbekend'}
+                            {expense.supplier?.company_name || expense.supplier?.name || expense.vendor_name || 'Onbekend'}
                           </div>
                           {expense.supplier?.country_code && expense.supplier.country_code !== 'NL' && (
                             <div className="text-xs text-muted-foreground">
@@ -378,6 +465,20 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
                         >
                           <Edit className="h-3 w-3" />
                         </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteExpense(expense)}
+                          className="h-7 w-7 text-red-600 hover:text-red-700"
+                          disabled={deletingExpenseId === expense.id}
+                        >
+                          {deletingExpenseId === expense.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -410,9 +511,8 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
                 </div>
               </div>
             )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+        </>
+      )}
+    </>
   )
 }

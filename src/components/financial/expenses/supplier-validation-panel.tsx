@@ -49,25 +49,25 @@ export function SupplierValidationPanel({
   }
 
   return (
-    <Card className="border-l-4 border-l-blue-500">
+    <Card className="border-l-4 border-l-sky-400/50 bg-white/5 border-white/10 backdrop-blur-xl text-slate-100">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Building2 className="h-4 w-4 text-blue-600" />
-            <CardTitle className="text-sm">Leverancier Validatie</CardTitle>
+            <Building2 className="h-4 w-4 text-sky-300" />
+            <CardTitle className="text-sm text-slate-100">Leverancier Validatie</CardTitle>
           </div>
-          {isValidating && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isValidating && <Loader2 className="h-4 w-4 animate-spin text-sky-300" />}
         </div>
-        <CardDescription className="text-xs">
+        <CardDescription className="text-xs text-slate-300">
           Automatische controle voor BTW verlegd en buitenlandse leveranciers
         </CardDescription>
       </CardHeader>
       
       <CardContent className="space-y-3">
         {error && (
-          <Alert>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-sm">
+          <Alert className="bg-red-500/10 border-red-400/20 text-red-200">
+            <AlertTriangle className="h-4 w-4 text-red-300" />
+            <AlertDescription className="text-sm text-red-200">
               Validatie mislukt: {error}
             </AlertDescription>
           </Alert>
@@ -101,9 +101,9 @@ export function SupplierValidationPanel({
 
             {/* VAT Validation Result */}
             {vatNumber && validation.vatValidation && (
-              <div className="p-3 bg-muted/50 rounded-lg">
-                <div className="text-sm font-medium mb-1">BTW Nummer Validatie</div>
-                <div className="text-xs text-muted-foreground space-y-1">
+              <div className="p-3 bg-white/5 rounded-lg border border-white/10">
+                <div className="text-sm font-medium mb-1 text-slate-100">BTW Nummer Validatie</div>
+                <div className="text-xs text-slate-300 space-y-1">
                   <div>BTW: {validation.vatValidation.vat_number}</div>
                   <div>Land: {validation.vatValidation.country_code}</div>
                   {validation.vatValidation.company_name && (
@@ -123,12 +123,12 @@ export function SupplierValidationPanel({
 
             {/* Warnings */}
             {hasWarnings && (
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
+              <Alert className="bg-yellow-500/10 border-yellow-400/20 text-yellow-200">
+                <AlertTriangle className="h-4 w-4 text-yellow-300" />
                 <AlertDescription>
                   <div className="space-y-1">
-                    <div className="font-medium text-sm">Waarschuwingen:</div>
-                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                    <div className="font-medium text-sm text-yellow-200">Waarschuwingen:</div>
+                    <ul className="list-disc list-inside text-xs space-y-0.5 text-yellow-100">
                       {validation.foreignSupplierWarnings.map((warning, index) => (
                         <li key={index}>{warning}</li>
                       ))}
@@ -140,14 +140,14 @@ export function SupplierValidationPanel({
 
             {/* Reverse Charge Alert */}
             {requiresReverseCharge && (
-              <Alert>
-                <Flag className="h-4 w-4" />
+              <Alert className="bg-orange-500/10 border-orange-400/20 text-orange-200">
+                <Flag className="h-4 w-4 text-orange-300" />
                 <AlertDescription>
                   <div className="space-y-1">
-                    <div className="font-medium text-sm">BTW Verlegd van Toepassing</div>
-                    <div className="text-xs">
-                      Voor deze leverancier geldt het BTW verlegd mechanisme. 
-                      U betaalt geen BTW aan de leverancier maar voldoet deze 
+                    <div className="font-medium text-sm text-orange-200">BTW Verlegd van Toepassing</div>
+                    <div className="text-xs text-orange-100">
+                      Voor deze leverancier geldt het BTW verlegd mechanisme.
+                      U betaalt geen BTW aan de leverancier maar voldoet deze
                       direct aan de Belastingdienst via uw BTW aangifte.
                     </div>
                   </div>
@@ -156,12 +156,12 @@ export function SupplierValidationPanel({
             )}
 
             {/* Suggested VAT Type */}
-            <div className="p-2 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="text-sm font-medium text-blue-900 mb-1">
+            <div className="p-2 bg-white/5 rounded-lg border border-white/10">
+              <div className="text-sm font-medium text-slate-100 mb-1">
                 Aanbevolen BTW Type:
               </div>
               <Badge variant={suggestedVATType === 'reverse_charge' ? 'destructive' : 'default'}>
-                {suggestedVATType === 'reverse_charge' ? 'BTW Verlegd' : 
+                {suggestedVATType === 'reverse_charge' ? 'BTW Verlegd' :
                  suggestedVATType === 'exempt' ? 'Vrijgesteld' : 'Standaard'}
               </Badge>
             </div>

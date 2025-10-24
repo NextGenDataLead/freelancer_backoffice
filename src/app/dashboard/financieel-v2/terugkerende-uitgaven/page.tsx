@@ -1,13 +1,257 @@
 'use client'
 
-import { RecurringExpensesContent } from '@/components/financial/recurring-expenses/recurring-expenses-content'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { Card, CardContent } from '@/components/ui/card'
+import { ExpenseForm } from '@/components/financial/expenses/expense-form'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { RecurringExpensesList } from '@/components/financial/recurring-expenses/recurring-expenses-list'
+import { PreviewModal } from '@/components/financial/recurring-expenses/preview-modal'
+import { formatEuropeanCurrency } from '@/lib/utils/formatEuropeanNumber'
+import { Plus, Repeat, TrendingUp, Calendar, Euro } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { GlassmorphicMetricCard } from '@/components/dashboard/glassmorphic-metric-card'
+
+interface RecurringTemplate {
+  id: string
+  name: string
+  amount: number
+  frequency: string
+  is_active: boolean
+  next_occurrence: string
+  annual_cost?: number
+  category?: { name: string }
+}
 
 export default function TerugkerendeUitgavenPage() {
+  const router = useRouter()
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<any>(null)
+  const [previewingTemplate, setPreviewingTemplate] = useState<any>(null)
+  const [templates, setTemplates] = useState<RecurringTemplate[]>([])
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalTemplates: 0,
+    activeTemplates: 0,
+    totalMonthlyAmount: 0,
+    totalAnnualCost: 0
+  })
+
+  // Fetch templates
+  const fetchTemplates = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/recurring-expenses/templates')
+      const data = await response.json()
+
+      if (data.success) {
+        setTemplates(data.data)
+
+        // Calculate stats
+        const active = data.data.filter((t: RecurringTemplate) => t.is_active)
+        const totalAnnual = data.data.reduce((sum: number, t: RecurringTemplate) => sum + (t.annual_cost || 0), 0)
+
+        setStats({
+          totalTemplates: data.data.length,
+          activeTemplates: active.length,
+          totalMonthlyAmount: totalAnnual / 12,
+          totalAnnualCost: totalAnnual
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchTemplates()
+  }, [])
+
+  const handleExpenseCreated = () => {
+    setShowCreateForm(false)
+    fetchTemplates()
+  }
+
+  const handleEditTemplate = (template: any) => {
+    setEditingTemplate(template)
+  }
+
+  const handlePreviewTemplate = (template: any) => {
+    setPreviewingTemplate(template)
+  }
+
+  const handleDeleteTemplate = async (id: string) => {
+    if (!confirm('Weet je zeker dat je deze terugkerende uitgave wilt verwijderen?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/recurring-expenses/templates/${id}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        fetchTemplates()
+      }
+    } catch (error) {
+      console.error('Error deleting template:', error)
+    }
+  }
+
+  const handleToggleActive = async (template: RecurringTemplate) => {
+    try {
+      const response = await fetch(`/api/recurring-expenses/templates/${template.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: !template.is_active })
+      })
+
+      if (response.ok) {
+        fetchTemplates()
+      }
+    } catch (error) {
+      console.error('Error toggling template:', error)
+    }
+  }
+
   return (
     <section className="main-grid" aria-label="Recurring expenses content">
-      <article className="glass-card" style={{gridColumn: 'span 12', gridRow: 'span 1'}}>
-        <RecurringExpensesContent showHeader={true} />
+      {/* Monthly Stats Cards */}
+      <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1' }} aria-labelledby="recurring-title">
+        <div className="card-header">
+          <div>
+            <h2 className="card-header__title" id="recurring-title">
+              Recurring Expenses
+            </h2>
+            <p className="card-header__subtitle">
+              Beheer abonnementen, huur en andere vaste kosten voor nauwkeurige cashflow voorspellingen
+            </p>
+          </div>
+          <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
+            <DialogTrigger asChild>
+              <button type="button" className="action-chip">
+                <Plus className="h-4 w-4 mr-2" />
+                Nieuwe Uitgave
+              </button>
+            </DialogTrigger>
+            <DialogContent
+              className={cn(
+                'max-w-2xl max-h-[90vh] overflow-y-auto',
+                'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
+              )}
+            >
+              <DialogHeader>
+                <DialogTitle>Nieuwe Terugkerende Uitgave</DialogTitle>
+              </DialogHeader>
+              <ExpenseForm
+                onSuccess={handleExpenseCreated}
+                onCancel={() => setShowCreateForm(false)}
+                variant="glass"
+                defaultRecurring={true}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem' }}>
+          {/* Card 1: Total Templates */}
+          <div style={{ gridColumn: 'span 3' }}>
+            <GlassmorphicMetricCard
+              icon={Repeat}
+              iconColor="rgba(139, 92, 246, 0.7)"
+              title="Total Templates"
+              value={loading ? '...' : stats.totalTemplates}
+              subtitle={`${stats.activeTemplates} active`}
+              badge={{
+                label: 'Templates',
+                color: 'rgba(139, 92, 246, 0.25)',
+              }}
+              gradient="linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(124, 58, 237, 0.08))"
+            />
+          </div>
+
+          {/* Card 2: Monthly */}
+          <div style={{ gridColumn: 'span 3' }}>
+            <GlassmorphicMetricCard
+              icon={Calendar}
+              iconColor="rgba(34, 211, 238, 0.7)"
+              title="Monthly"
+              value={loading ? '...' : formatEuropeanCurrency(stats.totalMonthlyAmount)}
+              subtitle="Average fixed costs"
+              badge={{
+                label: 'MTD',
+                color: 'rgba(34, 211, 238, 0.25)',
+              }}
+              gradient="linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(6, 182, 212, 0.08))"
+            />
+          </div>
+
+          {/* Card 3: Yearly */}
+          <div style={{ gridColumn: 'span 3' }}>
+            <GlassmorphicMetricCard
+              icon={TrendingUp}
+              iconColor="rgba(16, 185, 129, 0.7)"
+              title="Yearly"
+              value={loading ? '...' : formatEuropeanCurrency(stats.totalAnnualCost)}
+              subtitle="Total annual costs"
+              badge={{
+                label: 'Annual',
+                color: 'rgba(16, 185, 129, 0.25)',
+              }}
+              gradient="linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(5, 150, 105, 0.08))"
+            />
+          </div>
+
+          {/* Card 4: Cashflow Impact */}
+          <div style={{ gridColumn: 'span 3' }}>
+            <GlassmorphicMetricCard
+              icon={Euro}
+              iconColor="rgba(251, 146, 60, 0.7)"
+              title="Cashflow Impact"
+              value={loading ? '...' : formatEuropeanCurrency(stats.totalMonthlyAmount * 3)}
+              subtitle="Quarterly forecast"
+              badge={{
+                label: 'Q1',
+                color: 'rgba(251, 146, 60, 0.25)',
+              }}
+              gradient="linear-gradient(135deg, rgba(251, 146, 60, 0.12), rgba(249, 115, 22, 0.08))"
+            />
+          </div>
+        </div>
       </article>
+
+      {/* Templates List */}
+      <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1' }} aria-labelledby="templates-title">
+        <div className="card-header">
+          <h2 className="card-header__title" id="templates-title">
+            Recurring Templates
+          </h2>
+          <p className="card-header__subtitle">
+            Beheer je terugkerende uitgaven en automatische registraties
+          </p>
+        </div>
+        <CardContent className="pt-6">
+          <RecurringExpensesList
+            templates={templates}
+            loading={loading}
+            onEdit={handleEditTemplate}
+            onDelete={handleDeleteTemplate}
+            onToggleActive={handleToggleActive}
+            onPreview={handlePreviewTemplate}
+          />
+        </CardContent>
+      </article>
+
+      {/* Preview Modal */}
+      {previewingTemplate && (
+        <PreviewModal
+          template={previewingTemplate}
+          open={!!previewingTemplate}
+          onClose={() => setPreviewingTemplate(null)}
+        />
+      )}
     </section>
   )
 }

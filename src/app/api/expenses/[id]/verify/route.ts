@@ -64,7 +64,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     // Prepare update data based on verification status
     const updateData = {
-      manual_verification_required: !isVerified,
+      requires_manual_review: !isVerified,
       verified_at: isVerified ? getCurrentDate().toISOString() : null,
       verified_by: isVerified ? profile.id : null,
       updated_at: getCurrentDate().toISOString()
@@ -76,22 +76,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       .update(updateData)
       .eq('id', expenseId)
       .eq('tenant_id', profile.tenant_id)
-      .select(`
-        *,
-        supplier:clients(
-          id,
-          name,
-          company_name,
-          email,
-          country_code
-        ),
-        verified_by_user:profiles!expenses_verified_by_fkey(
-          id,
-          first_name,
-          last_name,
-          email
-        )
-      `)
+      .select('*')
       .single()
 
     if (updateError) {
@@ -106,13 +91,15 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       expenseId,
       isVerified ? 'verified' : 'unverified',
       profile.id,
-      { 
+      {
         verified_at: existingExpense.verified_at,
-        manual_verification_required: existingExpense.manual_verification_required 
+        verified_by: existingExpense.verified_by,
+        requires_manual_review: existingExpense.requires_manual_review
       },
-      { 
+      {
         verified_at: updateData.verified_at,
-        manual_verification_required: updateData.manual_verification_required 
+        verified_by: updateData.verified_by,
+        requires_manual_review: updateData.requires_manual_review
       },
       request
     )
@@ -162,16 +149,11 @@ export async function GET(request: Request, { params }: RouteParams) {
       .select(`
         id,
         description,
-        manual_verification_required,
+        requires_manual_review,
         verified_at,
-        ocr_confidence,
-        ocr_data,
-        verified_by_user:profiles!expenses_verified_by_fkey(
-          id,
-          first_name,
-          last_name,
-          email
-        )
+        verified_by,
+        ocr_confidence_score,
+        ocr_extracted_fields
       `)
       .eq('id', expenseId)
       .eq('tenant_id', profile.tenant_id)
@@ -187,10 +169,10 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     // Determine verification status
-    const isVerified = !expense.manual_verification_required && expense.verified_at !== null
-    const requiresVerification = expense.manual_verification_required
-    const hasOCRData = expense.ocr_data !== null
-    const ocrConfidence = expense.ocr_confidence || 0
+    const isVerified = !expense.requires_manual_review && expense.verified_at !== null
+    const requiresVerification = expense.requires_manual_review
+    const hasOCRData = expense.ocr_extracted_fields !== null
+    const ocrConfidence = expense.ocr_confidence_score || 0
 
     // Determine confidence level
     let confidenceLevel = 'unknown'
@@ -203,7 +185,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       is_verified: isVerified,
       requires_verification: requiresVerification,
       verified_at: expense.verified_at,
-      verified_by: expense.verified_by_user,
+      verified_by: expense.verified_by,
       has_ocr_data: hasOCRData,
       ocr_confidence: ocrConfidence,
       confidence_level: confidenceLevel,

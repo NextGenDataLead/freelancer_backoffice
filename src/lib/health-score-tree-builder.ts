@@ -45,7 +45,8 @@ export function buildProfitTree(scores: any, breakdown: any): HealthScoreTreeNod
         calculationDescription: `Current Rate: €${profitBreakdown.currentRate?.toFixed(0) || 0}/hr vs €${profitBreakdown.targetRate || 0}/hr (${profitBreakdown.targetRate > 0 ? Math.round((profitBreakdown.currentRate / profitBreakdown.targetRate) * 100) : 0}%) → ${hourlyRateScore}/10 pts`,
         isCalculationDriver: true,
         metricId: 'hourly_rate_value',
-        hasDetailedBreakdown: false
+        hasDetailedBreakdown: false,
+        detailedCalculation: profitBreakdown.hourlyRateBreakdown
       },
       {
         id: 'time_utilization_efficiency',
@@ -74,7 +75,8 @@ export function buildProfitTree(scores: any, breakdown: any): HealthScoreTreeNod
             calculationDescription: `Hours Progress (30-day rolling): ${profitBreakdown.currentHours || 0}h / ${profitBreakdown.mtdTargetHours || 0}h monthly target (${((profitBreakdown.currentHours || 0) / Math.max(profitBreakdown.mtdTargetHours || 1, 1) * 100).toFixed(1)}%) → ${profitBreakdown.timeUtilizationComponents?.hoursScore || 0}/6 pts`,
             isCalculationDriver: true,
             metricId: 'hours_progress',
-            hasDetailedBreakdown: false
+            hasDetailedBreakdown: false,
+            detailedCalculation: profitBreakdown.timeUtilizationComponents?.hoursBreakdown
           },
           {
             id: 'billable_ratio',
@@ -88,7 +90,8 @@ export function buildProfitTree(scores: any, breakdown: any): HealthScoreTreeNod
             calculationDescription: `Billable Ratio (30-day rolling): ${(profitBreakdown.actualBillableRatio || 0).toFixed(1)}% vs ${profitBreakdown.targetBillableRatio || 90}% (${profitBreakdown.targetBillableRatio > 0 ? ((profitBreakdown.actualBillableRatio / profitBreakdown.targetBillableRatio) * 100).toFixed(1) : 0}%) → ${profitBreakdown.timeUtilizationComponents?.billableScore || 0}/6 pts`,
             isCalculationDriver: true,
             metricId: 'billable_ratio',
-            hasDetailedBreakdown: false
+            hasDetailedBreakdown: false,
+            detailedCalculation: profitBreakdown.timeUtilizationComponents?.billableBreakdown
           }
         ]
       }
@@ -159,9 +162,61 @@ export function buildCashflowTree(scores: any, breakdown: any): HealthScoreTreeN
         calculationDescription: `Overdue amount: €${breakdown.cashflow.overdueAmount?.toLocaleString() || 0} → ${absoluteAmountScore}/5 pts`,
         isCalculationDriver: true,
         metricId: 'absolute_amount_control',
-        hasDetailedBreakdown: false
+        hasDetailedBreakdown: false,
+        detailedCalculation: breakdown.cashflow.absoluteAmountBreakdown
       }
     )
+  }
+
+  if (breakdown && breakdown.cashflow && breakdown.cashflow.recurringExpensePenalty > 0) {
+    const penaltyDetails = breakdown.cashflow.recurringExpensePenaltyBreakdown || {}
+    const totalCount = penaltyDetails.totalCount || 0
+    const totalAmount = penaltyDetails.totalAmount || 0
+    const daysStale = penaltyDetails.daysSinceLastRegistration || breakdown.cashflow.daysSinceLastExpenseRegistration
+
+    const buildDescription = () => {
+      if (penaltyDetails.type === 'due_occurrences') {
+        const countLabel = totalCount === 1 ? '1 missed recurring expense' : `${totalCount} missed recurring expenses`
+        const amountLabel = totalAmount > 0 ? ` (€${Math.round(totalAmount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} outstanding)` : ''
+        return `${countLabel}${amountLabel}`
+      }
+      if (penaltyDetails.type === 'stale_registration' && daysStale) {
+        return `Last recurring expense recorded ${daysStale} days ago`
+      }
+      if (daysStale) {
+        return `Last recurring expense recorded ${daysStale} days ago`
+      }
+      return 'Penalty for not registering recurring expenses on time.'
+    }
+
+    const buildCalculationDescription = () => {
+      if (penaltyDetails.type === 'due_occurrences') {
+        return `${totalCount} overdue occurrence${totalCount === 1 ? '' : 's'} (~€${Math.round(totalAmount).toLocaleString()})`
+      }
+      if (penaltyDetails.type === 'stale_registration' && daysStale) {
+        return `Last registration ${daysStale} days ago (target: 21 days)`
+      }
+      if (daysStale) {
+        return `Last registration ${daysStale} days ago (target: 21 days)`
+      }
+      return undefined
+    }
+
+    children.push({
+      id: 'recurring_expense_penalty',
+      name: 'Recurring Expense Penalty',
+      score: -breakdown.cashflow.recurringExpensePenalty,
+      maxScore: 0,
+      contribution: 0,
+      level: 1,
+      description: buildDescription(),
+      calculationValue: `-${breakdown.cashflow.recurringExpensePenalty} pts`,
+      calculationDescription: buildCalculationDescription(),
+      isCalculationDriver: true,
+      metricId: 'recurring_expense_penalty',
+      hasDetailedBreakdown: Boolean(breakdown.cashflow.recurringExpensePenaltyBreakdown),
+      detailedCalculation: breakdown.cashflow.recurringExpensePenaltyBreakdown
+    });
   }
 
   return {
@@ -200,7 +255,8 @@ export function buildEfficiencyTree(scores: any, breakdown: any): HealthScoreTre
         calculationDescription: `DRI: ${breakdown.efficiency.averageDRI?.toFixed(1)} days → ${driScore}/15 pts`,
         isCalculationDriver: true,
         metricId: 'invoicing_speed',
-        hasDetailedBreakdown: false
+        hasDetailedBreakdown: false,
+        detailedCalculation: breakdown.efficiency.driBreakdown
       },
       {
         id: 'volume_efficiency_unbilled',
@@ -214,7 +270,8 @@ export function buildEfficiencyTree(scores: any, breakdown: any): HealthScoreTre
         calculationDescription: `Volume: ${breakdown.efficiency.unbilledCount || 0} clients ready to invoice → ${volumeScore}/5 pts`,
         isCalculationDriver: true,
         metricId: 'volume_efficiency',
-        hasDetailedBreakdown: false
+        hasDetailedBreakdown: false,
+        detailedCalculation: breakdown.efficiency.volumeBreakdown
       },
       {
         id: 'absolute_amount_unbilled',
@@ -228,7 +285,8 @@ export function buildEfficiencyTree(scores: any, breakdown: any): HealthScoreTre
         calculationDescription: `Amount: €${breakdown.efficiency.unbilledValue?.toFixed(0) || 0} ready to invoice → ${absoluteAmountScore}/5 pts`,
         isCalculationDriver: true,
         metricId: 'absolute_amount_control',
-        hasDetailedBreakdown: false
+        hasDetailedBreakdown: false,
+        detailedCalculation: breakdown.efficiency.absoluteAmountBreakdown
       }
     )
   }
@@ -298,7 +356,8 @@ export function buildRiskTree(scores: any, breakdown: any): HealthScoreTreeNode 
           : `Client concentration (30-day): ${topClientShare.toFixed(1)}% → ${Math.max(0, 9 - (clientRisk || 0)).toFixed(1)}/9 pts`,
         isCalculationDriver: true,
         metricId: 'client_concentration_risk',
-        hasDetailedBreakdown: false
+        hasDetailedBreakdown: false,
+        detailedCalculation: breakdown.risk.clientConcentrationBreakdown
       },
       {
         id: 'daily_consistency_risk',
@@ -313,6 +372,7 @@ export function buildRiskTree(scores: any, breakdown: any): HealthScoreTreeNode 
         isCalculationDriver: true,
         metricId: 'daily_consistency_risk',
         hasDetailedBreakdown: true,
+        detailedCalculation: breakdown.risk.dailyConsistencyBreakdown,
         children: [
           {
             id: 'days_per_week_risk',
@@ -326,7 +386,8 @@ export function buildRiskTree(scores: any, breakdown: any): HealthScoreTreeNode 
             calculationDescription: `Days/week (30-day): ${estimatedDaysPerWeek.toFixed(1)} vs ${targetDaysPerWeek} target → ${Math.max(0, 4 - (daysRisk || 0)).toFixed(1)}/4 pts`,
             isCalculationDriver: true,
             metricId: 'days_per_week_risk',
-            hasDetailedBreakdown: false
+            hasDetailedBreakdown: false,
+            detailedCalculation: breakdown.risk.daysPerWeekBreakdown
           },
           {
             id: 'hours_per_day_risk',
@@ -340,7 +401,8 @@ export function buildRiskTree(scores: any, breakdown: any): HealthScoreTreeNode 
             calculationDescription: `Hours/day (30-day): ${actualDailyHours.toFixed(1)} vs ${targetDailyHours.toFixed(1)} target → ${Math.max(0, 4 - (hoursRisk || 0)).toFixed(1)}/4 pts`,
             isCalculationDriver: true,
             metricId: 'hours_per_day_risk',
-            hasDetailedBreakdown: false
+            hasDetailedBreakdown: false,
+            detailedCalculation: breakdown.risk.hoursPerDayBreakdown
           }
         ]
       },
@@ -357,6 +419,7 @@ export function buildRiskTree(scores: any, breakdown: any): HealthScoreTreeNode 
         isCalculationDriver: true,
         metricId: 'business_continuity_risk',
         hasDetailedBreakdown: true,
+        detailedCalculation: breakdown.risk.businessContinuityBreakdown,
         children: [
           {
             id: 'revenue_stability_risk',
@@ -370,7 +433,8 @@ export function buildRiskTree(scores: any, breakdown: any): HealthScoreTreeNode 
             calculationDescription: `Revenue trend: €${current30DaysBillableRevenue.toFixed(0)} vs €${previous30DaysBillableRevenue.toFixed(0)} (prev 30d) → ${Math.max(0, 3 - (revenueStabilityRisk || 0)).toFixed(1)}/3 pts`,
             isCalculationDriver: true,
             metricId: 'revenue_stability_risk',
-            hasDetailedBreakdown: false
+            hasDetailedBreakdown: false,
+            detailedCalculation: breakdown.risk.revenueStabilityBreakdown
           },
           {
             id: 'client_concentration_trend_risk',
@@ -384,7 +448,8 @@ export function buildRiskTree(scores: any, breakdown: any): HealthScoreTreeNode 
             calculationDescription: `Client trend: ${current30DaysClientShare.toFixed(1)}% vs ${previous30DaysClientShare.toFixed(1)}% (prev 30d) → ${Math.max(0, 2.5 - (clientConcentrationTrendRisk || 0)).toFixed(1)}/2.5 pts`,
             isCalculationDriver: true,
             metricId: 'client_concentration_trend_risk',
-            hasDetailedBreakdown: false
+            hasDetailedBreakdown: false,
+            detailedCalculation: breakdown.risk.clientConcentrationTrendBreakdown
           },
           {
             id: 'consistency_trend_risk',
@@ -398,11 +463,30 @@ export function buildRiskTree(scores: any, breakdown: any): HealthScoreTreeNode 
             calculationDescription: `Consistency trend: ${current30DaysDailyHours.toFixed(1)}h vs ${previous30DaysDailyHours.toFixed(1)}h (prev 30d) → ${Math.max(0, 2.5 - (consistencyTrendRisk || 0)).toFixed(1)}/2.5 pts`,
             isCalculationDriver: true,
             metricId: 'consistency_trend_risk',
-            hasDetailedBreakdown: false
+            hasDetailedBreakdown: false,
+            detailedCalculation: breakdown.risk.consistencyTrendBreakdown
           }
         ]
       }
     )
+  }
+
+  if (breakdown && breakdown.risk && breakdown.risk.penalties.vatPenalty > 0) {
+    children.push({
+      id: 'vat_processing_penalty',
+      name: 'VAT Processing Penalty',
+      score: -breakdown.risk.penalties.vatPenalty,
+      maxScore: 0,
+      contribution: 0,
+      level: 1,
+      description: `Penalty for not processing VAT on time.`,
+      calculationValue: `-${breakdown.risk.penalties.vatPenalty} pts`,
+      calculationDescription: `VAT processing is ${breakdown.risk.daysOverdue} days overdue`,
+      isCalculationDriver: true,
+      metricId: 'vat_processing_penalty',
+      hasDetailedBreakdown: false,
+      detailedCalculation: breakdown.risk.vatPenaltyBreakdown
+    });
   }
 
   return {

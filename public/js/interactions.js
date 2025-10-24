@@ -93,8 +93,8 @@
   };
 
   onReady(() => {
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-      window.lucide.createIcons();
+    if (typeof lucide !== 'undefined' && typeof lucide.createIcons === 'function') {
+      lucide.createIcons({ icons: lucide.icons });
     }
 
     // Initialize tooltips

@@ -19,12 +19,13 @@ class DutchReceiptParser:
         # LLM Configuration for field extraction with WSL2/Windows compatibility
         self.llm_config = {
             'endpoints': [
-                'http://172.24.0.1:1234/v1',  # Windows host IP (primary)
-                'http://127.0.0.1:1234/v1',  # Direct localhost
-                'http://host.docker.internal:1234/v1',  # WSL2 fallback
+                'http://10.173.239.108:1235/v1',  # LM Studio on local network (primary - Windows with "Serve on Local Network" enabled)
+                'http://127.0.0.1:1235/v1',  # Fallback: Direct localhost
+                'http://172.24.0.1:1235/v1',  # Fallback: Windows host IP
+                'http://host.docker.internal:1235/v1',  # Fallback: WSL2 Docker
             ],
             'model': 'microsoft_-_phi-3.5-mini-instruct',  # Updated model ID
-            'timeout': 60,  # Increased timeout for large documents (was 15)
+            'timeout': 3,  # Fast fail if LLM service unavailable, fallback to rules
             'max_retries': 2,
             'enable_caching': True
         }
@@ -39,17 +40,17 @@ class DutchReceiptParser:
             )
             if hostname_result.returncode == 0:
                 hostname = hostname_result.stdout.strip()
-                self.llm_config['endpoints'].append(f"http://{hostname}.local:1234/v1")
-            
+                self.llm_config['endpoints'].append(f"http://{hostname}.local:1235/v1")
+
             # Method 2: Get Windows host IP from resolv.conf
             resolv_result = subprocess.run(
-                ["cat", "/etc/resolv.conf"], 
+                ["cat", "/etc/resolv.conf"],
                 capture_output=True, text=True, timeout=2
             )
             for line in resolv_result.stdout.split('\n'):
                 if 'nameserver' in line:
                     windows_ip = line.split()[-1]
-                    self.llm_config['endpoints'].append(f"http://{windows_ip}:1234/v1")
+                    self.llm_config['endpoints'].append(f"http://{windows_ip}:1235/v1")
                     break
         except:
             pass

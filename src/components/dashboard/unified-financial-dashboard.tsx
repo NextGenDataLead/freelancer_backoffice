@@ -95,7 +95,23 @@ interface DashboardMetricsResponse {
       current: number
       previous: number
     }
+    lastRecurringExpenseRegistration?: string
   }
+}
+
+interface RecurringExpensesDueResponse {
+  success: boolean
+  data: Array<{
+    template: {
+      id: string
+      name: string
+      frequency: string
+    }
+    occurrences_due: number
+    total_amount: number
+    next_occurrence_date: string
+    last_occurrence_date: string
+  }>
 }
 
 interface TimeStatsResponse {
@@ -209,6 +225,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
       previous: { topClientShare: number; totalRevenue: number }
     }
   } | null>(null)
+  const [recurringExpensesDue, setRecurringExpensesDue] = useState<RecurringExpensesDueResponse['data'] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [smartAlerts, setSmartAlerts] = useState<SmartAlert[]>([])
@@ -217,15 +234,6 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
   const [showExplanation, setShowExplanation] = useState<string | null>(null)
   const [showHealthReport, setShowHealthReport] = useState(false)
   const [healthScoreResults, setHealthScoreResults] = useState<HealthScoreOutputs | null>(null)
-  const [calculationDetailModal, setCalculationDetailModal] = useState<{
-    metricId: string;
-    metricName: string;
-    calculationValue?: string;
-    calculationDescription?: string;
-    score: number;
-    maxScore: number;
-    detailedCalculation?: any;
-  } | null>(null)
   const { targets: profitTargets } = useProfitTargets()
 
   // Helper function to get metric definition based on label
@@ -434,7 +442,9 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         actual_dso: dashboardMetrics.actual_dso,
         average_payment_terms: dashboardMetrics.average_payment_terms,
         average_dri: dashboardMetrics.average_dri,
-        rolling30DaysRevenue: dashboardMetrics.rolling30DaysRevenue
+        rolling30DaysRevenue: dashboardMetrics.rolling30DaysRevenue,
+        recurringExpensesDue: recurringExpensePenaltySummary,
+        lastRecurringExpenseRegistration: dashboardMetrics.lastRecurringExpenseRegistration
       },
       timeStats: {
         thisMonth: {
@@ -474,7 +484,8 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
       rolling30DaysData: timeStats.rolling30Days,
       hasDashboardMetrics: !!dashboardMetrics,
       hasProfitTargets: !!profitTargets,
-      hasClientRevenue: !!clientRevenue
+      hasClientRevenue: !!clientRevenue,
+      hasRecurringExpenseData: !!recurringExpensePenaltySummary
     })
 
     try {
@@ -486,7 +497,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
       // Set null when profit targets are not configured
       setHealthScoreResults(null)
     }
-  }, [dashboardMetrics, timeStats, mtdCalculations, profitTargets, clientRevenue])
+  }, [dashboardMetrics, timeStats, mtdCalculations, profitTargets, clientRevenue, recurringExpensePenaltySummary])
 
   // Determine if subscription/SaaS features are enabled
   const subscriptionEnabled = Boolean(
@@ -571,18 +582,42 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
     return healthScoreResults.scores
   }, [healthScoreResults])
 
+  const recurringExpensePenaltySummary = useMemo(() => {
+    if (!recurringExpensesDue || recurringExpensesDue.length === 0) {
+      return undefined
+    }
+
+    const totalCount = recurringExpensesDue.reduce((sum, item) => sum + (item.occurrences_due || 0), 0)
+    const totalAmount = recurringExpensesDue.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+
+    return {
+      totalCount,
+      totalAmount,
+      templates: recurringExpensesDue.map(item => ({
+        templateId: item.template.id,
+        templateName: item.template.name,
+        frequency: item.template.frequency,
+        occurrencesDue: item.occurrences_due,
+        totalAmount: item.total_amount,
+        nextOccurrenceDate: item.next_occurrence_date,
+        lastOccurrenceDate: item.last_occurrence_date
+      }))
+    }
+  }, [recurringExpensesDue])
+
   // Function to fetch all dashboard data
   const fetchAllData = async () => {
       try {
         setLoading(true)
 
         // Parallel fetch of all required data
-        const [dashboardResponse, timeResponse, todayResponse, revenueTrendResponse, clientRevenueResponse] = await Promise.all([
+        const [dashboardResponse, timeResponse, todayResponse, revenueTrendResponse, clientRevenueResponse, recurringExpensesResponse] = await Promise.all([
           fetch('/api/invoices/dashboard-metrics'),
           fetch('/api/time-entries/stats'),
           fetch('/api/time-entries/today'),
           fetch('/api/financial/revenue-trend'),
-          fetch('/api/financial/client-revenue')
+          fetch('/api/financial/client-revenue'),
+          fetch('/api/recurring-expenses/due')
         ])
 
         if (!dashboardResponse.ok || !timeResponse.ok || !revenueTrendResponse.ok) {
@@ -593,6 +628,9 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         const timeData: TimeStatsResponse = await timeResponse.json()
         const revenueTrendData = await revenueTrendResponse.json()
         const clientRevenueData = clientRevenueResponse.ok ? await clientRevenueResponse.json() : null
+        const recurringExpensesData: RecurringExpensesDueResponse | null = recurringExpensesResponse.ok
+          ? await recurringExpensesResponse.json()
+          : null
 
         // Dashboard metrics fetched successfully
 
@@ -628,6 +666,12 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
           })
         } else {
           setClientRevenue(null)
+        }
+
+        if (recurringExpensesData?.data) {
+          setRecurringExpensesDue(recurringExpensesData.data)
+        } else {
+          setRecurringExpensesDue(null)
         }
 
         // Generate smart alerts
@@ -1185,27 +1229,12 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
                     healthScoreResults={healthScoreResults}
                     category={showExplanation as 'profit' | 'cashflow' | 'efficiency' | 'risk'}
                     onMetricClick={(metricId, metricName, score, maxScore, currentValue) => {
-                      // Use calculation modal for all metric clicks - no fallback to compact modal
-                      setCalculationDetailModal({
-                        metricId,
-                        metricName,
-                        calculationValue: `${score}/${maxScore} points`,
-                        calculationDescription: `Current score: ${score}/${maxScore} points`,
-                        score,
-                        maxScore,
-                        detailedCalculation: undefined
-                      });
+                      // No longer opening a separate modal for calculation details
+                      // The HealthExplanationModal itself should display the detailed information
                     }}
                     onCalculationClick={(metricId, metricName, calculationValue, calculationDescription, score, maxScore, detailedCalculation) => {
-                      setCalculationDetailModal({
-                        metricId,
-                        metricName,
-                        calculationValue,
-                        calculationDescription,
-                        score,
-                        maxScore,
-                        detailedCalculation
-                      });
+                      // No longer opening a separate modal for calculation details
+                      // The HealthExplanationModal itself should display the detailed information
                     }}
                     className="max-w-full"
                   />
@@ -1227,23 +1256,7 @@ export function UnifiedFinancialDashboard({ onTabChange }: UnifiedFinancialDashb
         )}
 
 
-        {/* Calculation Detail Modal */}
-        {calculationDetailModal && (
-          <CalculationDetailModal
-            metricId={calculationDetailModal.metricId}
-            metricName={calculationDetailModal.metricName}
-            calculationValue={calculationDetailModal.calculationValue}
-            calculationDescription={calculationDetailModal.calculationDescription}
-            currentScore={calculationDetailModal.score}
-            maxScore={calculationDetailModal.maxScore}
-            detailedCalculation={calculationDetailModal.detailedCalculation}
-            isOpen={true}
-            onClose={() => setCalculationDetailModal(null)}
-          />
-        )}
-
-
-        {/* Comprehensive Health Report Modal */}
+                {/* Comprehensive Health Report Modal */}
         {showHealthReport && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
             <div className="bg-card border rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">

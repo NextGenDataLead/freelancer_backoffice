@@ -240,6 +240,30 @@ export const VerifyExpenseSchema = z.object({
   verified: z.boolean()
 });
 
+// Recurring expense configuration schema
+export const RecurringExpenseConfigSchema = z.object({
+  template_name: z.string().min(1, "Template name is required").max(255, "Template name too long"),
+  frequency: z.enum(['weekly', 'monthly', 'quarterly', 'yearly'], {
+    errorMap: () => ({ message: "Frequency must be weekly, monthly, quarterly, or yearly" })
+  }),
+  start_date: z.string().min(1, "Start date is required"),
+  end_date: z.string().optional(),
+  day_of_month: z.number().int().min(1).max(31).optional(),
+  amount_escalation_percentage: z.number().min(0).max(100).optional()
+});
+
+// Expense creation with optional recurring template
+export const CreateExpenseWithRecurringSchema = CreateExpenseSchema.extend({
+  is_recurring: z.boolean().default(false),
+  recurring_config: RecurringExpenseConfigSchema.optional()
+}).refine(
+  (data) => !data.is_recurring || data.recurring_config !== undefined,
+  {
+    message: "Recurring configuration is required when is_recurring is true",
+    path: ["recurring_config"]
+  }
+);
+
 // ====================
 // TIME ENTRY SCHEMAS
 // ====================

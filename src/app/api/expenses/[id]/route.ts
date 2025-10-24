@@ -230,7 +230,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     // Fetch existing expense
     const { data: existingExpense, error: fetchError } = await supabaseAdmin
       .from('expenses')
-      .select('id, description, total_amount, expense_date')
+      .select('*')
       .eq('id', expenseId)
       .eq('tenant_id', profile.tenant_id)
       .single()
@@ -268,9 +268,50 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       request
     )
 
+    const recurringTemplateId = existingExpense.metadata?.template_id || existingExpense.metadata?.template
+    const occurrenceDate = existingExpense.metadata?.occurrence_date || existingExpense.metadata?.recurring_date
+    let metricsRefreshHint: { templateId?: string } | undefined
+
+    if (recurringTemplateId) {
+      metricsRefreshHint = { templateId: recurringTemplateId }
+
+      if (occurrenceDate) {
+        try {
+          const { data: template, error: templateError } = await supabaseAdmin
+            .from('recurring_expense_templates')
+            .select('next_occurrence')
+            .eq('id', recurringTemplateId)
+            .eq('tenant_id', profile.tenant_id)
+            .single()
+
+          if (!templateError && template) {
+            const deletedOccurrence = new Date(occurrenceDate)
+            const currentNext = template.next_occurrence ? new Date(template.next_occurrence) : null
+
+            if (!currentNext || deletedOccurrence < currentNext) {
+              const normalizedDate = deletedOccurrence.toISOString().split('T')[0]
+              const { error: updateTemplateError } = await supabaseAdmin
+                .from('recurring_expense_templates')
+                .update({ next_occurrence: normalizedDate })
+                .eq('id', recurringTemplateId)
+                .eq('tenant_id', profile.tenant_id)
+
+              if (updateTemplateError) {
+                console.error('Failed to reset recurring template next_occurrence:', updateTemplateError)
+              }
+            }
+          }
+        } catch (err) {
+          console.error('Failed to adjust recurring template after deletion:', err)
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      message: `Expense "${existingExpense.description}" deleted successfully`
+      message: `Expense "${existingExpense.description}" deleted successfully`,
+      deletedExpenseId: expenseId,
+      metricsRefreshHint
     })
 
   } catch (error) {

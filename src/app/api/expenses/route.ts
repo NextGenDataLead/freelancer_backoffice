@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
-import { 
-  CreateExpenseSchema, 
+import {
+  CreateExpenseSchema,
+  CreateExpenseWithRecurringSchema,
   ExpensesQuerySchema
 } from '@/lib/validations/financial'
 import type { 
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
     // Build query without supplier join (expenses are for tenant, not clients)
     let query = supabaseAdmin
       .from('expenses')
-      .select('id, tenant_id, title, description, expense_date, amount, currency, category_id, expense_type, payment_method, status, submitted_by, submitted_at, project_code, cost_center, vendor_name, reference_number, requires_reimbursement, client_id, tags, metadata, vat_rate, vat_amount, vat_type, is_vat_deductible, business_percentage, supplier_country_code, supplier_vat_number, is_reverse_charge, created_at, updated_at', { count: 'exact' })
+      .select('id, tenant_id, title, description, expense_date, amount, currency, category_id, expense_type, payment_method, status, submitted_by, submitted_at, project_code, cost_center, vendor_name, reference_number, requires_reimbursement, client_id, tags, metadata, vat_rate, vat_amount, vat_type, is_vat_deductible, business_percentage, supplier_country_code, supplier_vat_number, is_reverse_charge, requires_manual_review, verified_at, verified_by, created_at, updated_at', { count: 'exact' })
       .eq('tenant_id', profile.tenant_id)
       .order('expense_date', { ascending: false })
 
@@ -88,8 +89,8 @@ export async function GET(request: Request) {
       category: expense.expense_type,  // Map expense_type to category
       is_deductible: expense.is_vat_deductible,  // Map is_vat_deductible to is_deductible
       total_amount: parseFloat(expense.amount) + parseFloat(expense.vat_amount || 0),
-      manual_verification_required: false,
-      verified_at: null,
+      manual_verification_required: expense.requires_manual_review ?? true,
+      verified_at: expense.verified_at,
       receipt_url: null,
       supplier: expense.vendor_name ? {
         id: null,
@@ -146,9 +147,12 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    
-    // Validate request data
-    const validatedData = CreateExpenseSchema.parse(body)
+
+    // Validate request data - use extended schema if recurring
+    const isRecurring = body.is_recurring === true
+    const validatedData = isRecurring
+      ? CreateExpenseWithRecurringSchema.parse(body)
+      : CreateExpenseSchema.parse(body)
 
     // Note: Expenses are primarily for the tenant itself, not linked to clients
 
@@ -230,7 +234,81 @@ export async function POST(request: Request) {
       request
     )
 
-    const response = createApiResponse(newExpense, 'Expense created successfully')
+    let templateId: string | null = null
+
+    // Create recurring template if requested
+    if (isRecurring && 'recurring_config' in validatedData && validatedData.recurring_config) {
+      const config = validatedData.recurring_config
+
+      console.log('=== RECURRING TEMPLATE CREATION DEBUG ===')
+      console.log('Is recurring:', isRecurring)
+      console.log('Recurring config received:', config)
+      console.log('Validated expense data:', validatedData)
+
+      // Prepare OCR metadata if available from body
+      const ocrMetadata = body.ocr_result?.extracted_data ? {
+        supplier_country_code: validatedData.supplier_country,
+        requires_reverse_charge: validatedData.vat_rate === -1,
+        supplier_vat_number: body.ocr_result.extracted_data.validated_supplier?.vat_number,
+        vat_validation_status: body.ocr_result.extracted_data.vat_validation_status
+      } : null
+
+      const templateData = {
+        name: config.template_name,
+        description: validatedData.description,
+        vendor_name: validatedData.vendor_name, // Now stored in column
+        amount: validatedData.amount,
+        currency: 'EUR',
+        frequency: config.frequency,
+        start_date: config.start_date,
+        end_date: config.end_date || null,
+        day_of_month: config.day_of_month || null,
+        amount_escalation_percentage: config.amount_escalation_percentage || null,
+        vat_rate: validatedData.vat_rate,
+        is_vat_deductible: validatedData.is_deductible,
+        expense_type: validatedData.category, // Now stored in column
+        vat_type: validatedData.vat_rate === -1 ? 'reverse_charge' : 'standard', // Now stored in column
+        supplier_country: validatedData.supplier_country || 'NL', // Now stored in column
+        business_use_percentage: 100, // Default to 100% business use
+        tenant_id: profile.tenant_id,
+        is_active: true,
+        next_occurrence: config.start_date,
+        ocr_metadata: ocrMetadata, // Still store OCR metadata for audit trail
+        // Optional: link to supplier if we have supplier_id
+        ...(validatedData.supplier_id && { supplier_id: validatedData.supplier_id })
+      }
+
+      console.log('Template data to be inserted:', JSON.stringify(templateData, null, 2))
+
+      const { data: template, error: templateError } = await supabaseAdmin
+        .from('recurring_expense_templates')
+        .insert(templateData)
+        .select('id')
+        .single()
+
+      if (templateError) {
+        console.error('❌ ERROR creating recurring template:', templateError)
+        console.error('Error details:', JSON.stringify(templateError, null, 2))
+        console.error('Template data that failed:', JSON.stringify(templateData, null, 2))
+        // Don't fail the whole request, just log the error
+        console.warn('Expense created but recurring template failed:', newExpense.id)
+      } else {
+        templateId = template.id
+        console.log('✅ Successfully created recurring template:', templateId, 'for expense:', newExpense.id)
+      }
+      console.log('=== END RECURRING TEMPLATE DEBUG ===')
+    }
+
+    const responseData = {
+      ...newExpense,
+      ...(templateId && { template_id: templateId })
+    }
+
+    const message = isRecurring && templateId
+      ? 'Expense and recurring template created successfully'
+      : 'Expense created successfully'
+
+    const response = createApiResponse(responseData, message)
     return NextResponse.json(response, { status: 201 })
 
   } catch (error) {

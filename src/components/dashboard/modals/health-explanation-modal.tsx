@@ -1,30 +1,31 @@
-'use client'
-
-import { Target, Activity, Clock, Users, X } from 'lucide-react'
+import { Target, Activity, Clock, Users, X, ArrowLeft } from 'lucide-react'
 import { HealthScoreHierarchicalTree } from '../health-score-hierarchical-tree'
 import type { HealthScoreOutputs } from '@/lib/health-score-engine'
+import { useState } from 'react'
 
 interface HealthExplanationModalProps {
   pillar: 'profit' | 'cashflow' | 'efficiency' | 'risk' | null
   healthScoreResults: HealthScoreOutputs | null
   subscriptionEnabled: boolean
   onClose: () => void
-  onShowCalculationDetail: (
-    metricId: string,
-    metricName: string,
-    score: number,
-    maxScore: number,
-    detailedCalculation?: any
-  ) => void
 }
 
 export function HealthExplanationModal({
   pillar,
   healthScoreResults,
   subscriptionEnabled,
-  onClose,
-  onShowCalculationDetail
+  onClose
 }: HealthExplanationModalProps) {
+  const [detailedCalculation, setDetailedCalculation] = useState<{
+    metricId: string;
+    metricName: string;
+    calculationValue?: string;
+    calculationDescription?: string;
+    score: number;
+    maxScore: number;
+    detailedCalculation?: any;
+  } | null>(null)
+
   if (!pillar || !healthScoreResults) return null
 
   const getPillarConfig = () => {
@@ -107,30 +108,56 @@ export function HealthExplanationModal({
           </div>
 
           {/* Score Breakdown Visualization */}
-          <HealthScoreHierarchicalTree
-            healthScoreResults={healthScoreResults}
-            category={pillar}
-            onMetricClick={(metricId, metricName, score, maxScore, currentValue) => {
-              // Use calculation modal for all metric clicks
-              onShowCalculationDetail(
-                metricId,
-                metricName,
-                score,
-                maxScore,
-                undefined
-              )
-            }}
-            onCalculationClick={(metricId, metricName, calculationValue, calculationDescription, score, maxScore, detailedCalculation) => {
-              onShowCalculationDetail(
-                metricId,
-                metricName,
-                score,
-                maxScore,
-                detailedCalculation
-              )
-            }}
-            className="max-w-full"
-          />
+          {!detailedCalculation ? (
+            <HealthScoreHierarchicalTree
+              healthScoreResults={healthScoreResults}
+              category={pillar}
+              onMetricClick={(metricId, metricName, score, maxScore, currentValue) => {
+                // Use calculation modal for all metric clicks - no fallback to compact modal
+                setDetailedCalculation({
+                  metricId,
+                  metricName,
+                  calculationValue: `${score}/${maxScore} points`,
+                  calculationDescription: `Current score: ${score}/${maxScore} points`,
+                  score,
+                  maxScore,
+                  detailedCalculation: undefined
+                });
+              }}
+              onCalculationClick={(metricId, metricName, calculationValue, calculationDescription, score, maxScore, detailedCalculation) => {
+                setDetailedCalculation({
+                  metricId,
+                  metricName,
+                  calculationValue,
+                  calculationDescription,
+                  score,
+                  maxScore,
+                  detailedCalculation
+                });
+              }}
+              className="max-w-full"
+            />
+          ) : (
+            <div className="space-y-4">
+              <button onClick={() => setDetailedCalculation(null)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+                <ArrowLeft className="h-4 w-4" /> Back to {config.title}
+              </button>
+              <h4 className="text-lg font-semibold">{detailedCalculation.metricName}</h4>
+              <p className="text-sm text-muted-foreground">Score: {detailedCalculation.score}/{detailedCalculation.maxScore}</p>
+              {detailedCalculation.calculationValue && (
+                <p className="text-sm text-muted-foreground">Value: {detailedCalculation.calculationValue}</p>
+              )}
+              {detailedCalculation.calculationDescription && (
+                <p className="text-sm text-muted-foreground">Description: {detailedCalculation.calculationDescription}</p>
+              )}
+              {detailedCalculation.detailedCalculation && (
+                <div className="mt-4 p-4 bg-muted rounded-lg">
+                  <h5 className="font-semibold mb-2">Detailed Breakdown:</h5>
+                  <pre className="text-xs overflow-x-auto">{JSON.stringify(detailedCalculation.detailedCalculation, null, 2)}</pre>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

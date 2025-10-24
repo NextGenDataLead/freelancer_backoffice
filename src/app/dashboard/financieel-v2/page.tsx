@@ -30,6 +30,7 @@ interface DashboardMetricsResponse {
       current: number
       previous: number
     }
+    lastRecurringExpenseRegistration?: string
   }
 }
 
@@ -69,6 +70,21 @@ interface TimeStatsResponse {
   }
 }
 
+interface RecurringExpensesDueResponse {
+  success: boolean
+  data: Array<{
+    template: {
+      id: string
+      name: string
+      frequency: string
+    }
+    occurrences_due: number
+    total_amount: number
+    next_occurrence_date: string
+    last_occurrence_date: string
+  }>
+}
+
 export default function FinancieelV2Page() {
   const router = useRouter()
   const [dashboardMetrics, setDashboardMetrics] = useState<DashboardMetricsResponse['data'] | null>(null)
@@ -80,6 +96,7 @@ export default function FinancieelV2Page() {
       previous: { topClientShare: number; totalRevenue: number }
     }
   } | null>(null)
+  const [recurringExpensesDue, setRecurringExpensesDue] = useState<RecurringExpensesDueResponse['data'] | null>(null)
   const [revenueTrendData, setRevenueTrendData] = useState<any[]>([])
   const [currentTimeframe, setCurrentTimeframe] = useState<'12m' | '3m' | '31d'>('12m')
   const [showExplanation, setShowExplanation] = useState<string | null>(null)
@@ -132,11 +149,12 @@ export default function FinancieelV2Page() {
         // Determine granularity based on timeframe
         const granularity = currentTimeframe === '31d' ? 'daily' : currentTimeframe === '3m' ? 'weekly' : 'monthly'
 
-        const [dashboardResponse, timeResponse, clientRevenueResponse, revenueTrendResponse] = await Promise.all([
+        const [dashboardResponse, timeResponse, clientRevenueResponse, revenueTrendResponse, recurringExpensesResponse] = await Promise.all([
           fetch('/api/invoices/dashboard-metrics'),
           fetch('/api/time-entries/stats'),
           fetch('/api/financial/client-revenue'),
           fetch(`/api/financial/revenue-trend?granularity=${granularity}&period=${currentTimeframe}`),
+          fetch('/api/recurring-expenses/due')
         ])
 
         if (dashboardResponse.ok) {
@@ -157,6 +175,13 @@ export default function FinancieelV2Page() {
         if (revenueTrendResponse.ok) {
           const revenueTrendDataRes = await revenueTrendResponse.json()
           setRevenueTrendData(revenueTrendDataRes.data || [])
+        }
+
+        if (recurringExpensesResponse.ok) {
+          const recurringExpensesData: RecurringExpensesDueResponse = await recurringExpensesResponse.json()
+          setRecurringExpensesDue(recurringExpensesData.data || [])
+        } else {
+          setRecurringExpensesDue(null)
         }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error)
@@ -181,6 +206,29 @@ export default function FinancieelV2Page() {
     }
   }, [currentDay, daysInMonth, monthProgress, monthlyRevenueTarget, mtdRevenueTarget, monthlyHoursTarget, mtdHoursTarget])
 
+  const recurringExpensePenaltySummary = useMemo(() => {
+    if (!recurringExpensesDue || recurringExpensesDue.length === 0) {
+      return undefined
+    }
+
+    const totalCount = recurringExpensesDue.reduce((sum, item) => sum + (item.occurrences_due || 0), 0)
+    const totalAmount = recurringExpensesDue.reduce((sum, item) => sum + (item.total_amount || 0), 0)
+
+    return {
+      totalCount,
+      totalAmount,
+      templates: recurringExpensesDue.map(item => ({
+        templateId: item.template.id,
+        templateName: item.template.name,
+        frequency: item.template.frequency,
+        occurrencesDue: item.occurrences_due,
+        totalAmount: item.total_amount,
+        nextOccurrenceDate: item.next_occurrence_date,
+        lastOccurrenceDate: item.last_occurrence_date
+      }))
+    }
+  }, [recurringExpensesDue])
+
   // Calculate health scores client-side (full results for modals)
   const healthScoreResults = useMemo<HealthScoreOutputs | null>(() => {
     if (!dashboardMetrics || !timeStats) {
@@ -198,7 +246,9 @@ export default function FinancieelV2Page() {
           actual_dso: dashboardMetrics.actual_dso,
           average_payment_terms: dashboardMetrics.average_payment_terms,
           average_dri: dashboardMetrics.average_dri,
-          rolling30DaysRevenue: dashboardMetrics.rolling30DaysRevenue
+          rolling30DaysRevenue: dashboardMetrics.rolling30DaysRevenue,
+          lastRecurringExpenseRegistration: dashboardMetrics.lastRecurringExpenseRegistration,
+          recurringExpensesDue: recurringExpensePenaltySummary
         },
         timeStats: {
           thisMonth: {
@@ -236,7 +286,7 @@ export default function FinancieelV2Page() {
       console.error('Health score calculation failed:', error)
       return null
     }
-  }, [dashboardMetrics, timeStats, mtdCalculations, profitTargets, clientRevenue])
+  }, [dashboardMetrics, timeStats, mtdCalculations, profitTargets, clientRevenue, recurringExpensePenaltySummary])
 
   // Extract scores for component usage
   const healthScores = healthScoreResults?.scores || null

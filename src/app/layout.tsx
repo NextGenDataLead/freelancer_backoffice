@@ -111,7 +111,7 @@ export default function RootLayout({
             </QueryProvider>
           </ThemeProvider>
           {/* Scripts for NovaWave template (financieel-v2) */}
-          <Script src="https://unpkg.com/lucide@latest" strategy="beforeInteractive" />
+          <Script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" strategy="beforeInteractive" />
           <Script src="https://cdn.jsdelivr.net/npm/chart.js" strategy="beforeInteractive" />
           <Script src="/js/utils.js" strategy="afterInteractive" />
           <Script src="/js/chart.js" strategy="afterInteractive" />

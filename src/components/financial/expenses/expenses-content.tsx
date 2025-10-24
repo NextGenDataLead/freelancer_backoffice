@@ -9,19 +9,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ExpenseList } from '@/components/financial/expenses/expense-list'
 import { ExpenseForm } from '@/components/financial/expenses/expense-form'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Euro, Plus, ArrowLeft, Receipt, TrendingDown, Repeat } from 'lucide-react'
+import { Euro, Plus, ArrowLeft, Receipt, TrendingDown } from 'lucide-react'
 import Link from 'next/link'
+import { cn } from '@/lib/utils'
 
 interface ExpensesContentProps {
   showHeader?: boolean
   className?: string
+  variant?: 'default' | 'glass'
 }
 
-export function ExpensesContent({ showHeader = true, className = '' }: ExpensesContentProps) {
+export function ExpensesContent({ showHeader = true, className = '', variant = 'default' }: ExpensesContentProps) {
   const searchParams = useSearchParams()
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingExpense, setEditingExpense] = useState<any>(null)
   const { metrics, loading } = useExpenseMetrics()
+  const isGlass = variant === 'glass'
 
   // Handle action query parameter
   useEffect(() => {
@@ -101,13 +104,6 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
           </div>
 
           <div className="flex space-x-2">
-            <Link href="/dashboard/financieel-v2/terugkerende-uitgaven">
-              <Button variant="outline">
-                <Repeat className="h-4 w-4 mr-2" />
-                Terugkerende Uitgaven
-              </Button>
-            </Link>
-
             <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
               <DialogTrigger asChild>
                 <Button>
@@ -115,13 +111,19 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
                   Nieuwe Uitgave
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogContent
+                className={cn(
+                  'max-w-2xl max-h-[90vh] overflow-y-auto',
+                  isGlass && 'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
+                )}
+              >
                 <DialogHeader>
                   <DialogTitle>Nieuwe Uitgave Toevoegen</DialogTitle>
                 </DialogHeader>
                 <ExpenseForm
                   onSuccess={handleExpenseCreated}
                   onCancel={() => setShowCreateForm(false)}
+                  variant={isGlass ? 'glass' : 'default'}
                 />
               </DialogContent>
             </Dialog>
@@ -137,13 +139,6 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
           </div>
 
           <div className="flex space-x-2">
-            <Link href="/dashboard/financieel-v2/terugkerende-uitgaven">
-              <Button variant="outline" size="sm">
-                <Repeat className="h-4 w-4 mr-2" />
-                Terugkerende Uitgaven
-              </Button>
-            </Link>
-
             <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
               <DialogTrigger asChild>
                 <Button size="sm">
@@ -151,13 +146,19 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
                   Nieuwe Uitgave
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogContent
+                className={cn(
+                  'max-w-2xl max-h-[90vh] overflow-y-auto',
+                  isGlass && 'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
+                )}
+              >
                 <DialogHeader>
                   <DialogTitle>Nieuwe Uitgave Toevoegen</DialogTitle>
                 </DialogHeader>
                 <ExpenseForm
                   onSuccess={handleExpenseCreated}
                   onCancel={() => setShowCreateForm(false)}
+                  variant={isGlass ? 'glass' : 'default'}
                 />
               </DialogContent>
             </Dialog>
@@ -342,6 +343,9 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
       <Card>
         <CardHeader>
           <CardTitle>Alle Uitgaven</CardTitle>
+          <p className="text-sm text-muted-foreground mt-2">
+            Beheer je zakelijke uitgaven en bonnen
+          </p>
         </CardHeader>
         <CardContent>
           <ExpenseList onEditExpense={handleEditExpense} />
@@ -350,7 +354,12 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
 
       {/* Edit Expense Dialog */}
       <Dialog open={!!editingExpense} onOpenChange={() => setEditingExpense(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className={cn(
+            'max-w-2xl max-h-[90vh] overflow-y-auto',
+            isGlass && 'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
+          )}
+        >
           <DialogHeader>
             <DialogTitle>Uitgave Bewerken</DialogTitle>
           </DialogHeader>
@@ -359,6 +368,7 @@ export function ExpensesContent({ showHeader = true, className = '' }: ExpensesC
               expense={editingExpense}
               onSuccess={handleExpenseUpdated}
               onCancel={() => setEditingExpense(null)}
+              variant={isGlass ? 'glass' : 'default'}
             />
           )}
         </DialogContent>

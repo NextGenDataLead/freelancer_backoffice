@@ -95,6 +95,37 @@ export async function GET(request: Request) {
       return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
     }
 
+    // 3a. Fetch recent recurring expense registrations (used for cash flow penalty logic)
+    const { data: recurringExpenseRecords, error: recurringExpenseError } = await supabaseAdmin
+      .from('expenses')
+      .select('expense_date, metadata')
+      .eq('tenant_id', profile.tenant_id)
+      .order('expense_date', { ascending: false })
+      .limit(200)
+
+    if (recurringExpenseError) {
+      console.error('Error fetching recurring expense registrations:', recurringExpenseError)
+    }
+
+    const latestRecurringExpenseDate = (() => {
+      if (!recurringExpenseRecords) return undefined
+      for (const record of recurringExpenseRecords) {
+        const metadata = record.metadata || {}
+        if (
+          metadata?.template_id ||
+          metadata?.source === 'recurring_template' ||
+          metadata?.is_recurring === true
+        ) {
+          try {
+            return new Date(record.expense_date).toISOString().split('T')[0]
+          } catch {
+            continue
+          }
+        }
+      }
+      return undefined
+    })()
+
     // Derive tenant-wide payment term baseline (default 30 days)
     const tenantPaymentTermsBaseline = (() => {
       const clientTerms = (clients || [])
@@ -109,17 +140,23 @@ export async function GET(request: Request) {
     })()
 
     // 4. Calculate metrics
-    const metrics = calculateDashboardMetrics(clients, timeEntries, invoices, {
-      prevMonthStart,
-      prevMonthEnd,
-      prevWeekStart,
-      prevWeekEnd,
-      today: now.toISOString().split('T')[0],
-      last30DaysStart: last30DaysStart.toISOString().split('T')[0],
-      previous30DaysStart: previous30DaysStart.toISOString().split('T')[0],
-      previous30DaysEnd: previous30DaysEnd.toISOString().split('T')[0],
-      tenantPaymentTermsBaseline
-    })
+    const metrics = calculateDashboardMetrics(
+      clients,
+      timeEntries,
+      invoices,
+      {
+        prevMonthStart,
+        prevMonthEnd,
+        prevWeekStart,
+        prevWeekEnd,
+        today: now.toISOString().split('T')[0],
+        last30DaysStart: last30DaysStart.toISOString().split('T')[0],
+        previous30DaysStart: previous30DaysStart.toISOString().split('T')[0],
+        previous30DaysEnd: previous30DaysEnd.toISOString().split('T')[0],
+        tenantPaymentTermsBaseline
+      },
+      { latestRecurringExpenseDate }
+    )
 
     // Dashboard metrics calculated successfully
 
@@ -149,7 +186,8 @@ function calculateDashboardMetrics(
     previous30DaysStart?: string
     previous30DaysEnd?: string
     tenantPaymentTermsBaseline?: number
-  }
+  },
+  options: { latestRecurringExpenseDate?: string } = {}
 ) {
   // Create client lookup map
   const clientMap = new Map(clients.map(c => [c.id, c]))
@@ -377,6 +415,7 @@ function calculateDashboardMetrics(
       current: Math.ceil(current30DaysRevenue * 100) / 100,
       previous: Math.ceil(previous30DaysRevenue * 100) / 100
     },
+    lastRecurringExpenseRegistration: options.latestRecurringExpenseDate || null,
     period_info: {
       current_date: periods.today,
       previous_month: `${periods.prevMonthStart} to ${periods.prevMonthEnd}`,

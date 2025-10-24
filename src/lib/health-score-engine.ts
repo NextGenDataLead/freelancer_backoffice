@@ -50,6 +50,21 @@ export interface HealthScoreInputs {
       current: number
       previous: number
     }
+    lastRecurringExpenseRegistration?: string // ISO date string
+    lastVatProcessingDate?: string // ISO date string
+    recurringExpensesDue?: {
+      totalCount: number
+      totalAmount: number
+      templates: Array<{
+        templateId: string
+        templateName: string
+        frequency: string
+        occurrencesDue: number
+        totalAmount: number
+        nextOccurrenceDate: string
+        lastOccurrenceDate: string
+      }>
+    }
   }
   timeStats: {
     thisMonth: {
@@ -326,7 +341,86 @@ class CashFlowScoreCalculator {
       overdueAmount <= 6000 ? 1 : 0
     )
 
-    const finalScore = roundToOneDecimal(dioScore + volumeScore + absoluteAmountScore)
+    // Recurring Expenses Penalty
+    let recurringExpensePenalty = 0
+    let daysSinceLastExpenseRegistration: number | null = null
+    let recurringExpensePenaltyBreakdown: {
+      type: 'due_occurrences' | 'stale_registration'
+      severity: 'low' | 'medium' | 'high'
+      totalCount?: number
+      totalAmount?: number
+      templates?: {
+        templateId: string
+        templateName: string
+        frequency: string
+        occurrencesDue: number
+        totalAmount: number
+        nextOccurrenceDate: string
+        lastOccurrenceDate: string
+      }[]
+      daysSinceLastRegistration?: number | null
+    } | null = null
+
+    const recurringDueSummary = inputs.dashboardMetrics.recurringExpensesDue
+
+    if (recurringDueSummary && recurringDueSummary.totalCount > 0) {
+      const { totalCount, totalAmount, templates } = recurringDueSummary
+
+      if (totalCount >= 5 || totalAmount >= 2500) {
+        recurringExpensePenalty = 5
+      } else if (totalCount >= 3 || totalAmount >= 1500) {
+        recurringExpensePenalty = 3.5
+      } else {
+        recurringExpensePenalty = 2
+      }
+
+      recurringExpensePenaltyBreakdown = {
+        type: 'due_occurrences',
+        severity: recurringExpensePenalty >= 5 ? 'high'
+          : recurringExpensePenalty >= 3.5 ? 'medium'
+            : 'low',
+        totalCount,
+        totalAmount,
+        templates
+      }
+    } else {
+      if (inputs.dashboardMetrics.lastRecurringExpenseRegistration) {
+        const lastRegistration = new Date(inputs.dashboardMetrics.lastRecurringExpenseRegistration)
+        const today = new Date()
+        daysSinceLastExpenseRegistration = Math.floor(
+          (today.getTime() - lastRegistration.getTime()) / (1000 * 60 * 60 * 24)
+        )
+      } else {
+        const today = new Date()
+        const estimateDate = new Date(today)
+        estimateDate.setDate(today.getDate() - 35)
+        daysSinceLastExpenseRegistration = Math.floor(
+          (today.getTime() - estimateDate.getTime()) / (1000 * 60 * 60 * 24)
+        )
+      }
+
+      if (daysSinceLastExpenseRegistration !== null && daysSinceLastExpenseRegistration > 0) {
+        if (daysSinceLastExpenseRegistration > 60) {
+          recurringExpensePenalty = 5
+        } else if (daysSinceLastExpenseRegistration > 35) {
+          recurringExpensePenalty = 3.5
+        } else if (daysSinceLastExpenseRegistration > 21) {
+          recurringExpensePenalty = 2
+        }
+
+        if (recurringExpensePenalty > 0) {
+          recurringExpensePenaltyBreakdown = {
+            type: 'stale_registration',
+            severity: recurringExpensePenalty >= 5 ? 'high'
+              : recurringExpensePenalty >= 3.5 ? 'medium'
+                : 'low',
+            daysSinceLastRegistration: daysSinceLastExpenseRegistration
+          }
+        }
+      }
+    }
+
+    const finalScore = roundToOneDecimal(dioScore + volumeScore + absoluteAmountScore - recurringExpensePenalty)
 
     return {
       score: finalScore,
@@ -335,7 +429,10 @@ class CashFlowScoreCalculator {
         overdueCount,
         dioEquivalent: actualDIO,
         paymentTerms,
-        scores: { dioScore, volumeScore, absoluteAmountScore }
+        scores: { dioScore, volumeScore, absoluteAmountScore },
+        recurringExpensePenalty, // Add to breakdown
+        daysSinceLastExpenseRegistration,
+        recurringExpensePenaltyBreakdown
       }
     }
   }
@@ -416,7 +513,45 @@ class CashFlowScoreCalculator {
               formula: `Total Score: ${result.breakdown.scores?.dioScore || 0} + ${result.breakdown.scores?.volumeScore || 0} + ${result.breakdown.scores?.absoluteAmountScore || 0} = ${result.score}/25`
             }
           ]
-        }
+        },
+        ...(result.breakdown.recurringExpensePenalty > 0 ? [{
+          type: 'calculations' as const,
+          title: 'Additional Penalties',
+          items: [
+            {
+              type: 'calculation' as const,
+              label: 'Recurring Expense Coverage',
+              value: `-${result.breakdown.recurringExpensePenalty} pts`,
+              description: (() => {
+                const penaltyDetails = result.breakdown.recurringExpensePenaltyBreakdown
+                const formatEuro = (value: number) => `€${value.toLocaleString()}`
+
+                if (penaltyDetails?.type === 'due_occurrences') {
+                  const { totalCount = 0, totalAmount = 0, templates = [] } = penaltyDetails
+                  const oldest = templates[templates.length - 1]?.lastOccurrenceDate
+                  const newest = templates[0]?.nextOccurrenceDate
+                  const countLabel = totalCount === 1 ? '1 missed recurring expense' : `${totalCount} missed recurring expenses`
+                  const amountLabel = totalAmount > 0 ? ` (${formatEuro(Math.round(totalAmount))} outstanding)` : ''
+                  const dateLabel = oldest ? ` covering ${oldest}${newest && newest !== oldest ? ` → ${newest}` : ''}` : ''
+                  return `${countLabel}${amountLabel}${dateLabel}`
+                }
+
+                if (penaltyDetails?.type === 'stale_registration') {
+                  const days = penaltyDetails.daysSinceLastRegistration ?? result.breakdown.daysSinceLastExpenseRegistration
+                  return days
+                    ? `Last recurring expense registration was ${days} days ago (target: record within 21 days)`
+                    : 'Recurring expense registration data unavailable'
+                }
+
+                const fallbackDays = result.breakdown.daysSinceLastExpenseRegistration
+                return fallbackDays
+                  ? `Last recurring expense registration was ${fallbackDays} days ago (target: record within 21 days)`
+                  : 'Recurring expense registration data unavailable'
+              })(),
+              emphasis: 'secondary' as const
+            }
+          ]
+        }] : [])
       ]
     }
   }
@@ -536,6 +671,46 @@ class CashFlowScoreCalculator {
         pointsToGain: Math.round(amountPointsToGain * 10) / 10
       }
     })
+
+    if (breakdown.recurringExpensePenalty > 0) {
+      const penaltyDetails = breakdown.recurringExpensePenaltyBreakdown || {}
+      const missedOccurrences = penaltyDetails.totalCount || 0
+      const outstandingRecurringAmount = penaltyDetails.totalAmount || 0
+      const priority = penaltyDetails.severity === 'high'
+        ? 'high'
+        : penaltyDetails.severity === 'medium'
+          ? 'medium'
+          : 'low'
+
+      recommendations.push({
+        id: 'catch-up-recurring-expenses',
+        priority,
+        impact: Math.round(breakdown.recurringExpensePenalty * 10) / 10,
+        effort: missedOccurrences <= 2 ? 'low' : missedOccurrences <= 4 ? 'medium' : 'high',
+        timeframe: penaltyDetails.severity === 'high' ? 'weekly' : 'monthly',
+        title: missedOccurrences > 0
+          ? `Record ${missedOccurrences} missed recurring expense${missedOccurrences === 1 ? '' : 's'}`
+          : 'Review recurring expense registrations',
+        description: missedOccurrences > 0
+          ? `Missing ${missedOccurrences} recurring expense${missedOccurrences === 1 ? '' : 's'} (~€${Math.round(outstandingRecurringAmount).toLocaleString()}) is reducing cash flow visibility.`
+          : 'Recurring expenses have not been registered recently, which hides predictable outflows.',
+        actionItems: [
+          missedOccurrences > 0
+            ? `Record all missed recurring expenses (total ~€${Math.round(outstandingRecurringAmount).toLocaleString()}).`
+            : 'Verify the latest recurring expense registrations are in the system.',
+          'Use the Recurring Expenses due list to post each occurrence with the correct date.',
+          'Schedule a monthly recurring expense review to avoid future penalties.',
+          'Enable reminders/automation for recurring expense postings.'
+        ],
+        metrics: {
+          current: missedOccurrences > 0
+            ? `${missedOccurrences} missed occurrence${missedOccurrences === 1 ? '' : 's'} (~€${Math.round(outstandingRecurringAmount).toLocaleString()})`
+            : 'No entries recorded in the last 21 days',
+          target: 'All recurring expenses recorded on or before due date',
+          pointsToGain: Math.round(breakdown.recurringExpensePenalty * 10) / 10
+        }
+      })
+    }
 
     // Sort by priority and impact, return top 5
     return recommendations
@@ -909,7 +1084,33 @@ class RiskScoreCalculator {
 
     const dailyConsistencyRisk = roundToOneDecimal(daysRisk + hoursRisk)
 
-    const totalRiskPenalty = roundToOneDecimal(clientRisk + businessContinuityRisk + dailyConsistencyRisk)
+    // New: VAT Processing Penalty
+    let vatPenalty = 0
+    let daysOverdue = 0
+    const today = new Date();
+    const currentQuarter = Math.floor(today.getMonth() / 3);
+    const deadline = new Date(today.getFullYear(), (currentQuarter * 3), 0);
+
+    if (inputs.dashboardMetrics.lastVatProcessingDate) {
+      const lastVatDate = new Date(inputs.dashboardMetrics.lastVatProcessingDate);
+      if (lastVatDate < deadline) {
+          daysOverdue = Math.floor((today.getTime() - deadline.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysOverdue > 21) {
+              vatPenalty = 5; // Heavier penalty
+          } else if (daysOverdue > 0) {
+              vatPenalty = 2; // Minor penalty
+          }
+      }
+    } else { // if no date is provided, assume it's late
+        daysOverdue = Math.floor((today.getTime() - deadline.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysOverdue > 21) {
+            vatPenalty = 5; // Heavier penalty
+        } else if (daysOverdue > 0) {
+            vatPenalty = 2; // Minor penalty
+        }
+    }
+
+    const totalRiskPenalty = roundToOneDecimal(clientRisk + businessContinuityRisk + dailyConsistencyRisk + vatPenalty)
     const finalScore = roundToOneDecimal(Math.max(0, 25 - totalRiskPenalty))
 
     return {
@@ -920,9 +1121,11 @@ class RiskScoreCalculator {
           businessContinuityRisk,
           dailyConsistencyRisk,
           daysRisk,
-          hoursRisk
+          hoursRisk,
+          vatPenalty // Add to breakdown
         },
         totalPenalty: totalRiskPenalty,
+        daysOverdue, // Add to breakdown
         // Business Continuity Risk sub-metrics breakdown
         businessContinuityBreakdown: {
           revenueStabilityRisk,
@@ -1036,7 +1239,7 @@ class RiskScoreCalculator {
 
     calculationItems.push({
       type: 'formula',
-      formula: `Total Score: 25 - ${penalties?.clientRisk || 0} - ${penalties?.subscriptionRisk || 0} = ${result.score}/25`
+      formula: `Total Score: 25 - ${penalties?.clientRisk || 0} - ${penalties?.subscriptionRisk || 0} - ${penalties?.vatPenalty || 0} = ${result.score}/25`
     })
 
     details.push({
@@ -1044,6 +1247,22 @@ class RiskScoreCalculator {
       title: 'Independent Risk Assessment',
       items: calculationItems
     })
+
+    if (penalties?.vatPenalty > 0) {
+      details.push({
+        type: 'calculations',
+        title: 'Additional Penalties',
+        items: [
+          {
+            type: 'calculation',
+            label: 'VAT Processing',
+            value: `-${penalties?.vatPenalty} pts`,
+            description: `VAT processing is ${result.breakdown.daysOverdue} days overdue`,
+            emphasis: 'secondary'
+          }
+        ]
+      })
+    }
 
     return {
       title: 'Risk Management - Business Continuity (25 points)',

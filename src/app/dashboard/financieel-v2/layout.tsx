@@ -69,11 +69,19 @@ export default function FinancieelV2Layout({ children }: { children: React.React
 
   // Initialize Lucide icons and setup scroll effects
   useEffect(() => {
+    let retryCount = 0
+    const maxRetries = 5
+
     const initializeLucide = () => {
-      if (typeof window !== 'undefined' && (window as any).lucide) {
-        (window as any).lucide.createIcons()
-      } else {
+      if (typeof window !== 'undefined' && typeof (window as any).lucide !== 'undefined') {
+        try {
+          (window as any).lucide.createIcons({ icons: (window as any).lucide.icons })
+        } catch (error) {
+          console.warn('Failed to initialize Lucide icons:', error)
+        }
+      } else if (retryCount < maxRetries) {
         // Retry after a short delay if lucide isn't loaded yet
+        retryCount++
         setTimeout(initializeLucide, 100)
       }
     }
@@ -212,14 +220,22 @@ export default function FinancieelV2Layout({ children }: { children: React.React
   // Reinitialize tooltips and icons when pathname changes (for newly added elements)
   useEffect(() => {
     // Immediate initialization
-    if (typeof window !== 'undefined' && (window as any).lucide) {
-      (window as any).lucide.createIcons()
+    if (typeof window !== 'undefined' && typeof (window as any).lucide !== 'undefined') {
+      try {
+        (window as any).lucide.createIcons({ icons: (window as any).lucide.icons })
+      } catch (error) {
+        console.warn('Failed to initialize Lucide icons on pathname change:', error)
+      }
     }
 
     const timer = setTimeout(() => {
       // Reinitialize Lucide icons for new page content
-      if (typeof window !== 'undefined' && (window as any).lucide) {
-        (window as any).lucide.createIcons()
+      if (typeof window !== 'undefined' && typeof (window as any).lucide !== 'undefined') {
+        try {
+          (window as any).lucide.createIcons({ icons: (window as any).lucide.icons })
+        } catch (error) {
+          console.warn('Failed to reinitialize Lucide icons:', error)
+        }
       }
 
       // Reinitialize tooltips for new page content
@@ -289,18 +305,25 @@ export default function FinancieelV2Layout({ children }: { children: React.React
 
   // Navigation items configuration
   const navItems = [
-    { href: '/dashboard/financieel-v2', icon: 'home', label: 'Cockpit', tooltip: 'Cockpit' },
-    { href: '/dashboard/financieel-v2/tijd', icon: 'clock', label: 'Time', tooltip: 'Time Tracking' },
-    { href: '/dashboard/financieel-v2/uitgaven', icon: 'receipt', label: 'Expenses', tooltip: 'Expenses' },
-    { href: '/dashboard/financieel-v2/facturen', icon: 'file-text', label: 'Invoices', tooltip: 'Invoices' },
-    { href: '/dashboard/financieel-v2/klanten', icon: 'users', label: 'Clients', tooltip: 'Clients' },
-    { href: '/dashboard/financieel-v2/belasting', icon: 'calculator', label: 'Tax', tooltip: 'Tax' },
+    { href: '/dashboard/financieel-v2', icon: 'home', label: 'Cockpit', tooltip: 'Cockpit', subtitle: '' },
+    { href: '/dashboard/financieel-v2/tijd', icon: 'clock', label: 'Time', tooltip: 'Time Tracking', subtitle: 'Registreer gewerkte uren met ingebouwde timer en projectkoppeling' },
+    { href: '/dashboard/financieel-v2/uitgaven', icon: 'receipt', label: 'Expenses', tooltip: 'Expenses', subtitle: 'Registreer uitgaven met OCR bonnetjesscan en automatische categorisering' },
+    { href: '/dashboard/financieel-v2/terugkerende-uitgaven', icon: 'repeat', label: 'Recurring Expenses', tooltip: 'Recurring Expenses', subtitle: 'Beheer abonnementen, huur en andere vaste kosten voor nauwkeurige cashflow voorspellingen' },
+    { href: '/dashboard/financieel-v2/facturen', icon: 'file-text', label: 'Invoices', tooltip: 'Invoices', subtitle: 'Beheer facturen en houd je financiële overzicht bij' },
+    { href: '/dashboard/financieel-v2/klanten', icon: 'users', label: 'Clients', tooltip: 'Clients', subtitle: 'Beheer je klanten en leveranciers' },
+    { href: '/dashboard/financieel-v2/belasting', icon: 'calculator', label: 'Tax', tooltip: 'Tax', subtitle: 'Nederlandse BTW-aangiften en ICP-opgaven voor zzp\'ers' },
   ]
 
   // Get page title based on pathname
   const getPageTitle = () => {
     const item = navItems.find(item => item.href === pathname)
     return item ? item.label : 'Cockpit'
+  }
+
+  // Get page subtitle based on pathname
+  const getPageSubtitle = () => {
+    const item = navItems.find(item => item.href === pathname)
+    return item?.subtitle || ''
   }
 
   return (
@@ -379,16 +402,40 @@ export default function FinancieelV2Layout({ children }: { children: React.React
           </button>
         </aside>
         <main className="main-panel" role="main">
-          <header className="topbar">
-            <div className="topbar__left">
+          <header className="topbar" style={{ position: 'relative', minHeight: '80px', maxHeight: '80px' }}>
+            <div className="topbar__left" style={{ minWidth: '0', zIndex: 1, height: '100%', display: 'flex', alignItems: 'center' }}>
               <button type="button" className="hamburger-menu" aria-label="Toggle navigation menu" aria-expanded="false">
                 <span />
                 <span />
                 <span />
               </button>
-              <h1>{getPageTitle()}</h1>
+              <div style={{ minWidth: '0', flex: '1', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <h1 style={{
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  margin: 0,
+                  padding: 0
+                }}>{getPageTitle()}</h1>
+                <p style={{
+                  fontSize: '0.875rem',
+                  color: 'rgba(148, 163, 184, 0.7)',
+                  marginTop: '0.25rem',
+                  maxWidth: '400px',
+                  lineHeight: '1.3',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  margin: 0,
+                  padding: 0,
+                  visibility: getPageSubtitle() ? 'visible' : 'hidden',
+                  height: getPageSubtitle() ? 'auto' : '0'
+                }}>
+                  {getPageSubtitle() || '\u00A0'}
+                </p>
+              </div>
             </div>
-            <div className="topbar__center">
+            <div className="topbar__center" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 0 }}>
               <button
                 type="button"
                 className="quick-action-btn timer-btn"
@@ -435,7 +482,7 @@ export default function FinancieelV2Layout({ children }: { children: React.React
                 </div>
               </button>
             </div>
-            <div className="topbar__right">
+            <div className="topbar__right" style={{ zIndex: 1, height: '100%', display: 'flex', alignItems: 'center' }}>
               <button type="button" className="icon-button" data-tooltip="Messages" aria-label="Messages">
                 <i data-lucide="mail" />
               </button>

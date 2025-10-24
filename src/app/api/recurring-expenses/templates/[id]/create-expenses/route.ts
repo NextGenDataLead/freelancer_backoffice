@@ -118,42 +118,130 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Create expense records for each due occurrence
-    const expensesToCreate = outstandingOccurrences.map(occ => ({
-      tenant_id: profile.tenant_id,
-      title: template.name,
-      description: template.description || `Automatic expense from recurring template`,
-      expense_date: occ.date,
-      amount: occ.gross_amount,
-      currency: template.currency || 'EUR',
-      category_id: template.category_id,
-      expense_type: template.category_id ? undefined : 'overige_zakelijk',
-      payment_method: template.payment_method,
-      status: 'draft',
-      submitted_by: profile.id,
-      submitted_at: nowIso,
-      vendor_name: null,
-      vat_rate: template.vat_rate,
-      vat_amount: occ.vat_amount,
-      is_vat_deductible: template.is_vat_deductible,
-      business_percentage: template.business_use_percentage,
-      metadata: {
-        source: 'recurring_template',
-        template_id: template.id,
-        template_name: template.name,
-        occurrence_date: occ.date
+    const normalizeNumber = (value: unknown): number => {
+      if (typeof value === 'number') return value
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (!trimmed) return 0
+
+        let sanitized = trimmed.replace(/\s/g, '')
+
+        if (sanitized.includes('.') && sanitized.includes(',')) {
+          // Assume European format: thousands with dot, decimal with comma
+          sanitized = sanitized.replace(/\./g, '').replace(',', '.')
+        } else if (sanitized.includes(',')) {
+          // Assume decimal comma
+          sanitized = sanitized.replace(',', '.')
+        }
+
+        const parsed = parseFloat(sanitized)
+        return Number.isFinite(parsed) ? parsed : 0
       }
-    }))
+      return 0
+    }
+
+    const fallbackPaymentMethod = template.payment_method || 'other'
+
+    const toCurrencyNumber = (value: number) => {
+      if (!Number.isFinite(value)) return 0
+      return Number((Math.round(value * 100) / 100).toFixed(2))
+    }
+
+    const templateMetadata = typeof template.metadata === 'object' && template.metadata !== null
+      ? template.metadata as Record<string, any>
+      : {}
+
+    const resolvedCategoryId =
+      template.category_id ||
+      (typeof templateMetadata.category_id === 'string' && templateMetadata.category_id.length === 36
+        ? templateMetadata.category_id
+        : null)
+
+    const vendorName = (() => {
+      const candidates = [
+        templateMetadata.vendor_name,
+        templateMetadata.supplier_name,
+        templateMetadata.default_vendor,
+        templateMetadata.vendor,
+        template.name
+      ]
+      const selected = candidates.find(val => typeof val === 'string' && val.trim().length > 0)
+      return selected ? selected.trim() : 'Onbekend'
+    })()
+
+    const expenseDescription = (() => {
+      const candidates = [
+        template.description,
+        templateMetadata.description,
+        templateMetadata.default_description
+      ]
+      const selected = candidates.find(val => typeof val === 'string' && val.trim().length > 0)
+      return selected ? selected.trim() : `Terugkerende uitgave - ${template.name}`
+    })()
+
+    const expensesToCreate = outstandingOccurrences.map(occ => {
+      const netAmount = normalizeNumber(occ.amount)
+      const grossAmount = normalizeNumber(occ.gross_amount)
+      const vatAmount = normalizeNumber(occ.vat_amount)
+      let vatRate = normalizeNumber(template.vat_rate)
+      if (vatRate > 1) {
+        vatRate = vatRate / 100
+      }
+      let businessPercentage = normalizeNumber(template.business_use_percentage)
+      if (businessPercentage <= 1) {
+        businessPercentage = businessPercentage * 100
+      }
+      if (!Number.isFinite(businessPercentage) || businessPercentage <= 0) {
+        businessPercentage = 100
+      }
+
+      return {
+        tenant_id: profile.tenant_id,
+        title: template.name,
+        description: expenseDescription,
+        expense_date: occ.date,
+        amount: toCurrencyNumber(netAmount || grossAmount),
+        currency: template.currency || 'EUR',
+        category_id: resolvedCategoryId,
+        expense_type: resolvedCategoryId ? undefined : 'overige_zakelijk',
+        payment_method: fallbackPaymentMethod,
+        status: 'draft',
+        submitted_by: profile.id,
+        submitted_at: nowIso,
+        vendor_name: vendorName,
+        vat_rate: vatRate,
+        vat_amount: toCurrencyNumber(vatAmount),
+        is_vat_deductible: template.is_vat_deductible,
+        business_percentage: businessPercentage,
+        is_recurring: true,
+        metadata: {
+          source: 'recurring_template',
+          template_id: template.id,
+          template_name: template.name,
+          occurrence_date: occ.date
+        }
+      }
+    })
 
     // Insert all expenses
+    console.log('Recurring template expenses to create:', JSON.stringify(expensesToCreate, null, 2))
+
     const { data: createdExpenses, error: createError } = await supabaseAdmin
       .from('expenses')
       .insert(expensesToCreate)
       .select()
 
     if (createError) {
-      console.error('Error creating expenses:', createError)
+      console.error('Error creating expenses:', JSON.stringify(createError, null, 2))
+      const errorMessage = createError.message || createError.details || 'Failed to create expenses from template'
+      const errorPayload = {
+        message: createError.message,
+        details: createError.details,
+        hint: createError.hint,
+        code: createError.code
+      }
       return NextResponse.json(
-        createApiResponse(null, 'Failed to create expenses from template', false),
+        createApiResponse({ error: errorPayload }, errorMessage, false),
         { status: 500 }
       )
     }

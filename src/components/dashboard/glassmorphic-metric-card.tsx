@@ -20,6 +20,7 @@ interface GlassmorphicMetricCardProps {
     value: string
     label: string
     isPositive: boolean
+    inline?: boolean // if true, renders inline with subtitle instead of separate section
   }
   splitMetrics?: {
     label1: string
@@ -75,11 +76,27 @@ export function GlassmorphicMetricCard({
       {/* Main Value and Subtitle */}
       <div className="metric-card__value-wrapper">
         <span className="metric-card__value">{value}</span>
-        <span className="metric-card__subtitle">{subtitle}</span>
+        {trendComparison?.inline ? (
+          <div className="metric-card__trend" style={{ marginTop: '0.5rem' }}>
+            <trendComparison.icon
+              className="metric-card__trend-icon"
+              style={{ color: trendComparison.isPositive ? 'var(--color-success)' : 'var(--color-danger)' }}
+            />
+            <span
+              className="metric-card__trend-value"
+              style={{ color: trendComparison.isPositive ? 'var(--color-success)' : 'var(--color-danger)' }}
+            >
+              {trendComparison.value}
+            </span>
+            <span className="metric-card__trend-label">{trendComparison.label}</span>
+          </div>
+        ) : (
+          <span className="metric-card__subtitle">{subtitle}</span>
+        )}
       </div>
 
-      {/* Trend Comparison */}
-      {trendComparison && (
+      {/* Trend Comparison - Only show if not inline */}
+      {trendComparison && !trendComparison.inline && (
         <div className="metric-card__trend">
           <trendComparison.icon
             className="metric-card__trend-icon"
