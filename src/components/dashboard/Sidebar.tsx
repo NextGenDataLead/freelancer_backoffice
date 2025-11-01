@@ -39,15 +39,15 @@ const navigationItems = [
   {
     name: 'Financial Hub',
     icon: Calculator,
-    href: '/dashboard/financieel',
+    href: '/dashboard/financieel-v2',
     category: 'main',
     children: [
-      { name: 'Overview', icon: BarChart3, href: '/dashboard/financieel' },
-      { name: 'Clients', icon: Users, href: '/dashboard/financieel/klanten' },
-      { name: 'Time Tracking', icon: Clock, href: '/dashboard/financieel/tijd' },
-      { name: 'Invoices', icon: FileText, href: '/dashboard/financieel/facturen' },
-      { name: 'Expenses', icon: Euro, href: '/dashboard/financieel/uitgaven' },
-      { name: 'Tax & Reports', icon: Building2, href: '/dashboard/financieel/belasting' }
+      { name: 'Overview', icon: BarChart3, href: '/dashboard/financieel-v2' },
+      { name: 'Clients', icon: Users, href: '/dashboard/financieel-v2/klanten' },
+      { name: 'Time Tracking', icon: Clock, href: '/dashboard/financieel-v2/tijd' },
+      { name: 'Invoices', icon: FileText, href: '/dashboard/financieel-v2/facturen' },
+      { name: 'Expenses', icon: Euro, href: '/dashboard/financieel-v2/uitgaven' },
+      { name: 'Tax & Reports', icon: Building2, href: '/dashboard/financieel-v2/belasting' }
     ]
   },
   { 
@@ -86,12 +86,12 @@ export function Sidebar() {
   const { sidebarOpen, closeSidebar } = useSidebar()
   const pathname = usePathname()
   const [expandedFinancial, setExpandedFinancial] = React.useState(
-    pathname.startsWith('/dashboard/financieel')
+    pathname.startsWith('/dashboard/financieel-v2')
   )
 
   // Auto-expand financial section when on financial pages
   React.useEffect(() => {
-    if (pathname.startsWith('/dashboard/financieel')) {
+    if (pathname.startsWith('/dashboard/financieel-v2')) {
       setExpandedFinancial(true)
     }
   }, [pathname])

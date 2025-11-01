@@ -640,14 +640,14 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
           <div>
             <h4 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
               <TrendingDown className="h-4 w-4" />
-              Uitgaven Analyse
+              Expense Analysis
             </h4>
             <div className="grid grid-cols-2 gap-2">
               <div className="text-center p-2 rounded" style={{
                 background: 'rgba(96, 165, 250, 0.12)',
                 border: '1px solid rgba(96, 165, 250, 0.22)'
               }}>
-                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Terugkerend</p>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Recurring</p>
                 <p className="text-sm font-bold" style={{ color: 'rgba(96, 165, 250, 0.95)' }}>
                   {formatCurrency((cashFlowAnalysis as any).expenseBreakdown.recurring)}
                 </p>
@@ -656,7 +656,7 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
                 background: 'rgba(139, 92, 246, 0.12)',
                 border: '1px solid rgba(139, 92, 246, 0.22)'
               }}>
-                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Daggemiddelde</p>
+                <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Daily Average</p>
                 <p className="text-sm font-bold" style={{ color: 'rgba(139, 92, 246, 0.95)' }}>
                   {formatCurrency((cashFlowAnalysis as any).expenseBreakdown.daily_average)}
                 </p>
@@ -670,14 +670,14 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
           <div>
             <h4 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--color-text-secondary)' }}>
               <DollarSign className="h-4 w-4" />
-              BTW Overzicht
+              VAT Overview
             </h4>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs p-2 rounded" style={{
                 background: 'rgba(239, 68, 68, 0.12)',
                 border: '1px solid rgba(239, 68, 68, 0.22)'
               }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Verschuldigd</span>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Owed</span>
                 <span className="font-bold" style={{ color: 'rgba(239, 68, 68, 0.95)' }}>
                   {formatCurrency((cashFlowAnalysis as any).taxBreakdown.vat_owed)}
                 </span>
@@ -686,7 +686,7 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
                 background: 'rgba(52, 211, 153, 0.12)',
                 border: '1px solid rgba(52, 211, 153, 0.22)'
               }}>
-                <span style={{ color: 'var(--color-text-secondary)' }}>Aftrekbaar</span>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Deductible</span>
                 <span className="font-bold" style={{ color: 'rgba(52, 211, 153, 0.95)' }}>
                   {formatCurrency((cashFlowAnalysis as any).taxBreakdown.vat_deductible)}
                 </span>
@@ -696,7 +696,7 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
                 border: '1px solid rgba(251, 146, 60, 0.22)'
               }}>
                 <div>
-                  <p className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>Te betalen</p>
+                  <p className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>To Pay</p>
                   {(cashFlowAnalysis as any).taxBreakdown.next_payment_date && (
                     <p style={{ color: 'var(--color-text-muted)' }}>
                       {new Date((cashFlowAnalysis as any).taxBreakdown.next_payment_date).toLocaleDateString('nl-NL', {
@@ -728,14 +728,14 @@ export function CashFlowForecast({ className, dashboardMetrics }: CashFlowForeca
               {(cashFlowAnalysis as any).dataQuality.has_recurring_templates && (cashFlowAnalysis as any).dataQuality.has_expense_history ? (
                 <>
                   <CheckCircle className="h-3 w-3" style={{ color: 'rgba(52, 211, 153, 0.95)' }} />
-                  <span style={{ color: 'var(--color-text-secondary)' }}>Voorspelling gebaseerd op echte data</span>
+                  <span style={{ color: 'var(--color-text-secondary)' }}>Forecast based on real data</span>
                 </>
               ) : (
                 <>
                   <Info className="h-3 w-3" style={{ color: 'rgba(251, 146, 60, 0.95)' }} />
                   <span style={{ color: 'var(--color-text-secondary)' }}>
-                    {!(cashFlowAnalysis as any).dataQuality.has_recurring_templates && 'Voeg terugkerende uitgaven toe voor betere voorspelling'}
-                    {!(cashFlowAnalysis as any).dataQuality.has_expense_history && 'Registreer uitgaven voor nauwkeurigere voorspelling'}
+                    {!(cashFlowAnalysis as any).dataQuality.has_recurring_templates && 'Add recurring expenses for better forecast'}
+                    {!(cashFlowAnalysis as any).dataQuality.has_expense_history && 'Register expenses for more accurate forecast'}
                   </span>
                 </>
               )}

@@ -107,7 +107,9 @@ export function useCalendarTimeEntries({
       // Transform API response to calendar format
       const calendarEntries: CalendarTimeEntry[] = result.data.map((entry: any) => ({
         id: entry.id,
-        date: entry.entry_date,
+        // Normalize date to YYYY-MM-DD format to handle potential timezone issues
+        // entry_date from DB might be ISO string or date string, ensure consistency
+        date: entry.entry_date.split('T')[0], // Extract YYYY-MM-DD from any format
         clientId: entry.client_id,
         clientName: entry.client?.name || 'Unknown Client',
         projectId: entry.project_id,
@@ -195,7 +197,7 @@ export function useCalendarTimeEntries({
       // Transform response and add to current entries
       const newCalendarEntry: CalendarTimeEntry = {
         id: result.data.id,
-        date: result.data.entry_date,
+        date: result.data.entry_date.split('T')[0], // Normalize to YYYY-MM-DD
         clientId: result.data.client_id,
         clientName: result.data.client?.name || entry.clientName,
         projectId: result.data.project_id,
@@ -256,7 +258,7 @@ export function useCalendarTimeEntries({
       // Transform response and update current entries
       const updatedCalendarEntry: CalendarTimeEntry = {
         id: result.data.id,
-        date: result.data.entry_date,
+        date: result.data.entry_date.split('T')[0], // Normalize to YYYY-MM-DD
         clientId: result.data.client_id,
         clientName: result.data.client?.name || updates.clientName || '',
         projectId: result.data.project_id,

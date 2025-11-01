@@ -112,14 +112,29 @@ export const VATRateSchema = z
   .max(1, "VAT rate must be less than or equal to 100%");
 
 // ====================
+// CLIENT CONTACT SCHEMAS
+// ====================
+
+export const ContactTypeSchema = z.enum(['primary', 'administration'] as const);
+
+export const ClientContactSchema = z.object({
+  first_name: z.string().min(1, "First name is required").max(100, "First name too long"),
+  last_name: z.string().min(1, "Last name is required").max(100, "Last name too long"),
+  email: z.string().email("Invalid email address"),
+  phone: z.string().max(50, "Phone number too long").optional().or(z.literal('')).transform(val => val || undefined),
+});
+
+// ====================
 // CLIENT SCHEMAS
 // ====================
 
 export const CreateClientSchema = z.object({
-  name: z.string().min(1, "Name is required").max(255, "Name too long"),
-  company_name: z.string().max(255, "Company name too long").optional(),
+  company_name: z.string().min(1, "Company name is required").max(255, "Company name too long"),
   email: z.string().email("Invalid email address").optional(),
   phone: z.string().max(50, "Phone number too long").optional(),
+  // Contact fields (both required)
+  primaryContact: ClientContactSchema,
+  administrationContact: ClientContactSchema,
   address: z.string().max(500, "Address too long").optional(),
   postal_code: z.string().max(10, "Postal code too long").optional(),
   city: z.string().max(100, "City name too long").optional(),
@@ -130,17 +145,19 @@ export const CreateClientSchema = z.object({
   default_payment_terms: z.number().int().min(1).max(365).default(30),
   notes: z.string().max(1000, "Notes too long").optional(),
   hourly_rate: z.number().min(0, "Hourly rate must be positive").max(9999.99, "Hourly rate too high").optional(),
-  // Invoicing frequency fields  
+  // Invoicing frequency fields
   invoicing_frequency: z.enum(['weekly', 'monthly', 'on_demand']).default('on_demand'),
   auto_invoice_enabled: z.boolean().default(false)
 });
 
 export const UpdateClientSchema = z.object({
   id: z.string().uuid("Invalid client ID"),
-  name: z.string().min(1).optional(),
-  company_name: z.string().optional(),
+  company_name: z.string().min(1, "Company name is required").max(255, "Company name too long").optional(),
   email: z.string().email().optional(),
   phone: z.string().optional(),
+  // Contact fields
+  primaryContact: ClientContactSchema.optional(),
+  administrationContact: ClientContactSchema.optional(),
   address: z.string().optional(),
   postal_code: z.string().max(10, "Postal code too long").optional(),
   city: z.string().optional(),

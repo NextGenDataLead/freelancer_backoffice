@@ -5,7 +5,16 @@
 // ENUM TYPES
 // ====================
 
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'partial' | 'overdue' | 'cancelled';
+export type InvoiceStatus =
+  | 'draft'
+  | 'sent'
+  | 'paid'
+  | 'partial'
+  | 'overdue'
+  | 'overdue_reminder_1'
+  | 'overdue_reminder_2'
+  | 'overdue_reminder_3'
+  | 'cancelled';
 
 export type VATType = 'standard' | 'reverse_charge' | 'exempt' | 'reduced';
 
@@ -32,16 +41,34 @@ export type PaymentMethod = 'bank_transfer' | 'credit_card' | 'cash' | 'paypal' 
 
 export type InvoicingFrequency = 'weekly' | 'monthly' | 'on_demand';
 
+export type ReminderLevel = 1 | 2 | 3;
+
+export type DeliveryStatus = 'sent' | 'delivered' | 'bounced' | 'failed';
+
+export type ContactType = 'primary' | 'administration';
+
 // ====================
 // DATABASE TYPES
 // ====================
+
+export interface ClientContact {
+  id: string;
+  tenant_id: string;
+  client_id: string;
+  contact_type: ContactType;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string;
+  created_at: Date;
+  updated_at: Date;
+}
 
 export interface Client {
   id: string;
   tenant_id: string;
   created_by: string;
-  name: string;
-  company_name?: string;
+  company_name: string; // Required - company name is the main identifier
   email?: string;
   phone?: string;
   address?: string;
@@ -204,6 +231,35 @@ export interface TransactionLog {
   changed_at: Date;
   ip_address?: string;
   user_agent?: string;
+}
+
+export interface PaymentReminder {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  sent_by: string;
+  reminder_level: ReminderLevel;
+  sent_at: Date;
+  email_sent_to: string;
+  email_subject: string;
+  email_body: string;
+  delivery_status: DeliveryStatus;
+  opened_at?: Date;
+  clicked_at?: Date;
+  notes?: string;
+  created_at: Date;
+}
+
+export interface ReminderTemplate {
+  id: string;
+  tenant_id: string;
+  name: string;
+  reminder_level: ReminderLevel;
+  subject: string;
+  body: string;
+  is_default: boolean;
+  created_at: Date;
+  updated_at: Date;
 }
 
 // ====================
@@ -446,11 +502,22 @@ export interface BalanceSheetReport {
 // FORM VALIDATION TYPES
 // ====================
 
-export interface ClientFormData {
-  name: string;
-  company_name: string;
+export interface ClientContactFormData {
+  first_name: string;
+  last_name: string;
   email: string;
   phone: string;
+}
+
+export interface ClientFormData {
+  company_name: string; // Required
+  email: string;
+  phone: string;
+  // Contact fields
+  primaryContact: ClientContactFormData;
+  administrationContact: ClientContactFormData;
+  sameAsPrimary: boolean; // UI-only field for checkbox
+  // Address & business info
   address: string;
   postal_code: string;
   city: string;
@@ -539,6 +606,22 @@ export type KilometerEntryWithClient = EntityWithRelations<KilometerEntry, {
   client?: Client;
 }>;
 
+export type ClientWithContacts = EntityWithRelations<Client, {
+  contacts: ClientContact[];
+}>;
+
+export type InvoiceWithClient = EntityWithRelations<Invoice, {
+  client: Client;
+}>;
+
+export type InvoiceWithClientAndContacts = EntityWithRelations<Invoice, {
+  client: ClientWithContacts;
+}>;
+
+export type InvoiceWithReminders = EntityWithRelations<Invoice, {
+  reminders: PaymentReminder[];
+}>;
+
 // ====================
 // RESPONSE TYPES
 // ====================
@@ -583,4 +666,52 @@ export interface FinancialDashboardMetrics {
   next_vat_deadline: Date;
   recent_invoices: InvoiceWithItems[];
   recent_expenses: ExpenseWithSupplier[];
+}
+
+// ====================
+// PAYMENT REMINDER TYPES
+// ====================
+
+export interface SendReminderRequest {
+  invoice_id: string;
+  template_id?: string;
+  personal_note?: string;
+  send_copy_to_sender?: boolean;
+}
+
+export interface SendReminderResponse {
+  reminder: PaymentReminder;
+  next_reminder_level?: ReminderLevel;
+  days_until_next_reminder?: number;
+}
+
+export interface ReminderStats {
+  total_reminders_sent: number;
+  reminders_by_level: {
+    level: ReminderLevel;
+    count: number;
+    response_rate: number;
+  }[];
+  average_days_to_payment: number;
+  most_effective_level: ReminderLevel;
+  invoices_needing_reminders: {
+    total: number;
+    by_level: {
+      level: ReminderLevel;
+      count: number;
+      total_amount: number;
+    }[];
+  };
+}
+
+export interface ReminderTemplateVariables {
+  client_name: string; // Company name
+  admin_name: string; // Administration contact full name (first_name + last_name)
+  invoice_number: string;
+  invoice_date: string;
+  due_date: string;
+  days_overdue: number;
+  total_amount: string;
+  business_name: string;
+  payment_link?: string;
 }

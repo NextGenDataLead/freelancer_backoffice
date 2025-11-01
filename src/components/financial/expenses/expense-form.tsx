@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -150,6 +151,14 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
   // Calculate VAT amount when amount or rate changes
   const watchedAmount = form.watch('amount')
   const watchedVatRate = form.watch('vat_rate')
+  const vatStatus = ocrResult?.extracted_data?.vat_validation_status
+  const vatMessage = ocrResult?.extracted_data?.vat_validation_message
+  const reverseChargeDetected = Boolean(
+    ocrResult?.extracted_data?.reverse_charge_detected_in_text ||
+    ocrResult?.extracted_data?.reverse_charge_detected_from_vat ||
+    ocrResult?.extracted_data?.suggested_vat_type === 'reverse_charge' ||
+    watchedVatRate === -1
+  )
   
   const vatAmount = watchedAmount && watchedVatRate && watchedVatRate > 0
     ? Math.round(watchedAmount * watchedVatRate * 100) / 100
@@ -167,13 +176,17 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
     // Validate file type - images and PDFs for PaddleOCR
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf']
     if (!allowedTypes.includes(file.type)) {
-      alert('Alleen JPG, PNG, WebP afbeeldingen en PDF documenten zijn toegestaan voor OCR')
+      toast.error('Invalid file type', {
+        description: 'Only JPG, PNG, WebP images and PDF documents are allowed for OCR'
+      })
       return
     }
 
     // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
-      alert('Bestand is te groot. Maximum grootte is 10MB')
+      toast.error('File too large', {
+        description: 'Maximum file size is 10MB'
+      })
       return
     }
 
@@ -275,7 +288,9 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
       }
     } catch (error) {
       console.error('OCR processing error:', error)
-      alert('Fout bij verwerken van de bon. Probeer opnieuw.')
+      toast.error('OCR processing failed', {
+        description: 'Error processing the receipt. Please try again.'
+      })
     } finally {
       setOcrProcessing(false)
     }
@@ -304,7 +319,9 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
 
         // Ensure required fields are present
         if (!recurringConfig.template_name || !recurringConfig.start_date) {
-          alert('Terugkerende uitgave vereist een template naam en startdatum')
+          toast.error('Validation error', {
+            description: 'Recurring expense requires a template name and start date'
+          })
           return
         }
       }
@@ -372,10 +389,14 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
           expenseId: result.data.id,
           templateId: result.data.template_id
         })
-        alert(`✅ Uitgave en terugkerende template succesvol aangemaakt!\n\nTemplate ID: ${result.data.template_id}`)
+        toast.success('Expense and template created!', {
+          description: `Successfully created expense and recurring template (ID: ${result.data.template_id})`
+        })
       } else if (isRecurring && !result.data?.template_id) {
         console.warn('Expense created but recurring template was NOT created')
-        alert('⚠️ Uitgave is aangemaakt, maar het terugkerende template kon niet worden aangemaakt. Controleer de console voor details.')
+        toast.warning('Partial success', {
+          description: 'Expense created, but recurring template could not be created. Check console for details.'
+        })
       }
 
       onSuccess?.(result.data)
@@ -397,7 +418,9 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
       }
     } catch (error) {
       console.error('Expense form error:', error)
-      alert(error instanceof Error ? error.message : 'Er is een fout opgetreden')
+      toast.error('Failed to save expense', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -707,21 +730,28 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
               </div>
 
               {/* VIES VAT Status Alert */}
-              {ocrResult?.extracted_data?.vat_validation_status && ocrResult?.extracted_data?.vat_validation_message && (
+              {(reverseChargeDetected || (vatStatus && vatMessage)) && (
                 <Alert className={
-                  ocrResult.extracted_data.vat_validation_status === 'valid_eu_vat' ? 'border-orange-200 bg-orange-50' :
-                  ocrResult.extracted_data.vat_validation_status === 'valid_nl_vat' ? 'border-green-200 bg-green-50' :
-                  'border-yellow-200 bg-yellow-50'
+                  reverseChargeDetected
+                    ? 'border-sky-200 bg-sky-50 text-sky-900'
+                    : vatStatus === 'valid_eu_vat'
+                    ? 'border-orange-200 bg-orange-50 text-orange-900'
+                    : vatStatus === 'valid_nl_vat'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                      : 'border-amber-200 bg-amber-50 text-amber-900'
                 }>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertTitle className="text-sm font-medium">
-                    {ocrResult.extracted_data.vat_validation_status === 'valid_eu_vat' && 'BTW Verlegd - EU Leverancier'}
-                    {ocrResult.extracted_data.vat_validation_status === 'valid_nl_vat' && 'Nederlandse Leverancier'}
-                    {ocrResult.extracted_data.vat_validation_status === 'invalid_vat' && 'Ongeldig BTW Nummer'}
-                    {ocrResult.extracted_data.vat_validation_status === 'unknown_vat' && 'Geen BTW Nummer Gevonden'}
+                    {reverseChargeDetected && 'BTW Verlegd - Controleer Leverancier'}
+                    {!reverseChargeDetected && vatStatus === 'valid_eu_vat' && 'BTW Verlegd - EU Leverancier'}
+                    {!reverseChargeDetected && vatStatus === 'valid_nl_vat' && 'Nederlandse Leverancier'}
+                    {!reverseChargeDetected && vatStatus === 'invalid_vat' && 'Ongeldig BTW Nummer'}
+                    {!reverseChargeDetected && vatStatus === 'unknown_vat' && 'Geen BTW Nummer Gevonden'}
                   </AlertTitle>
                   <AlertDescription className="text-sm mt-1">
-                    {ocrResult.extracted_data.vat_validation_message}
+                    {reverseChargeDetected
+                      ? 'Factuur vermeldt BTW-verlegging. Controleer of reverse charge van toepassing is en voer geen Nederlandse BTW in.'
+                      : vatMessage}
                   </AlertDescription>
                 </Alert>
               )}

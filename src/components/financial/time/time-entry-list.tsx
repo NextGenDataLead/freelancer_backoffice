@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -135,7 +136,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
   }, [limit]) // Component will remount due to key change, so this will run again
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Weet je zeker dat je deze tijdregistratie wilt verwijderen?')) {
+    if (!confirm('Are you sure you want to delete this time entry?')) {
       return
     }
 
@@ -152,7 +153,9 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
       onRefresh?.()
     } catch (error) {
       console.error('Delete error:', error)
-      alert('Er is een fout opgetreden bij het verwijderen')
+      toast.error('Failed to delete time entry', {
+        description: 'An error occurred while deleting'
+      })
     }
   }
 
@@ -172,7 +175,9 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
       onRefresh?.()
     } catch (error) {
       console.error('Update error:', error)
-      alert('Er is een fout opgetreden bij het bijwerken')
+      toast.error('Failed to update time entry', {
+        description: 'An error occurred while updating'
+      })
     }
   }
 
@@ -217,7 +222,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
-            Tijdregistraties
+            Time Entries
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -241,14 +246,14 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
-            Tijdregistraties
+            Time Entries
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8">
             <p className="text-muted-foreground mb-4">{error}</p>
             <Button onClick={fetchTimeEntries} variant="outline">
-              Opnieuw proberen
+              Try Again
             </Button>
           </div>
         </CardContent>
@@ -262,10 +267,10 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
-            Tijdregistraties
+            Time Entries
           </div>
           <div className="text-sm text-muted-foreground">
-            {filteredTimeEntries.length} van {timeEntries.length} registraties
+            {filteredTimeEntries.length} of {timeEntries.length} entries
             {limit && ` (max ${limit})`}
           </div>
         </CardTitle>
@@ -278,7 +283,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                 {formatTime(stats.totalHours)}
               </div>
               <div className="text-xs text-blue-600 dark:text-blue-400">
-                Totaal uren
+                Total Hours
               </div>
             </div>
             
@@ -287,7 +292,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                 {formatTime(stats.billableHours)}
               </div>
               <div className="text-xs text-green-600 dark:text-green-400">
-                Factureerbaar
+                Billable
               </div>
             </div>
             
@@ -296,7 +301,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                 {formatCurrency(stats.totalValue)}
               </div>
               <div className="text-xs text-purple-600 dark:text-purple-400">
-                Totale waarde
+                Total Value
               </div>
             </div>
             
@@ -305,7 +310,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                 {formatCurrency(stats.unbilledValue)}
               </div>
               <div className="text-xs text-orange-600 dark:text-orange-400">
-                Nog te factureren
+                To Invoice
               </div>
             </div>
           </div>
@@ -316,9 +321,9 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
         {filteredTimeEntries.length === 0 ? (
           <div className="text-center py-8">
             <Clock className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nog geen tijdregistraties</h3>
+            <h3 className="text-lg font-semibold mb-2">No time entries yet</h3>
             <p className="text-muted-foreground mb-4">
-              Start met het registreren van je gewerkte uren
+              Start tracking your hours
             </p>
           </div>
         ) : (
@@ -326,13 +331,13 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
             <Table className="overflow-visible">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Datum</TableHead>
-                  <TableHead>Klant</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Client</TableHead>
                   <TableHead>Project</TableHead>
-                  <TableHead>Beschrijving</TableHead>
-                  <TableHead className="text-right">Uren</TableHead>
-                  <TableHead className="text-right">Tarief</TableHead>
-                  <TableHead className="text-right">Waarde</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead className="text-right">Hours</TableHead>
+                  <TableHead className="text-right">Rate</TableHead>
+                  <TableHead className="text-right">Value</TableHead>
                   <TableHead className="text-center">Status</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
@@ -352,7 +357,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                         <Building2 className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <div className="font-medium">
-                            {entry.client?.company_name || entry.client?.name || 'Geen klant'}
+                            {entry.client?.company_name || entry.client?.name || 'No client'}
                           </div>
                           {entry.client?.company_name && entry.client?.name && (
                             <div className="text-xs text-muted-foreground">
@@ -447,11 +452,11 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                             if (entry.invoiced || entry.invoice_id) {
                               const statusInfo = {
                                 status: 'gefactureerd' as const,
-                                label: 'Gefactureerd',
+                                label: 'Invoiced',
                                 color: 'purple' as const,
-                                reason: entry.invoice_id 
-                                  ? `Gefactureerd op factuur ${entry.invoice_id}`
-                                  : 'Reeds gefactureerd'
+                                reason: entry.invoice_id
+                                  ? `Invoiced on invoice ${entry.invoice_id}`
+                                  : 'Already invoiced'
                               }
                               return (
                                 <TimeEntryStatusBadge 
@@ -464,9 +469,9 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                             } else if (!entry.billable) {
                               const statusInfo = {
                                 status: 'niet-factureerbaar' as const,
-                                label: 'Niet-factureerbaar',
+                                label: 'Non-billable',
                                 color: 'red' as const,
-                                reason: 'Markeerd als niet-factureerbaar'
+                                reason: 'Marked as non-billable'
                               }
                               return (
                                 <TimeEntryStatusBadge 
@@ -480,9 +485,9 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                               // Default to factureerbaar (green) when client data is missing
                               const statusInfo = {
                                 status: 'factureerbaar' as const,
-                                label: 'Factureerbaar',
+                                label: 'Billable',
                                 color: 'green' as const,
-                                reason: 'Klant data niet beschikbaar - standaard factureerbaar'
+                                reason: 'Client data not available - default billable'
                               }
                               return (
                                 <TimeEntryStatusBadge 
@@ -528,7 +533,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                             {isTimeEntryInvoiced(entry) ? (
                               <div className="px-3 py-2 text-sm text-gray-500 flex items-center">
                                 <Lock className="h-4 w-4 mr-2" />
-                                Gefactureerd - bewerken niet mogelijk
+                                Invoiced - editing not possible
                               </div>
                             ) : (
                               <>
@@ -540,7 +545,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                                   }}
                                 >
                                   <Edit2 className="h-4 w-4 mr-2" />
-                                  Bewerken
+                                  Edit
                                 </div>
                                 <div
                                   className="px-3 py-2 text-sm hover:bg-red-50 cursor-pointer flex items-center text-red-600"
@@ -550,7 +555,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
-                                  Verwijderen
+                                  Delete
                                 </div>
                               </>
                             )}

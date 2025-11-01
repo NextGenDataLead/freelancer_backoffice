@@ -28,6 +28,16 @@ interface GlassmorphicMetricCardProps {
     label2: string
     value2: string
   }
+  categoryBreakdown?: {
+    categories: Array<{
+      label: string
+      amount: number
+      percentage: number
+      color?: string
+      key?: string // for filtering
+    }>
+    onClick?: (categoryKey: string) => void
+  }
   gradient?: string
   className?: string
 }
@@ -44,6 +54,7 @@ export function GlassmorphicMetricCard({
   badge,
   trendComparison,
   splitMetrics,
+  categoryBreakdown,
   gradient,
   className = ''
 }: GlassmorphicMetricCardProps) {
@@ -145,6 +156,34 @@ export function GlassmorphicMetricCard({
             <span className="metric-card__split-label">{splitMetrics.label2}</span>
             <span className="metric-card__split-value">{splitMetrics.value2}</span>
           </div>
+        </div>
+      )}
+
+      {/* Category Breakdown */}
+      {categoryBreakdown && categoryBreakdown.categories.length > 0 && (
+        <div className="metric-card__category-breakdown">
+          {categoryBreakdown.categories.map((category, index) => (
+            <div
+              key={category.key || index}
+              className="metric-card__category-item"
+              onClick={() => category.key && categoryBreakdown.onClick?.(category.key)}
+              style={{ cursor: categoryBreakdown.onClick ? 'pointer' : 'default' }}
+            >
+              <span className="metric-card__category-label">{category.label}</span>
+              <div className="metric-card__category-bar">
+                <div
+                  className="metric-card__category-bar-fill"
+                  style={{
+                    width: `${category.percentage}%`,
+                    background: category.color || 'rgba(251, 146, 60, 0.7)'
+                  }}
+                />
+              </div>
+              <span className="metric-card__category-amount">
+                €{category.amount.toLocaleString('nl-NL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>

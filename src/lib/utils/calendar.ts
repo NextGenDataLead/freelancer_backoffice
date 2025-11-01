@@ -1,25 +1,30 @@
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday } from 'date-fns'
-import type { 
-  CalendarTimeEntry, 
-  CalendarDayData, 
-  CalendarMonthData, 
+import type {
+  CalendarTimeEntry,
+  CalendarDayData,
+  CalendarMonthData,
   ClientColorMap,
   CalendarColorKey
 } from '@/lib/types/calendar'
 import { CALENDAR_COLORS } from '@/lib/types/calendar'
+import { getCurrentDate } from '@/lib/current-date'
 
 /**
  * Format date to YYYY-MM-DD string for consistent date keys
  */
 export function formatDateKey(date: Date): string {
-  return format(date, 'yyyy-MM-dd')
+  const year = date.getFullYear().toString().padStart(4, '0')
+  const month = (date.getMonth() + 1).toString().padStart(2, '0')
+  const day = date.getDate().toString().padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 /**
  * Parse date key back to Date object
+ * Parse in local time to match how formatDateKey works
  */
 export function parseDateKey(dateKey: string): Date {
-  return new Date(dateKey + 'T00:00:00.000Z')
+  return new Date(dateKey + 'T00:00:00')
 }
 
 /**
@@ -57,11 +62,11 @@ export function getClientColor(clientId: string, colorMap: ClientColorMap): stri
  */
 export function transformTimeEntriesToDayData(entries: CalendarTimeEntry[]): Map<string, CalendarDayData> {
   const dayDataMap = new Map<string, CalendarDayData>()
-  
+
   // Get unique client IDs for color mapping
   const uniqueClientIds = [...new Set(entries.map(entry => entry.clientId))]
   const clientColors = generateClientColors(uniqueClientIds)
-  
+
   entries.forEach(entry => {
     const dateKey = entry.date
     const existingDay = dayDataMap.get(dateKey)
@@ -92,7 +97,7 @@ export function transformTimeEntriesToDayData(entries: CalendarTimeEntry[]): Map
       dayDataMap.set(dateKey, dayData)
     }
   })
-  
+
   return dayDataMap
 }
 
@@ -132,11 +137,11 @@ export function createCalendarMonthData(
  */
 export function getDayData(date: Date, monthData?: CalendarMonthData): CalendarDayData {
   const dateKey = formatDateKey(date)
-  
+
   if (monthData?.days.has(dateKey)) {
     return monthData.days.get(dateKey)!
   }
-  
+
   // Return empty day data
   return {
     date: dateKey,
@@ -198,15 +203,15 @@ export function getCalendarModifiers(monthData?: CalendarMonthData) {
   if (!monthData) {
     return {
       hasEntries: [],
-      today: new Date()
+      today: getCurrentDate()
     }
   }
-  
+
   const daysWithEntries = Array.from(monthData.days.keys()).map(dateKey => parseDateKey(dateKey))
-  
+
   return {
     hasEntries: daysWithEntries,
-    today: new Date()
+    today: getCurrentDate()
   }
 }
 

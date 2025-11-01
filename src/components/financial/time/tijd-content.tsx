@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TimeEntryForm } from '@/components/financial/time/time-entry-form'
@@ -259,7 +260,9 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
           if (response.ok) {
             const result = await response.json()
             console.log('Time entry created successfully:', result)
-            alert(`Tijdregistratie aangemaakt voor ${targetDate.toLocaleDateString('nl-NL')}!`)
+            toast.success('Time registered successfully!', {
+              description: `Time entry created for ${targetDate.toLocaleDateString('nl-NL')}`
+            })
             handleRefresh() // Refresh the time entries list and stats
             setCalendarRefreshTrigger(prev => prev + 1) // Refresh calendar
           } else {
@@ -268,7 +271,9 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
           }
         } catch (error) {
           console.error('Error creating time entry:', error)
-          alert(`Er ging iets mis: ${error instanceof Error ? error.message : 'Onbekende fout'}`)
+          toast.error('Failed to create time entry', {
+            description: error instanceof Error ? error.message : 'An error occurred'
+          })
         }
       }
 
@@ -403,7 +408,9 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
           const result = await response.json()
           console.log('✅ Time entry saved successfully:', result)
 
-          alert(`Tijd succesvol geregistreerd! ${hours} uur voor "${selectedClient}"`)
+          toast.success('Time registered successfully!', {
+            description: `${hours} hours for "${selectedClient}"`
+          })
 
           // Refresh immediately after successful save
           handleRefresh()
@@ -418,7 +425,9 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
         }
       } catch (error) {
         console.error('Error registering time:', error)
-        alert(`Er ging iets mis bij het registreren: ${error instanceof Error ? error.message : 'Onbekende fout'}`)
+        toast.error('Failed to register time', {
+          description: error instanceof Error ? error.message : 'An error occurred'
+        })
       }
     }
 
@@ -486,7 +495,7 @@ export function TijdContent({ showHeader = true }: TijdContentProps) {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Tijdregistratie</h1>
             <p className="text-muted-foreground mt-1">
-              Registreer gewerkte uren met ingebouwde timer en projectkoppeling
+              Track worked hours with built-in timer and project linking
             </p>
           </div>
         </div>

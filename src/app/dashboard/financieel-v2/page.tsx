@@ -118,8 +118,8 @@ export default function FinancieelV2Page() {
     profitTargets?.target_avg_subscription_fee && profitTargets.target_avg_subscription_fee > 0
   )
 
-  // Calculate MTD targets
-  const now = new Date()
+  // Calculate MTD targets (using development date if configured)
+  const now = getCurrentDate()
   const currentDay = now.getDate()
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   const monthProgress = currentDay / daysInMonth
@@ -140,7 +140,49 @@ export default function FinancieelV2Page() {
 
   const monthlyHoursTarget = profitTargets?.monthly_hours_target || 160
   const mtdRevenueTarget = monthlyRevenueTarget * monthProgress
-  const mtdHoursTarget = Math.round(monthlyHoursTarget * monthProgress)
+
+  // Calculate MTD hours target based on working days completed in current month
+  // (NOT rolling 30-day window - that's used in Business Health Score)
+  const workingDays = profitTargets?.target_working_days_per_week || [1, 2, 3, 4, 5]
+
+  // Calculate yesterday (we measure MTD progress up to yesterday, not including today)
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  yesterday.setHours(23, 59, 59, 999)
+
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  startOfMonth.setHours(0, 0, 0, 0)
+
+  // Count working days completed in current month (up to yesterday)
+  let workingDaysCompleted = 0
+  let tempDate = new Date(startOfMonth)
+  while (tempDate <= yesterday) {
+    const dayOfWeek = tempDate.getDay()
+    const isoWeekday = dayOfWeek === 0 ? 7 : dayOfWeek
+    if (workingDays.includes(isoWeekday)) {
+      workingDaysCompleted++
+    }
+    tempDate.setDate(tempDate.getDate() + 1)
+  }
+
+  // Calculate total working days in the full month
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+  endOfMonth.setHours(23, 59, 59, 999)
+
+  let totalWorkingDaysInMonth = 0
+  tempDate = new Date(startOfMonth)
+  while (tempDate <= endOfMonth) {
+    const dayOfWeek = tempDate.getDay()
+    const isoWeekday = dayOfWeek === 0 ? 7 : dayOfWeek
+    if (workingDays.includes(isoWeekday)) {
+      totalWorkingDaysInMonth++
+    }
+    tempDate.setDate(tempDate.getDate() + 1)
+  }
+
+  // Calculate MTD hours target: (monthly target / total working days) × working days completed
+  const dailyHoursTarget = totalWorkingDaysInMonth > 0 ? monthlyHoursTarget / totalWorkingDaysInMonth : 0
+  const mtdHoursTarget = Math.round(dailyHoursTarget * workingDaysCompleted)
 
   // Fetch all dashboard data
   useEffect(() => {
@@ -201,10 +243,10 @@ export default function FinancieelV2Page() {
       mtdRevenueTarget,
       monthlyHoursTarget,
       mtdHoursTarget,
-      expectedWorkingDaysUpToYesterday: 0,
-      totalExpectedWorkingDays: 0
+      expectedWorkingDaysUpToYesterday: workingDaysCompleted,
+      totalExpectedWorkingDays: totalWorkingDaysInMonth
     }
-  }, [currentDay, daysInMonth, monthProgress, monthlyRevenueTarget, mtdRevenueTarget, monthlyHoursTarget, mtdHoursTarget])
+  }, [currentDay, daysInMonth, monthProgress, monthlyRevenueTarget, mtdRevenueTarget, monthlyHoursTarget, mtdHoursTarget, workingDaysCompleted, totalWorkingDaysInMonth])
 
   const recurringExpensePenaltySummary = useMemo(() => {
     if (!recurringExpensesDue || recurringExpensesDue.length === 0) {
@@ -514,12 +556,15 @@ export default function FinancieelV2Page() {
   const revenueDifference = totalRevenueMTD - previousRevenue
   const revenueGrowth = previousRevenue > 0 ? (revenueDifference / previousRevenue) * 100 : 0
 
-  const hoursProgress = mtdHoursTarget > 0 ? (currentHoursMTD / mtdHoursTarget) * 100 : 0
-
   // Revenue progress: actual MTD as % of full monthly budget
   const revenueProgress = monthlyRevenueTarget > 0 ? (totalRevenueMTD / monthlyRevenueTarget) * 100 : 0
   // Revenue target line: where MTD target sits within monthly budget
   const revenueTargetLine = monthlyRevenueTarget > 0 ? (mtdRevenueTarget / monthlyRevenueTarget) * 100 : 100
+
+  // Hours progress: actual MTD as % of full monthly budget (same pattern as revenue)
+  const hoursProgress = monthlyHoursTarget > 0 ? (currentHoursMTD / monthlyHoursTarget) * 100 : 0
+  // Hours target line: where MTD target sits within monthly budget
+  const hoursTargetLine = monthlyHoursTarget > 0 ? (mtdHoursTarget / monthlyHoursTarget) * 100 : 100
 
   const targetRate = profitTargets?.target_hourly_rate || 75
   const rateProgress = targetRate > 0 ? (avgRate / targetRate) * 100 : 0
@@ -563,10 +608,10 @@ export default function FinancieelV2Page() {
               iconColor="rgba(59, 130, 246, 0.7)"
               title="Hours MTD"
               value={`${Math.round(currentHoursMTD)}h`}
-              subtitle={`Target: ${mtdHoursTarget}h`}
+              subtitle={`Target: ${mtdHoursTarget}h MTD (${monthlyHoursTarget}h monthly)`}
               progress={hoursProgress}
               progressColor="rgba(59, 130, 246, 1)"
-              targetLine={100}
+              targetLine={hoursTargetLine}
               badge={{
                 label: 'MTD',
                 color: 'rgba(59, 130, 246, 0.25)',
@@ -738,7 +783,7 @@ export default function FinancieelV2Page() {
         aria-labelledby="client-health-title"
       >
         <ClientHealthDashboard
-          onViewAllClients={() => router.push('/dashboard/financieel?tab=klanten')}
+          onViewAllClients={() => router.push('/dashboard/financieel-v2/klanten')}
         />
       </article>
 

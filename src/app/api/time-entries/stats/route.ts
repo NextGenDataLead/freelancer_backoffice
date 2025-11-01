@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
-import { 
+import {
   supabaseAdmin,
   getCurrentUserProfile,
   ApiErrors,
   createApiResponse
 } from '@/lib/supabase/financial-client'
 import { getCurrentDate } from '@/lib/current-date'
+import { getTimeEntryStatus } from '@/lib/utils/time-entry-status'
+import type { TimeEntry, Client } from '@/lib/types/financial'
 
 /**
  * GET /api/time-entries/stats
@@ -46,7 +48,7 @@ export async function GET() {
     // Query this week's hours
     const { data: thisWeekEntries, error: thisWeekError } = await supabaseAdmin
       .from('time_entries')
-      .select('hours, hourly_rate, effective_hourly_rate')
+      .select('hours, hourly_rate, effective_hourly_rate, billable')
       .eq('tenant_id', profile.tenant_id)
       .gte('entry_date', currentWeekStart.toISOString().split('T')[0])
       .lte('entry_date', currentWeekEnd.toISOString().split('T')[0])
@@ -56,7 +58,7 @@ export async function GET() {
     // Query previous week's hours for comparison
     const { data: previousWeekEntries, error: previousWeekError } = await supabaseAdmin
       .from('time_entries')
-      .select('hours')
+      .select('hours, billable')
       .eq('tenant_id', profile.tenant_id)
       .gte('entry_date', previousWeekStart.toISOString().split('T')[0])
       .lte('entry_date', previousWeekEnd.toISOString().split('T')[0])
@@ -89,17 +91,35 @@ export async function GET() {
 
     if (previousMonthMTDError) throw previousMonthMTDError
 
-    // Query unbilled hours (billable but not invoiced) - filtered to current month
+    // Query ALL unbilled billable hours (not filtered by month - for "Factureerbaar" status)
+    // These are entries that are billable=true, invoiced=false, ready to invoice based on client frequency
     const { data: unbilledEntries, error: unbilledError } = await supabaseAdmin
       .from('time_entries')
-      .select('hours, hourly_rate, effective_hourly_rate')
+      .select(`
+        id,
+        hours,
+        hourly_rate,
+        effective_hourly_rate,
+        entry_date,
+        billable,
+        invoiced,
+        invoice_id,
+        client_id,
+        clients!inner(
+          id,
+          invoicing_frequency
+        )
+      `)
       .eq('tenant_id', profile.tenant_id)
       .eq('billable', true)
       .eq('invoiced', false)
-      .gte('entry_date', currentMonthStart.toISOString().split('T')[0])
-      .lte('entry_date', currentMonthEnd.toISOString().split('T')[0])
 
-    if (unbilledError) throw unbilledError
+    if (unbilledError) {
+      console.error('❌ Error fetching unbilled entries:', unbilledError)
+      throw unbilledError
+    }
+
+    console.log('🔍 Unbilled entries query returned:', unbilledEntries?.length || 0, 'entries')
 
     // Query rolling 30-day periods for health score metrics
     // Current 30 days (last 30 days)
@@ -150,25 +170,33 @@ export async function GET() {
 
     if (previous30UnbilledError) throw previous30UnbilledError
 
-    // Query active projects and clients
+    // Query active projects and clients (last 30 days from development date)
+    const projectsLast30DaysStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
     const { data: projectStats, error: projectError } = await supabaseAdmin
       .from('time_entries')
       .select(`
-        project_name, 
-        client_id, 
+        project_name,
+        client_id,
         project_id,
-        clients(name),
+        clients(company_name),
         project:projects(name)
       `)
       .eq('tenant_id', profile.tenant_id)
-      .gte('entry_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]) // Last 30 days
+      .gte('entry_date', projectsLast30DaysStart.toISOString().split('T')[0]) // Last 30 days from development date
 
     if (projectError) throw projectError
 
+    console.log('📊 Active projects query:', {
+      dateFrom: projectsLast30DaysStart.toISOString().split('T')[0],
+      entriesFound: projectStats?.length || 0
+    })
+
     // Calculate statistics
     const thisWeekHours = thisWeekEntries?.reduce((sum, entry) => sum + entry.hours, 0) || 0
+    const thisWeekBillableHours = thisWeekEntries?.filter(e => e.billable !== false).reduce((sum, entry) => sum + entry.hours, 0) || 0
     const previousWeekHours = previousWeekEntries?.reduce((sum, entry) => sum + entry.hours, 0) || 0
-    const weekDifference = thisWeekHours - previousWeekHours
+    const previousWeekBillableHours = previousWeekEntries?.filter(e => e.billable !== false).reduce((sum, entry) => sum + entry.hours, 0) || 0
+    const weekDifference = thisWeekBillableHours - previousWeekBillableHours
 
     const thisMonthHours = thisMonthEntries?.reduce((sum, entry) => sum + entry.hours, 0) || 0
     const thisMonthRevenue = thisMonthEntries?.reduce((sum, entry) => {
@@ -176,6 +204,40 @@ export async function GET() {
       return sum + (entry.hours * effectiveRate)
     }, 0) || 0
 
+    // Filter for "Factureerbaar" status - entries ready to invoice based on frequency rules
+    const factureerbaarEntries = unbilledEntries?.filter(entry => {
+      // Build client object from nested data
+      const client = (entry as any).clients as Client
+      if (!client) {
+        console.log('⚠️ Entry missing client:', entry.id)
+        return false
+      }
+
+      // Check if entry is "Factureerbaar" (ready to invoice)
+      const statusInfo = getTimeEntryStatus(entry as unknown as TimeEntry, client, now)
+      console.log('📊 Entry status:', {
+        entryId: entry.id,
+        status: statusInfo.status,
+        color: statusInfo.color,
+        reason: statusInfo.reason,
+        included: statusInfo.status === 'factureerbaar' && statusInfo.color === 'green'
+      })
+      return statusInfo.status === 'factureerbaar' && statusInfo.color === 'green'
+    }) || []
+
+    console.log('✅ Factureerbaar totals:', {
+      totalUnbilled: unbilledEntries?.length || 0,
+      factureerbaarCount: factureerbaarEntries.length,
+      factureerbaarHours: factureerbaarEntries.reduce((sum, e) => sum + e.hours, 0)
+    })
+
+    const factureerbaarHours = factureerbaarEntries.reduce((sum, entry) => sum + entry.hours, 0)
+    const factureerbaarRevenue = factureerbaarEntries.reduce((sum, entry) => {
+      const effectiveRate = entry.effective_hourly_rate || entry.hourly_rate || 0
+      return sum + (entry.hours * effectiveRate)
+    }, 0)
+
+    // Keep legacy unbilled metrics (all billable not invoiced, regardless of frequency)
     const unbilledHours = unbilledEntries?.reduce((sum, entry) => sum + entry.hours, 0) || 0
     const unbilledRevenue = unbilledEntries?.reduce((sum, entry) => {
       const effectiveRate = entry.effective_hourly_rate || entry.hourly_rate || 0
@@ -287,7 +349,8 @@ export async function GET() {
 
     const stats = {
       thisWeek: {
-        hours: Math.round(thisWeekHours * 10) / 10, // Round to 1 decimal
+        hours: Math.round(thisWeekHours * 10) / 10, // All hours (for backwards compatibility)
+        billableHours: Math.round(thisWeekBillableHours * 10) / 10, // Billable hours only
         difference: Math.round(weekDifference * 10) / 10,
         trend: weekDifference >= 0 ? 'positive' : 'negative'
       },
@@ -307,6 +370,10 @@ export async function GET() {
       unbilled: {
         hours: Math.round(unbilledHours * 10) / 10,
         revenue: Math.round(unbilledRevenue * 100) / 100
+      },
+      factureerbaar: {
+        hours: Math.round(factureerbaarHours * 10) / 10,
+        revenue: Math.round(factureerbaarRevenue * 100) / 100
       },
       projects: {
         count: uniqueProjects.size,

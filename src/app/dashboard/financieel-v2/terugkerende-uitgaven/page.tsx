@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { ExpenseForm } from '@/components/financial/expenses/expense-form'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { RecurringExpensesList } from '@/components/financial/recurring-expenses/recurring-expenses-list'
 import { PreviewModal } from '@/components/financial/recurring-expenses/preview-modal'
 import { formatEuropeanCurrency } from '@/lib/utils/formatEuropeanNumber'
-import { Plus, Repeat, TrendingUp, Calendar, Euro } from 'lucide-react'
+import { Plus, Repeat, TrendingUp, Calendar, Euro, Receipt } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { GlassmorphicMetricCard } from '@/components/dashboard/glassmorphic-metric-card'
 
@@ -25,6 +25,7 @@ interface RecurringTemplate {
 
 export default function TerugkerendeUitgavenPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
   const [previewingTemplate, setPreviewingTemplate] = useState<any>(null)
@@ -118,22 +119,59 @@ export default function TerugkerendeUitgavenPage() {
 
   return (
     <section className="main-grid" aria-label="Recurring expenses content">
-      {/* Monthly Stats Cards */}
-      <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1' }} aria-labelledby="recurring-title">
-        <div className="card-header">
-          <div>
-            <h2 className="card-header__title" id="recurring-title">
-              Recurring Expenses
-            </h2>
-            <p className="card-header__subtitle">
-              Beheer abonnementen, huur en andere vaste kosten voor nauwkeurige cashflow voorspellingen
-            </p>
+      {/* Tab Navigation */}
+      <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1', padding: '0.75rem 1.5rem' }}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={cn(
+                'relative px-4 py-2.5 text-sm font-medium transition-all duration-300 rounded-xl flex items-center gap-2',
+                pathname === '/dashboard/financieel-v2/uitgaven'
+                  ? 'text-slate-100'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+              onClick={() => router.push('/dashboard/financieel-v2/uitgaven')}
+            >
+              {pathname === '/dashboard/financieel-v2/uitgaven' && (
+                <span
+                  className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-sm"
+                  style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+                />
+              )}
+              <Receipt className="h-4 w-4 relative" />
+              <span className="relative">All Expenses</span>
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'relative px-4 py-2.5 text-sm font-medium transition-all duration-300 rounded-xl flex items-center gap-2',
+                pathname === '/dashboard/financieel-v2/terugkerende-uitgaven'
+                  ? 'text-slate-100'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+              onClick={() => router.push('/dashboard/financieel-v2/terugkerende-uitgaven')}
+            >
+              {pathname === '/dashboard/financieel-v2/terugkerende-uitgaven' && (
+                <span
+                  className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-sm"
+                  style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+                />
+              )}
+              <Repeat className="h-4 w-4 relative" />
+              <span className="relative">Recurring</span>
+            </button>
           </div>
+
           <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
             <DialogTrigger asChild>
-              <button type="button" className="action-chip">
+              <button
+                type="button"
+                className="action-chip"
+                style={{ background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)' }}
+              >
                 <Plus className="h-4 w-4 mr-2" />
-                Nieuwe Uitgave
+                New Template
               </button>
             </DialogTrigger>
             <DialogContent
@@ -143,7 +181,7 @@ export default function TerugkerendeUitgavenPage() {
               )}
             >
               <DialogHeader>
-                <DialogTitle>Nieuwe Terugkerende Uitgave</DialogTitle>
+                <DialogTitle>New Recurring Expense</DialogTitle>
               </DialogHeader>
               <ExpenseForm
                 onSuccess={handleExpenseCreated}
@@ -153,6 +191,20 @@ export default function TerugkerendeUitgavenPage() {
               />
             </DialogContent>
           </Dialog>
+        </div>
+      </article>
+
+      {/* Monthly Stats Cards */}
+      <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1' }} aria-labelledby="recurring-title">
+        <div className="card-header">
+          <div>
+            <h2 className="card-header__title" id="recurring-title">
+              Recurring Expenses
+            </h2>
+            <p className="card-header__subtitle">
+              Manage subscriptions, rent and other fixed costs for accurate cashflow forecasting
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem' }}>

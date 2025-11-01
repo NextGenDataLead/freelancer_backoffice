@@ -38,6 +38,7 @@ import { CreateInvoiceSchema } from '@/lib/validations/financial'
 import type { InvoiceWithClient, Client, InvoiceCalculation } from '@/lib/types/financial'
 import { BusinessProfileWarning } from '@/components/business/business-profile-warning'
 import { z } from 'zod'
+import { toast } from 'sonner'
 
 interface InvoiceFormProps {
   invoice?: InvoiceWithClient
@@ -163,7 +164,9 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
 
   const onSubmit = async (data: z.infer<typeof CreateInvoiceSchema>) => {
     if (!vatCalculation) {
-      alert('VAT berekening is nog niet klaar. Probeer opnieuw.')
+      toast.error('VAT calculation not ready', {
+        description: 'Please try again in a moment'
+      })
       return
     }
 
@@ -199,6 +202,7 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
       }
 
       const result = await response.json()
+      toast.success(invoice ? 'Invoice updated successfully' : 'Invoice created successfully')
       onSuccess?.(result.data)
 
       // Reset form if creating new invoice
@@ -209,7 +213,9 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
       }
     } catch (error) {
       console.error('Invoice form error:', error)
-      alert(error instanceof Error ? error.message : 'Er is een fout opgetreden')
+      toast.error('Failed to save invoice', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      })
     } finally {
       setIsSubmitting(false)
     }

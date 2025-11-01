@@ -106,7 +106,16 @@ export async function POST(
     }
 
     // Update invoice paid amount and status
-    const newStatus = newPaidAmount >= totalAmount ? 'paid' : 'sent'
+    // Determine new status based on payment amount
+    let newStatus: string
+    if (newPaidAmount >= totalAmount) {
+      newStatus = 'paid'
+    } else if (newPaidAmount > 0) {
+      newStatus = 'partial'
+    } else {
+      // Keep existing status if no payment made (shouldn't happen due to validation)
+      newStatus = invoice.status
+    }
     
     const { error: updateError } = await supabaseAdmin
       .from('invoices')

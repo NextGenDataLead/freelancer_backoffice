@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -18,12 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { 
-  FileText, 
-  Download, 
-  Send, 
-  Check, 
-  Edit, 
+import {
+  FileText,
+  Download,
+  Send,
+  Check,
+  Edit,
   Printer,
   Eye,
   X,
@@ -31,10 +32,16 @@ import {
   User,
   Euro,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Bell,
+  Mail,
+  CheckCircle2,
+  XCircle,
+  Loader2
 } from 'lucide-react'
-import type { InvoiceWithClient } from '@/lib/types/financial'
+import type { InvoiceWithClient, PaymentReminder } from '@/lib/types/financial'
 import { PaymentRecordingModal } from './payment-recording-modal'
+import { PaymentReminderModal } from './payment-reminder-modal'
 
 interface InvoiceDetailModalProps {
   invoice: InvoiceWithClient | null
@@ -44,15 +51,46 @@ interface InvoiceDetailModalProps {
   onStatusUpdate?: (invoice: InvoiceWithClient, newStatus: string) => void
 }
 
-export function InvoiceDetailModal({ 
-  invoice, 
-  isOpen, 
-  onClose, 
+export function InvoiceDetailModal({
+  invoice,
+  isOpen,
+  onClose,
   onEdit,
-  onStatusUpdate 
+  onStatusUpdate
 }: InvoiceDetailModalProps) {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [showReminderModal, setShowReminderModal] = useState(false)
+  const [reminders, setReminders] = useState<PaymentReminder[]>([])
+  const [isLoadingReminders, setIsLoadingReminders] = useState(false)
+
+  // Fetch reminders when modal opens
+  useEffect(() => {
+    if (isOpen && invoice) {
+      fetchReminders()
+    }
+  }, [isOpen, invoice?.id])
+
+  const fetchReminders = async () => {
+    if (!invoice) return
+
+    try {
+      setIsLoadingReminders(true)
+      const response = await fetch(`/api/invoices/${invoice.id}/reminders`)
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch reminders')
+      }
+
+      const data = await response.json()
+      setReminders(data.data?.reminders || [])
+    } catch (error) {
+      console.error('Error fetching reminders:', error)
+      // Don't show error toast, just silently fail for reminders
+    } finally {
+      setIsLoadingReminders(false)
+    }
+  }
 
   if (!invoice) return null
 
@@ -174,7 +212,9 @@ export function InvoiceDetailModal({
       document.body.removeChild(a)
     } catch (error) {
       console.error('Error downloading PDF:', error)
-      alert('Er is een fout opgetreden bij het downloaden van de PDF')
+      toast.error('Failed to download PDF', {
+        description: 'An error occurred while downloading the PDF'
+      })
     }
   }
 
@@ -195,6 +235,54 @@ export function InvoiceDetailModal({
       // The payment API already updated the status, so we need to refresh
       onClose()
       window.location.reload()
+    }
+  }
+
+  const handleReminderSuccess = () => {
+    setShowReminderModal(false)
+    // Refresh reminders list
+    fetchReminders()
+    // Optionally refresh the invoice to update status
+    window.location.reload()
+  }
+
+  const getDeliveryStatusBadge = (status: string) => {
+    switch (status) {
+      case 'sent':
+        return { icon: <Mail className="h-3 w-3" />, color: 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30' }
+      case 'delivered':
+        return { icon: <CheckCircle2 className="h-3 w-3" />, color: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30' }
+      case 'bounced':
+      case 'failed':
+        return { icon: <XCircle className="h-3 w-3" />, color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30' }
+      default:
+        return { icon: <Mail className="h-3 w-3" />, color: 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900/30' }
+    }
+  }
+
+  const getReminderLevelColor = (level: number) => {
+    switch (level) {
+      case 1:
+        return 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30'
+      case 2:
+        return 'text-orange-600 bg-orange-100 dark:text-orange-400 dark:bg-orange-900/30'
+      case 3:
+        return 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30'
+      default:
+        return 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-900/30'
+    }
+  }
+
+  const getReminderLevelLabel = (level: number) => {
+    switch (level) {
+      case 1:
+        return 'Gentle Reminder'
+      case 2:
+        return 'Follow-up'
+      case 3:
+        return 'Final Notice'
+      default:
+        return `Level ${level}`
     }
   }
 
@@ -401,6 +489,97 @@ export function InvoiceDetailModal({
             </Card>
           )}
 
+          {/* Reminder History */}
+          {(invoice.status === 'sent' || invoice.status === 'overdue') && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-orange-500" />
+                    Betalingsherinneringen
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowReminderModal(true)}
+                    className="text-orange-600 hover:text-orange-700 border-orange-200 hover:border-orange-300"
+                  >
+                    <Bell className="h-4 w-4 mr-2" />
+                    Herinnering versturen
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoadingReminders ? (
+                  <div className="flex items-center justify-center py-8 text-muted-foreground">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                    Herinneringen laden...
+                  </div>
+                ) : !Array.isArray(reminders) || reminders.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Bell className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>Nog geen herinneringen verstuurd</p>
+                    <p className="text-sm mt-1">
+                      Klik op de knop hierboven om een betalingsherinnering te versturen
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {Array.isArray(reminders) && reminders.map((reminder, index) => {
+                      const statusBadge = getDeliveryStatusBadge(reminder.delivery_status)
+                      const levelColor = getReminderLevelColor(reminder.reminder_level)
+
+                      return (
+                        <div
+                          key={reminder.id}
+                          className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-slate-50 dark:bg-slate-900/30"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Badge className={`${levelColor} px-2 py-1 text-xs font-medium`}>
+                                Level {reminder.reminder_level}
+                              </Badge>
+                              <Badge className={`${statusBadge.color} px-2 py-1 text-xs font-medium flex items-center gap-1`}>
+                                {statusBadge.icon}
+                                {reminder.delivery_status}
+                              </Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {formatDate(reminder.sent_at)}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Onderwerp:</p>
+                              <p className="text-sm font-medium">{reminder.email_subject}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground mb-1">Verzonden naar:</p>
+                              <p className="text-sm">{reminder.email_sent_to}</p>
+                            </div>
+                            {reminder.opened_at && (
+                              <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Geopend op {formatDate(reminder.opened_at)}
+                              </div>
+                            )}
+                            {reminder.notes && (
+                              <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                <p className="text-xs text-muted-foreground mb-1">Notitie:</p>
+                                <p className="text-sm">{reminder.notes}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Action Buttons */}
           <div className="flex justify-between pt-4 border-t">
             <div className="flex gap-2">
@@ -466,15 +645,6 @@ export function InvoiceDetailModal({
                 </>
               )}
 
-              {(invoice.status === 'sent' || invoice.status === 'overdue') && (
-                <Button
-                  variant="outline"
-                  onClick={handleSendEmail}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Verstuur herinnering
-                </Button>
-              )}
             </div>
 
             <Button variant="outline" onClick={onClose}>
@@ -490,6 +660,14 @@ export function InvoiceDetailModal({
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         onSuccess={handlePaymentSuccess}
+      />
+
+      {/* Payment Reminder Modal */}
+      <PaymentReminderModal
+        invoice={invoice}
+        isOpen={showReminderModal}
+        onClose={() => setShowReminderModal(false)}
+        onSuccess={handleReminderSuccess}
       />
     </Dialog>
   )

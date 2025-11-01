@@ -55,7 +55,7 @@ export async function GET(request: Request) {
     // 1. Get all clients with their invoicing frequencies
     const { data: clients, error: clientsError } = await supabaseAdmin
       .from('clients')
-      .select('id, name, invoicing_frequency, default_payment_terms')
+      .select('id, company_name, invoicing_frequency, default_payment_terms')
       .eq('tenant_id', profile.tenant_id)
 
     if (clientsError) {

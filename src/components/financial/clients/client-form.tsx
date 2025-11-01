@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -24,7 +25,7 @@ import {
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Building2, User, Globe, Phone, Mail, MapPin, Calendar, Clock, Euro } from 'lucide-react'
+import { Loader2, Building2, User, Globe, Phone, Mail, MapPin, Calendar, Clock, Euro, UserCircle, Shield } from 'lucide-react'
 import { CreateClientSchema, UpdateClientSchema } from '@/lib/validations/financial'
 import type { Client } from '@/lib/types/financial'
 import { z } from 'zod'
@@ -68,27 +69,45 @@ const EU_COUNTRIES = [
 
 export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [sameAsPrimary, setSameAsPrimary] = useState(false)
   const [vatValidation, setVatValidation] = useState<{
     isValidating: boolean
     isValid: boolean | null
     message: string
   }>({ isValidating: false, isValid: null, message: '' })
 
+  // Extract contacts from client if editing
+  const clientData = client as any
+  const primaryContact = clientData?.contacts?.find((c: any) => c.contact_type === 'primary')
+  const adminContact = clientData?.contacts?.find((c: any) => c.contact_type === 'administration')
+
   const schema = client ? UpdateClientSchema : CreateClientSchema
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
       ...(client ? { id: client.id } : {}), // Include id for updates
-      name: client?.name || '',
       company_name: client?.company_name || '',
       email: client?.email || '',
       phone: client?.phone || '',
+      // Contact fields
+      primaryContact: {
+        first_name: primaryContact?.first_name || '',
+        last_name: primaryContact?.last_name || '',
+        email: primaryContact?.email || client?.email || '',
+        phone: primaryContact?.phone || client?.phone || '',
+      },
+      administrationContact: {
+        first_name: adminContact?.first_name || '',
+        last_name: adminContact?.last_name || '',
+        email: adminContact?.email || client?.email || '',
+        phone: adminContact?.phone || client?.phone || '',
+      },
       address: client?.address || '',
       postal_code: client?.postal_code || '',
       city: client?.city || '',
       country_code: client?.country_code || 'NL',
       vat_number: client?.vat_number || '',
-      is_business: client?.is_business || false,
+      is_business: client?.is_business !== undefined ? client.is_business : true,
       is_supplier: client?.is_supplier || false,
       default_payment_terms: client?.default_payment_terms || 30,
       notes: client?.notes || '',
@@ -159,6 +178,14 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
     }
   }, [watchedVatNumber, watchedCountry, watchedIsBusiness])
 
+  // Handle "Same as Primary" checkbox - copy primary contact to administration contact
+  React.useEffect(() => {
+    if (sameAsPrimary) {
+      const primaryContactData = form.getValues('primaryContact')
+      form.setValue('administrationContact', primaryContactData)
+    }
+  }, [sameAsPrimary, form])
+
   const onSubmit = async (data: any) => {
     console.log('Form submitted with data:', data)
     console.log('Client exists:', !!client)
@@ -194,8 +221,9 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
       }
     } catch (error) {
       console.error('Client form error:', error)
-      // TODO: Show toast notification
-      alert(error instanceof Error ? error.message : 'Er is een fout opgetreden')
+      toast.error('Failed to save client', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -242,61 +270,76 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
               )}
             />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Name Fields */}
+            {/* Company Name for Business Clients */}
+            {watchedIsBusiness && (
               <FormField
                 control={form.control}
-                name="name"
+                name="company_name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      {watchedIsBusiness ? 'Contactpersoon' : 'Naam'}
-                    </FormLabel>
+                    <FormLabel>Bedrijfsnaam</FormLabel>
                     <FormControl>
-                      <Input 
-                        placeholder={watchedIsBusiness ? 'Jan de Vries' : 'Jan de Vries'}
-                        {...field} 
-                      />
+                      <Input placeholder="Acme BV" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+            )}
 
-              {watchedIsBusiness && (
+            {/* Primary Contact Section */}
+            <div className="space-y-4 border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/50">
+              <div>
+                <h3 className="text-base font-semibold flex items-center gap-2">
+                  <UserCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  Primair contactpersoon
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Belangrijkste contactpersoon voor dagelijkse communicatie
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="company_name"
+                  name="primaryContact.first_name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Bedrijfsnaam</FormLabel>
+                      <FormLabel>Voornaam *</FormLabel>
                       <FormControl>
-                        <Input placeholder="Acme BV" {...field} />
+                        <Input placeholder="Jan" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              )}
-            </div>
 
-            {/* Contact Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="primaryContact.last_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Achternaam *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="de Vries" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <FormField
                 control={form.control}
-                name="email"
+                name="primaryContact.email"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-2">
                       <Mail className="h-4 w-4" />
-                      E-mailadres
+                      E-mailadres *
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        type="email" 
-                        placeholder="jan@example.com" 
-                        {...field} 
-                      />
+                      <Input type="email" placeholder="jan@example.com" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -305,7 +348,7 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
 
               <FormField
                 control={form.control}
-                name="phone"
+                name="primaryContact.phone"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel className="flex items-center gap-2">
@@ -315,6 +358,121 @@ export function ClientForm({ client, onSuccess, onCancel }: ClientFormProps) {
                     <FormControl>
                       <Input placeholder="+31 6 12345678" {...field} />
                     </FormControl>
+                    <FormDescription>Optioneel</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Administration Contact Section */}
+            <div className="space-y-4 border rounded-lg p-4 bg-slate-50 dark:bg-slate-900/50">
+              <div>
+                <h3 className="text-base font-semibold flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  Administratie contactpersoon
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Contactpersoon voor facturatie en betalingsherinneringen
+                </p>
+              </div>
+
+              {/* Same as Primary Checkbox */}
+              <div className="flex items-center space-x-2 rounded-lg border border-dashed p-3 bg-white dark:bg-slate-950">
+                <Checkbox
+                  id="sameAsPrimary"
+                  checked={sameAsPrimary}
+                  onCheckedChange={(checked) => setSameAsPrimary(checked as boolean)}
+                />
+                <label
+                  htmlFor="sameAsPrimary"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Zelfde als primair contactpersoon
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="administrationContact.first_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Voornaam *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Marie"
+                          {...field}
+                          disabled={sameAsPrimary}
+                          className={sameAsPrimary ? 'bg-slate-100 dark:bg-slate-800' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="administrationContact.last_name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Achternaam *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="van Dijk"
+                          {...field}
+                          disabled={sameAsPrimary}
+                          className={sameAsPrimary ? 'bg-slate-100 dark:bg-slate-800' : ''}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="administrationContact.email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Mail className="h-4 w-4" />
+                      E-mailadres *
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="admin@example.com"
+                        {...field}
+                        disabled={sameAsPrimary}
+                        className={sameAsPrimary ? 'bg-slate-100 dark:bg-slate-800' : ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="administrationContact.phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Phone className="h-4 w-4" />
+                      Telefoonnummer
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="+31 20 1234567"
+                        {...field}
+                        disabled={sameAsPrimary}
+                        className={sameAsPrimary ? 'bg-slate-100 dark:bg-slate-800' : ''}
+                      />
+                    </FormControl>
+                    <FormDescription>Optioneel</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

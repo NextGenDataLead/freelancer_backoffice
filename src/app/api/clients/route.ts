@@ -48,16 +48,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'User profile not found' }, { status: 404 })
     }
 
-    // Build query
+    // Build query - include contacts
     let query = supabaseAdmin
       .from('clients')
-      .select('*', { count: 'exact' })
+      .select('*, contacts:client_contacts(*)', { count: 'exact' })
       .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false })
 
     // Apply filters
     if (validatedQuery.search) {
-      query = query.or(`name.ilike.%${validatedQuery.search}%,company_name.ilike.%${validatedQuery.search}%,email.ilike.%${validatedQuery.search}%`)
+      query = query.or(`company_name.ilike.%${validatedQuery.search}%,email.ilike.%${validatedQuery.search}%`)
     }
 
     if (validatedQuery.is_business !== undefined) {
@@ -160,11 +160,15 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
-    // Create client
+    // Extract contacts from validated data
+    const { primaryContact, administrationContact, ...clientData } = validatedData
+
+    // Create client and contacts in a transaction
+    // First create the client
     const { data: newClient, error: createError } = await supabaseAdmin
       .from('clients')
       .insert({
-        ...validatedData,
+        ...clientData,
         tenant_id: profile.tenant_id,
         created_by: profile.id
       })
@@ -176,8 +180,56 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to create client' }, { status: 500 })
     }
 
+    // Create primary contact
+    const { error: primaryError } = await supabaseAdmin
+      .from('client_contacts')
+      .insert({
+        tenant_id: profile.tenant_id,
+        client_id: newClient.id,
+        contact_type: 'primary',
+        first_name: primaryContact.first_name,
+        last_name: primaryContact.last_name,
+        email: primaryContact.email,
+        phone: primaryContact.phone
+      })
+
+    if (primaryError) {
+      // Rollback: delete the client we just created
+      await supabaseAdmin.from('clients').delete().eq('id', newClient.id)
+      console.error('Error creating primary contact:', primaryError)
+      return NextResponse.json({ error: 'Failed to create primary contact' }, { status: 500 })
+    }
+
+    // Create administration contact
+    const { error: adminError } = await supabaseAdmin
+      .from('client_contacts')
+      .insert({
+        tenant_id: profile.tenant_id,
+        client_id: newClient.id,
+        contact_type: 'administration',
+        first_name: administrationContact.first_name,
+        last_name: administrationContact.last_name,
+        email: administrationContact.email,
+        phone: administrationContact.phone
+      })
+
+    if (adminError) {
+      // Rollback: delete the client and primary contact
+      await supabaseAdmin.from('client_contacts').delete().eq('client_id', newClient.id)
+      await supabaseAdmin.from('clients').delete().eq('id', newClient.id)
+      console.error('Error creating administration contact:', adminError)
+      return NextResponse.json({ error: 'Failed to create administration contact' }, { status: 500 })
+    }
+
+    // Fetch the complete client with contacts
+    const { data: clientWithContacts } = await supabaseAdmin
+      .from('clients')
+      .select('*, contacts:client_contacts(*)')
+      .eq('id', newClient.id)
+      .single()
+
     return NextResponse.json({
-      data: newClient,
+      data: clientWithContacts || newClient,
       success: true,
       message: 'Client created successfully'
     }, { status: 201 })

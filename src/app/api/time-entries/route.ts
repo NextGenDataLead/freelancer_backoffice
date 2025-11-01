@@ -56,7 +56,6 @@ export async function GET(request: Request) {
         *,
         client:clients(
           id,
-          name,
           company_name,
           email,
           country_code,
@@ -177,13 +176,13 @@ export async function POST(request: Request) {
       const { data: project, error: projectError } = await supabaseAdmin
         .from('projects')
         .select(`
-          id, 
-          name, 
-          client_id, 
+          id,
+          name,
+          client_id,
           hourly_rate,
           clients(
             id,
-            name,
+            company_name,
             hourly_rate
           )
         `)
@@ -202,7 +201,7 @@ export async function POST(request: Request) {
       // Verify client exists and belongs to tenant
       const { data: client, error: clientError } = await supabaseAdmin
         .from('clients')
-        .select('id, name, hourly_rate')
+        .select('id, company_name, hourly_rate')
         .eq('id', clientId)
         .eq('tenant_id', profile.tenant_id)
         .eq('active', true)
@@ -255,7 +254,6 @@ export async function POST(request: Request) {
         *,
         client:clients(
           id,
-          name,
           company_name,
           email,
           country_code,

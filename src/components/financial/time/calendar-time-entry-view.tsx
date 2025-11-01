@@ -146,7 +146,7 @@ export function CalendarTimeEntryView({
                 <span>{formatCurrency(monthData.totalValue)}</span>
               </div>
               <Badge variant="outline">
-                {monthData.totalEntries} registraties
+                {monthData.totalEntries} entries
               </Badge>
             </div>
           )}
@@ -158,7 +158,7 @@ export function CalendarTimeEntryView({
             onClick={goToToday}
             disabled={loading}
           >
-            Vandaag
+            Today
           </Button>
           
           <Button
@@ -170,7 +170,7 @@ export function CalendarTimeEntryView({
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              'Vernieuwen'
+              'Refresh'
             )}
           </Button>
         </div>
@@ -181,7 +181,7 @@ export function CalendarTimeEntryView({
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Fout bij laden van tijdregistraties: {error}
+            Error loading time entries: {error}
           </AlertDescription>
         </Alert>
       )}
@@ -197,6 +197,8 @@ export function CalendarTimeEntryView({
             onMonthChange={handleMonthChange}
             modifiers={modifiers}
             disabled={{ before: new Date('2020-01-01') }}
+            timeZone={Intl.DateTimeFormat().resolvedOptions().timeZone}
+            weekStartsOn={0}
             className="w-full"
             classNames={{
               months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 flex-1",

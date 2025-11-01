@@ -27,6 +27,9 @@ function Calendar({
 
   return (
     <DayPicker
+      // IMPORTANT: Use local timezone to prevent date offset bugs
+      // Without this, DayPicker creates UTC dates which cause 7-day calendar shifts
+      timeZone={Intl.DateTimeFormat().resolvedOptions().timeZone}
       showOutsideDays={showOutsideDays}
       className={cn(
         "bg-background group/calendar p-3 [--cell-size:theme(spacing.8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",

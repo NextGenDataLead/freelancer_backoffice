@@ -53,10 +53,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'User profile not found' }, { status: 404 })
     }
 
-    // Fetch client with tenant isolation
+    // Fetch client with tenant isolation and contacts
     const { data: client, error } = await supabaseAdmin
       .from('clients')
-      .select('*')
+      .select('*, contacts:client_contacts(*)')
       .eq('id', clientId)
       .eq('tenant_id', profile.tenant_id)
       .single()
@@ -143,16 +143,18 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Failed to fetch client' }, { status: 500 })
     }
 
-    // Remove id from validated data for update
-    const { id, ...updateData } = validatedData
-    
+    // Extract contacts from validated data
+    const { id, primaryContact, administrationContact, ...clientUpdateData } = validatedData
+
     // Update client
+    const clientUpdate: any = {
+      ...clientUpdateData,
+      updated_at: new Date(getCurrentDate().getTime()).toISOString()
+    }
+
     const { data: updatedClient, error: updateError } = await supabaseAdmin
       .from('clients')
-      .update({
-        ...updateData,
-        updated_at: new Date(getCurrentDate().getTime()).toISOString()
-      })
+      .update(clientUpdate)
       .eq('id', clientId)
       .eq('tenant_id', profile.tenant_id)
       .select()
@@ -163,8 +165,55 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Failed to update client' }, { status: 500 })
     }
 
+    // Update primary contact if provided
+    if (primaryContact) {
+      const { error: primaryUpdateError } = await supabaseAdmin
+        .from('client_contacts')
+        .update({
+          first_name: primaryContact.first_name,
+          last_name: primaryContact.last_name,
+          email: primaryContact.email,
+          phone: primaryContact.phone,
+          updated_at: new Date(getCurrentDate().getTime()).toISOString()
+        })
+        .eq('client_id', clientId)
+        .eq('contact_type', 'primary')
+
+      if (primaryUpdateError) {
+        console.error('Error updating primary contact:', primaryUpdateError)
+        // Continue - don't fail the whole update
+      }
+    }
+
+    // Update administration contact if provided
+    if (administrationContact) {
+      const { error: adminUpdateError } = await supabaseAdmin
+        .from('client_contacts')
+        .update({
+          first_name: administrationContact.first_name,
+          last_name: administrationContact.last_name,
+          email: administrationContact.email,
+          phone: administrationContact.phone,
+          updated_at: new Date(getCurrentDate().getTime()).toISOString()
+        })
+        .eq('client_id', clientId)
+        .eq('contact_type', 'administration')
+
+      if (adminUpdateError) {
+        console.error('Error updating administration contact:', adminUpdateError)
+        // Continue - don't fail the whole update
+      }
+    }
+
+    // Fetch updated client with contacts
+    const { data: clientWithContacts } = await supabaseAdmin
+      .from('clients')
+      .select('*, contacts:client_contacts(*)')
+      .eq('id', clientId)
+      .single()
+
     const response: FinancialApiResponse<Client> = {
-      data: updatedClient,
+      data: clientWithContacts || updatedClient,
       success: true,
       message: 'Client updated successfully'
     }
@@ -219,7 +268,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     // Check if client exists and belongs to tenant
     const { data: existingClient, error: fetchError } = await supabaseAdmin
       .from('clients')
-      .select('id, name')
+      .select('id, company_name')
       .eq('id', clientId)
       .eq('tenant_id', profile.tenant_id)
       .single()
@@ -281,7 +330,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      message: `Client "${existingClient.name}" deleted successfully`
+      message: `Client "${existingClient.company_name}" deleted successfully`
     })
 
   } catch (error) {

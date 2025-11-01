@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InvoiceList } from '@/components/financial/invoices/invoice-list'
@@ -85,7 +86,9 @@ export function InvoicesContent({ showHeader = true, className = '' }: InvoicesC
       setViewingInvoice(null)
       window.location.reload()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error updating status')
+      toast.error('Failed to update status', {
+        description: err instanceof Error ? err.message : 'An error occurred'
+      })
       throw err
     }
   }

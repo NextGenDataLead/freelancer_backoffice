@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -136,7 +137,9 @@ export function ProjectForm({ client, project, onSuccess, onCancel }: ProjectFor
       }
     } catch (error) {
       console.error('Project form error:', error)
-      alert(error instanceof Error ? error.message : 'Er is een fout opgetreden')
+      toast.error('Failed to save project', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     } finally {
       setIsSubmitting(false)
     }

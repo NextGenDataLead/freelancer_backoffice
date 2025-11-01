@@ -30,6 +30,9 @@ export async function GET() {
     const { data: businessData, error } = await supabaseAdmin
       .from('profiles')
       .select(`
+        first_name,
+        last_name,
+        email,
         business_name,
         kvk_number,
         btw_number,

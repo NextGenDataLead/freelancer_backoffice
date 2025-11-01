@@ -11,8 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Edit, Eye, Send, Check, AlertCircle, Clock, FileText, Download, Loader2 } from 'lucide-react'
-import type { InvoiceWithClient } from '@/lib/types/financial'
+import { Plus, Edit, Eye, Send, Check, AlertCircle, Clock, FileText, Download, Loader2, Bell, CheckCircle } from 'lucide-react'
+import type { InvoiceWithClient, ReminderLevel } from '@/lib/types/financial'
+import { toast } from 'sonner'
+import { PaymentReminderModal } from './payment-reminder-modal'
+import { Badge } from '@/components/ui/badge'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface InvoiceListProps {
   onAddInvoice?: () => void
@@ -38,22 +42,40 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [sendingInvoices, setSendingInvoices] = useState<Set<string>>(new Set())
+  const [reminderInvoice, setReminderInvoice] = useState<InvoiceWithClient | null>(null)
+  const [reminderLevels, setReminderLevels] = useState<Record<string, ReminderLevel | null | undefined>>({})
+
+  // Helper function to check if an invoice is actually overdue
+  const isInvoiceOverdue = (invoice: InvoiceWithClient): boolean => {
+    // Check if status already indicates overdue
+    const hasOverdueStatus = ['overdue', 'overdue_reminder_1', 'overdue_reminder_2', 'overdue_reminder_3'].includes(invoice.status)
+    if (hasOverdueStatus) return true
+
+    // For 'sent' invoices, check if due date has passed
+    if (invoice.status === 'sent') {
+      const today = getCurrentDate()
+      const dueDate = new Date(invoice.due_date)
+      return dueDate < today
+    }
+
+    return false
+  }
 
   const fetchInvoices = async (page: number = 1) => {
     try {
       setLoading(true)
-      
+
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '20'
       })
-      
+
       if (statusFilter) {
         params.append('status', statusFilter)
       }
-      
+
       const response = await fetch(`/api/invoices?${params.toString()}`)
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch invoices')
       }
@@ -62,6 +84,9 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
       setInvoices(data.data)
       setCurrentPage(data.pagination.page)
       setTotalPages(data.pagination.totalPages)
+
+      // Fetch reminder levels for overdue invoices
+      fetchReminderLevels(data.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -69,9 +94,61 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
     }
   }
 
+  const fetchReminderLevels = async (invoicesList: InvoiceWithClient[]) => {
+    // Only fetch for sent or overdue invoices (including reminder statuses)
+    const overdueInvoices = invoicesList.filter(inv =>
+      inv.status === 'sent' ||
+      inv.status === 'overdue' ||
+      inv.status === 'overdue_reminder_1' ||
+      inv.status === 'overdue_reminder_2' ||
+      inv.status === 'overdue_reminder_3'
+    )
+
+    const levels: Record<string, ReminderLevel | null | undefined> = {}
+
+    await Promise.all(
+      overdueInvoices.map(async (invoice) => {
+        try {
+          const response = await fetch(`/api/invoices/${invoice.id}/reminders`)
+          if (response.ok) {
+            const data = await response.json()
+            // Only show the reminder level if it can actually be sent
+            // Otherwise show null (which will display a checkmark)
+            if (data.data.canSendReminder && data.data.nextReminderLevel) {
+              levels[invoice.id] = data.data.nextReminderLevel
+            } else if (data.data.nextReminderLevel === null) {
+              // All reminders sent
+              levels[invoice.id] = null
+            } else {
+              // Waiting period not elapsed - don't show a badge
+              levels[invoice.id] = undefined
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching reminder level for invoice ${invoice.id}:`, error)
+        }
+      })
+    )
+
+    setReminderLevels(levels)
+  }
+
   useEffect(() => {
     fetchInvoices()
   }, [statusFilter])
+
+  const getReminderBadgeVariant = (level: ReminderLevel): 'default' | 'secondary' | 'destructive' => {
+    switch (level) {
+      case 1:
+        return 'default' // Blue
+      case 2:
+        return 'secondary' // Orange
+      case 3:
+        return 'destructive' // Red
+      default:
+        return 'default'
+    }
+  }
 
   const handleSendInvoice = async (invoice: InvoiceWithClient) => {
     const invoiceId = invoice.id
@@ -89,12 +166,15 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
         throw new Error(error.message || 'Failed to send invoice')
       }
       
-      setInvoices(prev => prev.map(inv => 
+      setInvoices(prev => prev.map(inv =>
         inv.id === invoiceId ? { ...inv, status: 'sent' } : inv
       ))
+      toast.success('Invoice sent successfully')
     } catch (error) {
       console.error('Error sending invoice:', error)
-      alert(error instanceof Error ? error.message : 'Failed to send invoice')
+      toast.error('Failed to send invoice', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      })
     } finally {
       setSendingInvoices(prev => {
         const updated = new Set(prev)
@@ -119,8 +199,11 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
 
       // Refresh the invoice list
       fetchInvoices(currentPage)
+      toast.success('Invoice status updated')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error updating status')
+      toast.error('Failed to update status', {
+        description: err instanceof Error ? err.message : 'Unknown error'
+      })
     }
   }
 
@@ -143,8 +226,11 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
+      toast.success('PDF downloaded successfully')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error downloading PDF')
+      toast.error('Failed to download PDF', {
+        description: err instanceof Error ? err.message : 'Unknown error'
+      })
     }
   }
 
@@ -172,6 +258,9 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
       case 'paid':
         return <Check className="h-3 w-3" />
       case 'overdue':
+      case 'overdue_reminder_1':
+      case 'overdue_reminder_2':
+      case 'overdue_reminder_3':
         return <AlertCircle className="h-3 w-3" />
       case 'cancelled':
         return <Clock className="h-3 w-3" />
@@ -180,9 +269,14 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
     }
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, invoice?: InvoiceWithClient) => {
     const baseClasses = "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium gap-1"
-    
+
+    // Check if 'sent' invoice is actually overdue
+    if (status === 'sent' && invoice && isInvoiceOverdue(invoice)) {
+      return `${baseClasses} bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300`
+    }
+
     switch (status) {
       case 'draft':
         return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300`
@@ -192,6 +286,12 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
         return `${baseClasses} bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300`
       case 'overdue':
         return `${baseClasses} bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300`
+      case 'overdue_reminder_1':
+        return `${baseClasses} bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300`
+      case 'overdue_reminder_2':
+        return `${baseClasses} bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300`
+      case 'overdue_reminder_3':
+        return `${baseClasses} bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300`
       case 'cancelled':
         return `${baseClasses} bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300`
       default:
@@ -199,18 +299,29 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
     }
   }
 
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = (status: string, invoice?: InvoiceWithClient) => {
+    // Check if 'sent' invoice is actually overdue
+    if (status === 'sent' && invoice && isInvoiceOverdue(invoice)) {
+      return 'Overdue'
+    }
+
     switch (status) {
       case 'draft':
-        return 'Concept'
+        return 'Draft'
       case 'sent':
-        return 'Verzonden'
+        return 'Sent'
       case 'paid':
-        return 'Betaald'
+        return 'Paid'
       case 'overdue':
-        return 'Achterstallig'
+        return 'Overdue'
+      case 'overdue_reminder_1':
+        return 'Overdue (1 reminder sent)'
+      case 'overdue_reminder_2':
+        return 'Overdue (2 reminders sent)'
+      case 'overdue_reminder_3':
+        return 'Overdue (3 reminders sent)'
       case 'cancelled':
-        return 'Geannuleerd'
+        return 'Cancelled'
       default:
         return status
     }
@@ -219,13 +330,13 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
   const getVATTypeLabel = (vatType: string) => {
     switch (vatType) {
       case 'standard':
-        return 'Standaard BTW'
+        return 'Standard VAT'
       case 'reverse_charge':
-        return 'BTW verlegd'
+        return 'Reverse charge'
       case 'exempt':
-        return 'BTW vrij'
+        return 'VAT exempt'
       case 'reduced':
-        return 'Verlaagd tarief'
+        return 'Reduced rate'
       default:
         return vatType
     }
@@ -235,7 +346,7 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Facturen</CardTitle>
+          <CardTitle>Invoices</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -257,14 +368,14 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Facturen</CardTitle>
+          <CardTitle>Invoices</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center text-red-600 dark:text-red-400">
-            Fout bij laden van facturen: {error}
+            Error loading invoices: {error}
           </div>
           <Button onClick={() => fetchInvoices()} className="mt-4">
-            Opnieuw proberen
+            Try again
           </Button>
         </CardContent>
       </Card>
@@ -275,14 +386,18 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6">
         <div>
-          <CardTitle>Facturen</CardTitle>
+          <CardTitle>Invoices</CardTitle>
           <p className="text-sm text-muted-foreground mt-2">
-            Beheer je facturen en hun status
+            Manage your invoices and their status
           </p>
         </div>
-        <Button onClick={onAddInvoice}>
+        <Button
+          onClick={onAddInvoice}
+          variant="ghost"
+          className="bg-slate-900/40 border border-slate-700/20 hover:bg-slate-800/50 hover:border-slate-600/30"
+        >
           <Plus className="h-4 w-4 mr-2" />
-          Nieuwe factuur
+          Start Invoice Wizard
         </Button>
       </CardHeader>
       
@@ -290,13 +405,13 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
         {invoices.length === 0 ? (
           <div className="text-center py-12">
             <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Nog geen facturen</h3>
+            <h3 className="text-lg font-semibold mb-2">No invoices yet</h3>
             <p className="text-muted-foreground mb-4">
-              Maak je eerste factuur om te beginnen met factureren
+              Create your first invoice to start billing
             </p>
             <Button onClick={onAddInvoice}>
               <Plus className="h-4 w-4 mr-2" />
-              Eerste factuur maken
+              Create first invoice
             </Button>
           </div>
         ) : (
@@ -304,14 +419,14 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Factuurnr.</TableHead>
-                  <TableHead>Klant</TableHead>
-                  <TableHead>Datum</TableHead>
-                  <TableHead>Vervaldatum</TableHead>
-                  <TableHead>BTW Type</TableHead>
-                  <TableHead className="text-right">Totaal</TableHead>
+                  <TableHead>Invoice No.</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead>VAT Type</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-24">Acties</TableHead>
+                  <TableHead className="w-24">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -351,9 +466,9 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
                     </TableCell>
                     
                     <TableCell>
-                      <span className={getStatusBadge(invoice.status)}>
+                      <span className={getStatusBadge(invoice.status, invoice)}>
                         {getStatusIcon(invoice.status)}
-                        {getStatusLabel(invoice.status)}
+                        {getStatusLabel(invoice.status, invoice)}
                       </span>
                     </TableCell>
                     
@@ -377,25 +492,14 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
                         >
                           <Eye className="h-3 w-3" />
                         </Button>
-                        
-                        {invoice.status === 'draft' && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onEditInvoice?.(invoice)}
-                            className="h-7 w-7"
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                        )}
-                        
+
                         {invoice.status === 'draft' && (
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleSendInvoice(invoice)}
                             className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
-                            title="Factuur verzenden"
+                            title="Send invoice"
                             disabled={sendingInvoices.has(invoice.id)}
                           >
                             {sendingInvoices.has(invoice.id) ? (
@@ -412,9 +516,37 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
                             size="icon"
                             onClick={() => handleStatusUpdate(invoice, 'paid')}
                             className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:text-green-300 dark:hover:bg-green-900/20"
-                            title="Markeren als betaald"
+                            title="Mark as paid"
                           >
                             <Check className="h-3 w-3" />
+                          </Button>
+                        )}
+
+                        {/* Always show payment reminder bell for overdue invoices */}
+                        {/* Badge shows action state: number (can send), checkmark (all sent), or no badge (waiting) */}
+                        {isInvoiceOverdue(invoice) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setReminderInvoice(invoice)}
+                            className="h-7 w-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:text-orange-400 dark:hover:text-orange-300 dark:hover:bg-orange-900/20 relative"
+                            title={`Send payment reminder${typeof reminderLevels[invoice.id] === 'number' ? ` (Level ${reminderLevels[invoice.id]})` : ''}`}
+                          >
+                            <Bell className="h-3 w-3" />
+                            {/* Show numbered badge when reminder can be sent (number type) */}
+                            {typeof reminderLevels[invoice.id] === 'number' && (
+                              <Badge
+                                variant={getReminderBadgeVariant(reminderLevels[invoice.id]!)}
+                                className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[9px] font-bold"
+                              >
+                                {reminderLevels[invoice.id]}
+                              </Badge>
+                            )}
+                            {/* Show checkmark when all reminders sent (null) */}
+                            {reminderLevels[invoice.id] === null && (
+                              <CheckCircle className="absolute -top-1 -right-1 h-3 w-3 text-green-500 bg-white dark:bg-slate-900 rounded-full" />
+                            )}
+                            {/* No badge shown during waiting period (undefined) - user can still click to view history */}
                           </Button>
                         )}
                       </div>
@@ -427,7 +559,7 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-6">
                 <div className="text-sm text-muted-foreground">
-                  Pagina {currentPage} van {totalPages}
+                  Page {currentPage} of {totalPages}
                 </div>
                 <div className="flex space-x-2">
                   <Button
@@ -436,7 +568,7 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
                     onClick={() => fetchInvoices(currentPage - 1)}
                     disabled={currentPage <= 1}
                   >
-                    Vorige
+                    Previous
                   </Button>
                   <Button
                     variant="outline"
@@ -444,7 +576,7 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
                     onClick={() => fetchInvoices(currentPage + 1)}
                     disabled={currentPage >= totalPages}
                   >
-                    Volgende
+                    Next
                   </Button>
                 </div>
               </div>
@@ -452,6 +584,17 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
           </>
         )}
       </CardContent>
+
+      {/* Payment Reminder Modal */}
+      <PaymentReminderModal
+        invoice={reminderInvoice}
+        isOpen={!!reminderInvoice}
+        onClose={() => setReminderInvoice(null)}
+        onSuccess={() => {
+          setReminderInvoice(null)
+          fetchInvoices(currentPage)
+        }}
+      />
     </Card>
   )
 }

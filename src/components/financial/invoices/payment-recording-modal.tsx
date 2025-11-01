@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -130,7 +131,9 @@ export function PaymentRecordingModal({
 
     } catch (error) {
       console.error('Payment recording error:', error)
-      alert(error instanceof Error ? error.message : 'Er is een fout opgetreden')
+      toast.error('Failed to record payment', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     } finally {
       setIsSubmitting(false)
     }

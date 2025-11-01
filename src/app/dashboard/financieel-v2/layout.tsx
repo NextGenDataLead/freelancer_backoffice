@@ -10,6 +10,7 @@ export default function FinancieelV2Layout({ children }: { children: React.React
   const pathname = usePathname()
   const router = useRouter()
   const [unbilledAmount, setUnbilledAmount] = useState(0)
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set())
 
   // Fetch unbilled amount for invoice button badge
   useEffect(() => {
@@ -306,22 +307,31 @@ export default function FinancieelV2Layout({ children }: { children: React.React
   // Navigation items configuration
   const navItems = [
     { href: '/dashboard/financieel-v2', icon: 'home', label: 'Cockpit', tooltip: 'Cockpit', subtitle: '' },
-    { href: '/dashboard/financieel-v2/tijd', icon: 'clock', label: 'Time', tooltip: 'Time Tracking', subtitle: 'Registreer gewerkte uren met ingebouwde timer en projectkoppeling' },
-    { href: '/dashboard/financieel-v2/uitgaven', icon: 'receipt', label: 'Expenses', tooltip: 'Expenses', subtitle: 'Registreer uitgaven met OCR bonnetjesscan en automatische categorisering' },
-    { href: '/dashboard/financieel-v2/terugkerende-uitgaven', icon: 'repeat', label: 'Recurring Expenses', tooltip: 'Recurring Expenses', subtitle: 'Beheer abonnementen, huur en andere vaste kosten voor nauwkeurige cashflow voorspellingen' },
-    { href: '/dashboard/financieel-v2/facturen', icon: 'file-text', label: 'Invoices', tooltip: 'Invoices', subtitle: 'Beheer facturen en houd je financiële overzicht bij' },
-    { href: '/dashboard/financieel-v2/klanten', icon: 'users', label: 'Clients', tooltip: 'Clients', subtitle: 'Beheer je klanten en leveranciers' },
-    { href: '/dashboard/financieel-v2/belasting', icon: 'calculator', label: 'Tax', tooltip: 'Tax', subtitle: 'Nederlandse BTW-aangiften en ICP-opgaven voor zzp\'ers' },
+    { href: '/dashboard/financieel-v2/tijd', icon: 'clock', label: 'Time', tooltip: 'Time Tracking', subtitle: 'Track worked hours with built-in timer and project linking' },
+    { href: '/dashboard/financieel-v2/uitgaven', icon: 'receipt', label: 'Expenses', tooltip: 'Expenses', subtitle: 'Register expenses with OCR receipt scanning and automatic categorization' },
+    { href: '/dashboard/financieel-v2/facturen', icon: 'file-text', label: 'Invoices', tooltip: 'Invoices', subtitle: 'Manage invoices and maintain your financial overview' },
+    { href: '/dashboard/financieel-v2/klanten', icon: 'users', label: 'Clients', tooltip: 'Clients', subtitle: 'Manage your clients and suppliers' },
+    { href: '/dashboard/financieel-v2/belasting', icon: 'calculator', label: 'Tax', tooltip: 'Tax', subtitle: 'Dutch VAT returns and ICP statements for freelancers' },
   ]
 
   // Get page title based on pathname
   const getPageTitle = () => {
+    // Special handling for recurring expenses
+    if (pathname === '/dashboard/financieel-v2/terugkerende-uitgaven') {
+      return 'Recurring'
+    }
+
     const item = navItems.find(item => item.href === pathname)
     return item ? item.label : 'Cockpit'
   }
 
   // Get page subtitle based on pathname
   const getPageSubtitle = () => {
+    // Special handling for recurring expenses
+    if (pathname === '/dashboard/financieel-v2/terugkerende-uitgaven') {
+      return 'Manage subscriptions, rent and other fixed costs for accurate cashflow forecasting'
+    }
+
     const item = navItems.find(item => item.href === pathname)
     return item?.subtitle || ''
   }
@@ -376,7 +386,7 @@ export default function FinancieelV2Layout({ children }: { children: React.React
               <button
                 key={item.href}
                 type="button"
-                className={pathname === item.href ? 'is-active' : ''}
+                className={pathname === item.href || (item.href === '/dashboard/financieel-v2/uitgaven' && pathname === '/dashboard/financieel-v2/terugkerende-uitgaven') ? 'is-active' : ''}
                 onClick={() => router.push(item.href)}
                 data-nav={item.label}
                 data-tooltip={item.tooltip}

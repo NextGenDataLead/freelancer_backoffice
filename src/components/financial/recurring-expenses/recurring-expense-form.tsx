@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -86,11 +87,15 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
         onSuccess()
       } else {
         const error = await response.json()
-        alert(error.message || 'Er is een fout opgetreden')
+        toast.error('Failed to save template', {
+          description: error.message || 'An error occurred'
+        })
       }
     } catch (error) {
       console.error('Form submission error:', error)
-      alert('Er is een fout opgetreden')
+      toast.error('Failed to save template', {
+        description: 'An error occurred'
+      })
     } finally {
       setLoading(false)
     }

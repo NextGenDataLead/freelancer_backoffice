@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 
     // Apply filters
     if (validatedQuery.category) {
-      query = query.eq('category', validatedQuery.category)
+      query = query.eq('expense_type', validatedQuery.category)
     }
 
     if (validatedQuery.supplier_id) {

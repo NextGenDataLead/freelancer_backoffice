@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -12,6 +12,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { getCurrentDate } from '../../../lib/current-date'
 import {  Users,
   TrendingUp,
@@ -70,6 +76,166 @@ interface ClientHealthScore {
   }
 }
 
+// Client Detail Content Component (reusable for both tooltip and dialog)
+function ClientDetailContent({ clientScore, getStatusIcon, getTrendIcon, formatCurrency }: {
+  clientScore: ClientHealthScore
+  getStatusIcon: (status: ClientHealthScore['status']) => React.ReactNode
+  getTrendIcon: (trend: 'up' | 'down' | 'stable' | 'improving' | 'declining') => React.ReactNode
+  formatCurrency: (amount: number) => string
+}) {
+  return (
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="border-b border-white/10 pb-2">
+        <h4 className="font-semibold text-slate-100 mb-1">{clientScore.client.name}</h4>
+        <div className="flex items-center gap-2">
+          {getStatusIcon(clientScore.status)}
+          <span className="text-sm text-slate-300">
+            Health Score: <strong className="text-slate-100">{clientScore.score}/100</strong>
+          </span>
+          <span className="text-xs px-2 py-0.5 rounded-md font-semibold" style={{
+            background: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.2)' :
+                       clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.2)' :
+                       clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.2)' :
+                       'rgba(239, 68, 68, 0.2)',
+            color: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 1)' :
+                  clientScore.status === 'good' ? 'rgba(59, 130, 246, 1)' :
+                  clientScore.status === 'warning' ? 'rgba(251, 146, 60, 1)' :
+                  'rgba(239, 68, 68, 1)'
+          }}>
+            {clientScore.status.toUpperCase()}
+          </span>
+        </div>
+      </div>
+
+      {/* Revenue Section */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <DollarSign className="h-4 w-4 text-green-400" />
+          <span className="text-sm font-medium text-slate-200">Revenue</span>
+        </div>
+        <div className="pl-6 space-y-1 text-xs">
+          <div className="flex justify-between text-slate-300">
+            <span>This Month:</span>
+            <strong className="text-slate-100">{formatCurrency(clientScore.client.revenue.thisMonth)}</strong>
+          </div>
+          <div className="flex justify-between text-slate-300">
+            <span>Last Month:</span>
+            <span className="text-slate-100">{formatCurrency(clientScore.client.revenue.lastMonth)}</span>
+          </div>
+          <div className="flex justify-between text-slate-300">
+            <span>Total Lifetime:</span>
+            <strong className="text-slate-100">{formatCurrency(clientScore.client.revenue.total)}</strong>
+          </div>
+          <div className="flex items-center gap-1 pt-1">
+            {getTrendIcon(clientScore.trends.revenue)}
+            <span className="text-slate-400">
+              {clientScore.trends.revenue === 'up' ? 'Growing' :
+               clientScore.trends.revenue === 'down' ? 'Declining' : 'Stable'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Payment Section */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Clock className="h-4 w-4 text-blue-400" />
+          <span className="text-sm font-medium text-slate-200">Payment Behavior</span>
+        </div>
+        <div className="pl-6 space-y-1 text-xs">
+          <div className="flex justify-between text-slate-300">
+            <span>Payment Terms:</span>
+            <span className="text-slate-100">{clientScore.client.paymentTerms} days</span>
+          </div>
+          <div className="flex justify-between text-slate-300">
+            <span>Avg. Payment Time:</span>
+            <strong className={
+              clientScore.client.payment.averageDays <= clientScore.client.paymentTerms ? 'text-green-400' :
+              clientScore.client.payment.averageDays <= clientScore.client.paymentTerms * 1.1 ? 'text-yellow-400' :
+              'text-red-400'
+            }>{clientScore.client.payment.averageDays} days</strong>
+          </div>
+          {clientScore.client.payment.overdueAmount > 0 && (
+            <div className="flex justify-between text-slate-300">
+              <span>Overdue Amount:</span>
+              <strong className="text-red-400">{formatCurrency(clientScore.client.payment.overdueAmount)}</strong>
+            </div>
+          )}
+          <div className="flex justify-between text-slate-300">
+            <span>Last Payment:</span>
+            <span className="text-slate-100">{new Date(clientScore.client.payment.lastPayment).toLocaleDateString()}</span>
+          </div>
+          <div className="flex items-center gap-1 pt-1">
+            {getTrendIcon(clientScore.trends.payment)}
+            <span className="text-slate-400">
+              {clientScore.trends.payment === 'improving' ? 'Improving' :
+               clientScore.trends.payment === 'declining' ? 'Declining' : 'Stable'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Engagement Section */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Activity className="h-4 w-4 text-purple-400" />
+          <span className="text-sm font-medium text-slate-200">Activity & Engagement</span>
+        </div>
+        <div className="pl-6 space-y-1 text-xs">
+          <div className="flex justify-between text-slate-300">
+            <span>Hours This Month:</span>
+            <strong className="text-slate-100">{clientScore.client.engagement.hoursThisMonth}h</strong>
+          </div>
+          <div className="flex justify-between text-slate-300">
+            <span>Last Activity:</span>
+            <span className="text-slate-100">{new Date(clientScore.client.engagement.lastActivity).toLocaleDateString()}</span>
+          </div>
+          <div className="flex items-center gap-1 pt-1">
+            {getTrendIcon(clientScore.trends.engagement)}
+            <span className="text-slate-400">
+              {clientScore.trends.engagement === 'up' ? 'Active' :
+               clientScore.trends.engagement === 'down' ? 'Declining' : 'Stable'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Risk Factors & Opportunities */}
+      {(clientScore.riskFactors.length > 0 || clientScore.opportunities.length > 0) && (
+        <div className="pt-2 border-t border-white/10">
+          {clientScore.riskFactors.length > 0 && (
+            <div className="mb-2">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle className="h-3 w-3 text-red-400" />
+                <span className="text-xs font-medium text-red-300">Risk Factors</span>
+              </div>
+              <ul className="pl-5 space-y-0.5">
+                {clientScore.riskFactors.map((risk, idx) => (
+                  <li key={idx} className="text-xs text-red-200">• {risk}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {clientScore.opportunities.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="h-3 w-3 text-green-400" />
+                <span className="text-xs font-medium text-green-300">Opportunities</span>
+              </div>
+              <ul className="pl-5 space-y-0.5">
+                {clientScore.opportunities.map((opp, idx) => (
+                  <li key={idx} className="text-xs text-green-200">• {opp}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Help Modal Component for Client Health
 function ClientHealthHelpModal() {
   return (
@@ -79,10 +245,10 @@ function ClientHealthHelpModal() {
           <HelpCircle className="h-4 w-4 text-muted-foreground" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-sm sm:max-w-2xl lg:max-w-4xl xl:max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-sm sm:max-w-2xl lg:max-w-4xl xl:max-w-5xl max-h-[90vh] overflow-hidden flex flex-col bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle>Client Health Dashboard Explained</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-slate-100">Client Health Dashboard Explained</DialogTitle>
+          <DialogDescription className="text-slate-400">
             Understanding how we measure and track your client relationships
           </DialogDescription>
         </DialogHeader>
@@ -93,21 +259,21 @@ function ClientHealthHelpModal() {
             <h3 className="text-lg font-semibold mb-3">Health Score System</h3>
 
             <div className="grid md:grid-cols-2 gap-6">
-              <div className="border-l-4 border-purple-500 pl-4">
-                <h4 className="font-medium text-purple-700">How Scores Work</h4>
-                <p className="text-sm text-muted-foreground mt-1">
+              <div className="bg-white/5 backdrop-blur-sm border border-purple-500/30 rounded-lg p-4">
+                <h4 className="font-medium text-purple-400 mb-2">How Scores Work</h4>
+                <p className="text-sm text-slate-300 mt-1">
                   Client health scores range from 0-100, calculated using multiple factors:
                 </p>
-                <ul className="text-sm text-muted-foreground mt-2 ml-4 list-disc space-y-1">
+                <ul className="text-sm text-slate-400 mt-2 ml-4 list-disc space-y-1">
                   <li>Payment behavior and timing</li>
                   <li>Revenue consistency and growth</li>
-                  <li>Project engagement levels</li>
-                  <li>Activity recency and hours worked</li>
+                  <li>Monthly activity and hours worked</li>
+                  <li>Activity recency and engagement</li>
                 </ul>
               </div>
 
-              <div className="border-l-4 border-blue-500 pl-4">
-                <h4 className="font-medium text-blue-700">Score Categories</h4>
+              <div className="bg-white/5 backdrop-blur-sm border border-blue-500/30 rounded-lg p-4">
+                <h4 className="font-medium text-blue-400 mb-2">Score Categories</h4>
                 <div className="space-y-2 mt-2">
                   <div className="flex items-center gap-2 text-sm">
                     <div className="w-3 h-3 bg-green-500 rounded-full"></div>
@@ -135,65 +301,40 @@ function ClientHealthHelpModal() {
             <h3 className="text-lg font-semibold mb-3">Key Metrics Tracked</h3>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <h4 className="font-medium text-green-700 flex items-center gap-2">
+              <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg p-3">
+                <h4 className="font-medium text-slate-300 flex items-center gap-2">
                   <DollarSign className="h-4 w-4" />
                   Revenue Metrics
                 </h4>
-                <ul className="text-sm text-green-600 mt-2 space-y-1">
+                <ul className="text-sm text-slate-400 mt-2 space-y-1">
                   <li>• Monthly revenue trends</li>
                   <li>• Total lifetime value</li>
                   <li>• Growth patterns</li>
                 </ul>
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <h4 className="font-medium text-blue-700 flex items-center gap-2">
+              <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg p-3">
+                <h4 className="font-medium text-slate-300 flex items-center gap-2">
                   <CreditCard className="h-4 w-4" />
                   Payment Behavior
                 </h4>
-                <ul className="text-sm text-blue-600 mt-2 space-y-1">
+                <ul className="text-sm text-slate-400 mt-2 space-y-1">
                   <li>• Average payment days</li>
                   <li>• Overdue amounts</li>
                   <li>• Payment reliability</li>
                 </ul>
               </div>
 
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 md:col-span-2 lg:col-span-1">
-                <h4 className="font-medium text-purple-700 flex items-center gap-2">
+              <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg p-3 md:col-span-2 lg:col-span-1">
+                <h4 className="font-medium text-slate-300 flex items-center gap-2">
                   <Activity className="h-4 w-4" />
-                  Engagement Level
+                  Activity & Engagement
                 </h4>
-                <ul className="text-sm text-purple-600 mt-2 space-y-1">
-                  <li>• Recent activity</li>
-                  <li>• Billable hours</li>
-                  <li>• Project involvement</li>
+                <ul className="text-sm text-slate-400 mt-2 space-y-1">
+                  <li>• Recent activity date</li>
+                  <li>• Hours worked this month</li>
+                  <li>• Monthly engagement trends</li>
                 </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Sorting Options */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3">Sorting & Views</h3>
-
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="text-center">
-                  <Target className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-                  <h4 className="font-medium text-blue-700">Score</h4>
-                  <p className="text-sm text-muted-foreground">Sort by overall health score</p>
-                </div>
-                <div className="text-center">
-                  <TrendingUp className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                  <h4 className="font-medium text-green-700">Revenue</h4>
-                  <p className="text-sm text-muted-foreground">Sort by monthly revenue</p>
-                </div>
-                <div className="text-center">
-                  <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                  <h4 className="font-medium text-red-700">Risk</h4>
-                  <p className="text-sm text-muted-foreground">Show highest risk clients first</p>
-                </div>
               </div>
             </div>
           </div>
@@ -203,27 +344,27 @@ function ClientHealthHelpModal() {
             <h3 className="text-lg font-semibold mb-3">Taking Action</h3>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
-                <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+              <div className="flex items-start gap-3 p-3 bg-green-500/10 backdrop-blur-sm border border-green-500/30 rounded-lg">
+                <CheckCircle className="h-5 w-5 text-green-400 mt-0.5" />
                 <div>
-                  <h4 className="font-medium text-green-700">Excellent Clients</h4>
-                  <p className="text-sm text-green-600">Maintain relationships, consider upselling opportunities, request referrals</p>
+                  <h4 className="font-medium text-green-400">Excellent Clients</h4>
+                  <p className="text-sm text-green-300/80">Maintain relationships, consider upselling opportunities, request referrals</p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-orange-500 mt-0.5" />
+              <div className="flex items-start gap-3 p-3 bg-orange-500/10 backdrop-blur-sm border border-orange-500/30 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5" />
                 <div>
-                  <h4 className="font-medium text-orange-700">Warning Clients</h4>
-                  <p className="text-sm text-orange-600">Increase communication, address any concerns, monitor payment behavior</p>
+                  <h4 className="font-medium text-orange-400">Warning Clients</h4>
+                  <p className="text-sm text-orange-300/80">Increase communication, address any concerns, monitor payment behavior</p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-red-50 rounded-lg md:col-span-2 lg:col-span-1">
-                <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
+              <div className="flex items-start gap-3 p-3 bg-red-500/10 backdrop-blur-sm border border-red-500/30 rounded-lg md:col-span-2 lg:col-span-1">
+                <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5" />
                 <div>
-                  <h4 className="font-medium text-red-700">At-Risk Clients</h4>
-                  <p className="text-sm text-red-600">Immediate follow-up required, review contracts, consider payment terms adjustment</p>
+                  <h4 className="font-medium text-red-400">At-Risk Clients</h4>
+                  <p className="text-sm text-red-300/80">Immediate follow-up required, review contracts, consider payment terms adjustment</p>
                 </div>
               </div>
             </div>
@@ -232,14 +373,14 @@ function ClientHealthHelpModal() {
           {/* Data Sources */}
           <div>
             <h3 className="text-lg font-semibold mb-3">Data Sources</h3>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-sm text-muted-foreground mb-2">
+            <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg p-3">
+              <p className="text-sm text-slate-300 mb-2">
                 Health scores are calculated from real business data:
               </p>
-              <ul className="text-sm text-muted-foreground ml-4 list-disc space-y-1">
-                <li><strong>Invoice Data:</strong> Payment timing, amounts, and overdue status</li>
-                <li><strong>Project Activity:</strong> Active projects, completion rates, and engagement</li>
-                <li><strong>Time Tracking:</strong> Billable hours, activity recency, and project involvement</li>
+              <ul className="text-sm text-slate-400 ml-4 list-disc space-y-1">
+                <li><strong className="text-slate-300">Invoice Data:</strong> Payment timing, amounts, and overdue status</li>
+                <li><strong className="text-slate-300">Monthly Activity:</strong> Hours worked this month as proxy for engagement</li>
+                <li><strong className="text-slate-300">Time Tracking:</strong> Billable hours, activity recency, and monthly trends</li>
               </ul>
             </div>
           </div>
@@ -301,18 +442,11 @@ const calculateClientHealth = (client: ClientHealthData): ClientHealthScore => {
     paymentTrend = 'declining'
   }
 
-  // Project activity (25 points max) - Updated for status system (Enhancement #2)
-  if (client.projects.active === 0) {
+  // Project activity (25 points max) - UPDATED TO USE HOURS PROXY (SAME AS KLANTEN PAGE)
+  // Using hours this month as proxy for project activity
+  if (client.engagement.hoursThisMonth === 0) {
     score -= 25
-    riskFactors.push('No active projects')
-  } else if (client.projects.active > 2) {
-    opportunities.push('Multiple active projects - stable relationship')
-  }
-
-  // Penalty for on-hold projects
-  if (client.projects.onHold > 0) {
-    score -= client.projects.onHold * 5
-    riskFactors.push(`${client.projects.onHold} projects on hold`)
+    riskFactors.push('No activity this month')
   }
 
   // Engagement analysis (20 points max)
@@ -412,6 +546,7 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
   const [clientHealthScores, setClientHealthScores] = useState<ClientHealthScore[]>([])
   const [loading, setLoading] = useState(true)
   const [sortBy, setSortBy] = useState<'score' | 'revenue' | 'risk'>('score')
+  const [selectedClient, setSelectedClient] = useState<ClientHealthScore | null>(null)
 
   useEffect(() => {
     // Fetch real client data from API
@@ -436,11 +571,6 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
             const timeResponse = await fetch(`/api/time-entries?client_id=${client.id}`)
             const timeResult = timeResponse.ok ? await timeResponse.json() : { data: [] }
             const timeEntries = timeResult.data || []
-
-            // Fetch projects for this client
-            const projectsResponse = await fetch(`/api/projects?client_id=${client.id}`)
-            const projectsResult = projectsResponse.ok ? await projectsResponse.json() : { data: [] }
-            const projects = projectsResult.data || []
 
             // Fetch invoices for this client to calculate overdue amounts
             const invoicesResponse = await fetch(`/api/invoices?client_id=${client.id}`)
@@ -467,12 +597,6 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
             })
 
             const lastMonthRevenue = lastMonthEntries.reduce((sum: number, entry: any) => sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
-
-            // Calculate project counts by status (Enhancement #2)
-            const activeProjects = projects.filter((p: any) => p.status === 'active').length
-            const onHoldProjects = projects.filter((p: any) => p.status === 'on_hold').length
-            const completedProjects = projects.filter((p: any) => p.status === 'completed').length
-            const prospectProjects = projects.filter((p: any) => p.status === 'prospect').length
 
             // Calculate overdue amounts from invoices (exclude cancelled invoices)
             const currentDate = getCurrentDate()
@@ -505,7 +629,7 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
 
             return {
               id: client.id,
-              name: client.name,
+              name: client.company_name,
               paymentTerms: client.default_payment_terms || 30, // Client's payment terms from database
               revenue: {
                 thisMonth: thisMonthRevenue,
@@ -519,9 +643,10 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
                 lastPayment: lastPaymentDate
               },
               projects: {
-                active: activeProjects,
-                completed: completedProjects,
-                onHold: onHoldProjects // Now properly tracked (Enhancement #2)
+                // Use hours as proxy for project activity (SAME AS KLANTEN PAGE)
+                active: thisMonthHours > 0 ? 1 : 0,
+                completed: 0,
+                onHold: 0
               },
               engagement: {
                 lastActivity: thisMonthEntries.length > 0 ? thisMonthEntries[thisMonthEntries.length - 1].entry_date : getCurrentDate().toISOString().split('T')[0],
@@ -720,72 +845,184 @@ export function ClientHealthDashboard({ className, onViewAllClients }: ClientHea
           </h4>
           <div className="space-y-2">
             {clientHealthScores.slice(0, 4).map((clientScore, index) => (
-              <div key={clientScore.client.id} className="p-3 rounded-lg transition-all duration-200" style={{
-                background: 'rgba(15, 23, 42, 0.45)',
-                border: '1px solid rgba(148, 163, 184, 0.16)',
-                cursor: 'pointer'
-              }} onMouseEnter={(e) => {
-                e.currentTarget.style.border = '1px solid rgba(96, 165, 250, 0.35)'
-              }} onMouseLeave={(e) => {
-                e.currentTarget.style.border = '1px solid rgba(148, 163, 184, 0.16)'
-              }}>
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-medium text-sm truncate">{clientScore.client.name}</p>
-                      <div className="flex items-center gap-1">
-                        {getStatusIcon(clientScore.status)}
-                        <span className="text-xs font-medium">{clientScore.score}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                      <div className="flex items-center gap-1">
-                        <DollarSign className="h-3 w-3" />
-                        {formatCurrency(clientScore.client.revenue.thisMonth)}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {getTrendIcon(clientScore.trends.revenue)}
-                        Rev
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {clientScore.client.payment.averageDays}d
-                      </div>
-                    </div>
-                  </div>
-                  <span className="text-xs px-2 py-1 rounded-md font-semibold" style={{
-                    background: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.15)' :
-                               clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.15)' :
-                               clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.15)' :
-                               'rgba(239, 68, 68, 0.15)',
-                    border: clientScore.status === 'excellent' ? '1px solid rgba(52, 211, 153, 0.25)' :
-                           clientScore.status === 'good' ? '1px solid rgba(59, 130, 246, 0.25)' :
-                           clientScore.status === 'warning' ? '1px solid rgba(251, 146, 60, 0.25)' :
-                           '1px solid rgba(239, 68, 68, 0.25)',
-                    color: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.95)' :
-                          clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.95)' :
-                          clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.95)' :
-                          'rgba(239, 68, 68, 0.95)'
-                  }}>
-                    {clientScore.status.toUpperCase()}
-                  </span>
+              <div key={clientScore.client.id}>
+                {/* Desktop: Tooltip */}
+                <div className="hidden md:block">
+                  <TooltipProvider>
+                    <Tooltip delayDuration={300}>
+                      <TooltipTrigger asChild>
+                        <div className="p-3 rounded-lg transition-all duration-200" style={{
+                          background: 'rgba(15, 23, 42, 0.45)',
+                          border: '1px solid rgba(148, 163, 184, 0.16)'
+                        }} onMouseEnter={(e) => {
+                          e.currentTarget.style.border = '1px solid rgba(96, 165, 250, 0.35)'
+                        }} onMouseLeave={(e) => {
+                          e.currentTarget.style.border = '1px solid rgba(148, 163, 184, 0.16)'
+                        }}>
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="font-medium text-sm truncate">{clientScore.client.name}</p>
+                                <div className="flex items-center gap-1">
+                                  {getStatusIcon(clientScore.status)}
+                                  <span className="text-xs font-medium">{clientScore.score}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                                <div className="flex items-center gap-1">
+                                  <DollarSign className="h-3 w-3" />
+                                  {formatCurrency(clientScore.client.revenue.thisMonth)}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {getTrendIcon(clientScore.trends.revenue)}
+                                  Rev
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {clientScore.client.payment.averageDays}d
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-xs px-2 py-1 rounded-md font-semibold" style={{
+                              background: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.15)' :
+                                         clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.15)' :
+                                         clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.15)' :
+                                         'rgba(239, 68, 68, 0.15)',
+                              border: clientScore.status === 'excellent' ? '1px solid rgba(52, 211, 153, 0.25)' :
+                                     clientScore.status === 'good' ? '1px solid rgba(59, 130, 246, 0.25)' :
+                                     clientScore.status === 'warning' ? '1px solid rgba(251, 146, 60, 0.25)' :
+                                     '1px solid rgba(239, 68, 68, 0.25)',
+                              color: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.95)' :
+                                    clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.95)' :
+                                    clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.95)' :
+                                    'rgba(239, 68, 68, 0.95)'
+                            }}>
+                              {clientScore.status.toUpperCase()}
+                            </span>
+                          </div>
+
+                          {/* Risk Factors or Opportunities */}
+                          {(clientScore.riskFactors.length > 0 || clientScore.opportunities.length > 0) && (
+                            <div className="mt-2">
+                              {clientScore.riskFactors.length > 0 && (
+                                <p className="text-xs" style={{ color: 'rgba(239, 68, 68, 0.95)' }}>
+                                  ⚠️ {clientScore.riskFactors[0]}
+                                </p>
+                              )}
+                              {clientScore.opportunities.length > 0 && !clientScore.riskFactors.length && (
+                                <p className="text-xs" style={{ color: 'rgba(52, 211, 153, 0.95)' }}>
+                                  💡 {clientScore.opportunities[0]}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        align="start"
+                        className="max-w-sm p-4 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-2xl"
+                      >
+                        <ClientDetailContent
+                          clientScore={clientScore}
+                          getStatusIcon={getStatusIcon}
+                          getTrendIcon={getTrendIcon}
+                          formatCurrency={formatCurrency}
+                        />
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
 
-                {/* Risk Factors or Opportunities */}
-                {(clientScore.riskFactors.length > 0 || clientScore.opportunities.length > 0) && (
-                  <div className="mt-2">
-                    {clientScore.riskFactors.length > 0 && (
-                      <p className="text-xs" style={{ color: 'rgba(239, 68, 68, 0.95)' }}>
-                        ⚠️ {clientScore.riskFactors[0]}
-                      </p>
-                    )}
-                    {clientScore.opportunities.length > 0 && !clientScore.riskFactors.length && (
-                      <p className="text-xs" style={{ color: 'rgba(52, 211, 153, 0.95)' }}>
-                        💡 {clientScore.opportunities[0]}
-                      </p>
-                    )}
-                  </div>
-                )}
+                {/* Mobile: Dialog */}
+                <div className="md:hidden">
+                  <Dialog open={selectedClient?.client.id === clientScore.client.id} onOpenChange={(open) => {
+                    if (!open) setSelectedClient(null)
+                  }}>
+                    <DialogTrigger asChild>
+                      <div
+                        onClick={() => setSelectedClient(clientScore)}
+                        className="p-3 rounded-lg transition-all duration-200 cursor-pointer active:scale-[0.98]"
+                        style={{
+                          background: 'rgba(15, 23, 42, 0.45)',
+                          border: '1px solid rgba(148, 163, 184, 0.16)'
+                        }}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-medium text-sm truncate">{clientScore.client.name}</p>
+                              <div className="flex items-center gap-1">
+                                {getStatusIcon(clientScore.status)}
+                                <span className="text-xs font-medium">{clientScore.score}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-3 w-3" />
+                                {formatCurrency(clientScore.client.revenue.thisMonth)}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {getTrendIcon(clientScore.trends.revenue)}
+                                Rev
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {clientScore.client.payment.averageDays}d
+                              </div>
+                            </div>
+                          </div>
+                          <span className="text-xs px-2 py-1 rounded-md font-semibold" style={{
+                            background: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.15)' :
+                                       clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.15)' :
+                                       clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.15)' :
+                                       'rgba(239, 68, 68, 0.15)',
+                            border: clientScore.status === 'excellent' ? '1px solid rgba(52, 211, 153, 0.25)' :
+                                   clientScore.status === 'good' ? '1px solid rgba(59, 130, 246, 0.25)' :
+                                   clientScore.status === 'warning' ? '1px solid rgba(251, 146, 60, 0.25)' :
+                                   '1px solid rgba(239, 68, 68, 0.25)',
+                            color: clientScore.status === 'excellent' ? 'rgba(52, 211, 153, 0.95)' :
+                                  clientScore.status === 'good' ? 'rgba(59, 130, 246, 0.95)' :
+                                  clientScore.status === 'warning' ? 'rgba(251, 146, 60, 0.95)' :
+                                  'rgba(239, 68, 68, 0.95)'
+                          }}>
+                            {clientScore.status.toUpperCase()}
+                          </span>
+                        </div>
+
+                        {/* Risk Factors or Opportunities */}
+                        {(clientScore.riskFactors.length > 0 || clientScore.opportunities.length > 0) && (
+                          <div className="mt-2">
+                            {clientScore.riskFactors.length > 0 && (
+                              <p className="text-xs" style={{ color: 'rgba(239, 68, 68, 0.95)' }}>
+                                ⚠️ {clientScore.riskFactors[0]}
+                              </p>
+                            )}
+                            {clientScore.opportunities.length > 0 && !clientScore.riskFactors.length && (
+                              <p className="text-xs" style={{ color: 'rgba(52, 211, 153, 0.95)' }}>
+                                💡 {clientScore.opportunities[0]}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-sm sm:max-w-md max-h-[85vh] overflow-y-auto bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-2xl text-slate-100">
+                      <DialogHeader>
+                        <DialogTitle className="text-slate-100">Client Details</DialogTitle>
+                        <DialogDescription className="text-slate-400">
+                          Health metrics and insights
+                        </DialogDescription>
+                      </DialogHeader>
+                      <ClientDetailContent
+                        clientScore={clientScore}
+                        getStatusIcon={getStatusIcon}
+                        getTrendIcon={getTrendIcon}
+                        formatCurrency={formatCurrency}
+                      />
+                    </DialogContent>
+                  </Dialog>
+                </div>
               </div>
             ))}
           </div>

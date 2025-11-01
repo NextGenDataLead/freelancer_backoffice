@@ -39,19 +39,26 @@ export async function GET(request: Request) {
     
     const validatedQuery = InvoicesQuerySchema.parse(queryParams)
 
-    // Build query with joins for client data
+    // Build query with joins for client data and contacts
     let query = supabaseAdmin
       .from('invoices')
       .select(`
         *,
         client:clients!inner(
           id,
-          name,
           company_name,
           email,
           country_code,
           vat_number,
-          is_business
+          is_business,
+          contacts:client_contacts(
+            id,
+            contact_type,
+            first_name,
+            last_name,
+            email,
+            phone
+          )
         )
       `, { count: 'exact' })
       .eq('tenant_id', profile.tenant_id)

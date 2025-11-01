@@ -5,9 +5,10 @@ import { DayButton } from 'react-day-picker'
 import { format } from 'date-fns'
 import { Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { 
-  getDayData, 
-  formatHours, 
+import { Button } from '@/components/ui/button'
+import {
+  getDayData,
+  formatHours,
   formatCurrency,
   shouldShowMultipleIndicators,
   getPrimaryClientColor
@@ -21,17 +22,24 @@ interface CalendarDayButtonProps extends React.ComponentProps<typeof DayButton> 
 
 export const CalendarDayButton = forwardRef<HTMLButtonElement, CalendarDayButtonProps>(
   ({ day, modifiers, monthData, onCreateEntry, className, ...props }, ref) => {
-    const dayData = getDayData(day.date, monthData || undefined)
+    // Normalize DayPicker's UTC-based date to local midnight to avoid weekday shifts
+    const normalizedDate = new Date(day.date.getFullYear(), day.date.getMonth(), day.date.getDate())
+
+    const dayData = getDayData(normalizedDate, monthData || undefined)
     const hasEntries = dayData.hasEntries
-    const showMultiple = shouldShowMultipleIndicators(day.date, monthData || undefined)
-    const primaryColor = getPrimaryClientColor(day.date, monthData || undefined)
+    const showMultiple = shouldShowMultipleIndicators(normalizedDate, monthData || undefined)
+    const primaryColor = getPrimaryClientColor(normalizedDate, monthData || undefined)
 
     return (
-      <div
+      <Button
         {...props}
         ref={ref}
+        variant="ghost"
+        asChild={false}
+        data-day={format(normalizedDate, 'yyyy-MM-dd')}
+        data-entry-count={dayData.entryCount}
         className={cn(
-          "relative h-16 w-full p-2 text-sm font-normal cursor-pointer",
+          "relative h-16 w-full p-2 text-sm font-normal cursor-pointer overflow-hidden",
           "flex flex-col items-start justify-between",
           "hover:bg-accent hover:text-accent-foreground",
           "focus:bg-accent focus:text-accent-foreground",
@@ -44,55 +52,28 @@ export const CalendarDayButton = forwardRef<HTMLButtonElement, CalendarDayButton
           className
         )}
       >
-        {/* Day Number */}
-        <span className="text-base font-medium">
+        {/* Day Number - Top Left */}
+        <span className="absolute top-2 left-2 text-base font-medium">
           {format(day.date, 'd')}
         </span>
 
-        {/* Content Area */}
-        <div className="flex-1 w-full flex flex-col justify-end items-start">
+        {/* Content Area - Centered */}
+        <div className="absolute inset-0 flex items-center justify-center">
           {hasEntries ? (
-            <div className="space-y-1 w-full">
-              {/* Time Summary */}
+            <div className="flex flex-col items-center gap-0.5">
+              {/* Time */}
               <div className="text-xs text-muted-foreground">
                 {formatHours(dayData.totalHours)}
               </div>
-              
-              {/* Value Summary */}
+
+              {/* Value */}
               <div className="text-xs font-medium">
                 {formatCurrency(dayData.totalValue)}
               </div>
-
-              {/* Visual Indicators */}
-              <div className="flex items-center justify-between w-full">
-                {/* Client Color Indicators */}
-                <div className="flex items-center gap-1">
-                  {dayData.clientColors.slice(0, 3).map((color, index) => (
-                    <div
-                      key={index}
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                  {showMultiple && dayData.clientColors.length > 3 && (
-                    <div className="w-2 h-2 rounded-full bg-muted-foreground/50 flex items-center justify-center">
-                      <span className="text-[6px] text-white">+</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Entry Count Badge */}
-                {showMultiple && (
-                  <div className="bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded-full font-medium">
-                    {dayData.entryCount}
-                  </div>
-                )}
-              </div>
-
             </div>
           ) : (
             /* Empty Day - Show Add Button on Hover */
-            <div className="opacity-0 group-hover:opacity-100 transition-opacity w-full">
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
               <div
                 className="h-6 w-6 p-1 rounded hover:bg-primary/10 flex items-center justify-center cursor-pointer"
                 onClick={(e) => {
@@ -106,9 +87,16 @@ export const CalendarDayButton = forwardRef<HTMLButtonElement, CalendarDayButton
           )}
         </div>
 
+        {/* Entry Count Badge - Bottom Right */}
+        {hasEntries && showMultiple && (
+          <div className="absolute bottom-1 right-1 bg-primary text-primary-foreground text-[9px] px-1 py-0.5 rounded-full font-medium leading-none">
+            {dayData.entryCount}
+          </div>
+        )}
+
         {/* Hover/Focus Overlay */}
         <div className="absolute inset-0 bg-primary/10 opacity-0 hover:opacity-100 transition-opacity rounded-md pointer-events-none" />
-        
+
         {/* Today Indicator */}
         {modifiers?.today && (
           <div className="absolute top-1 right-1 w-2 h-2 bg-primary rounded-full" />
@@ -133,7 +121,7 @@ export const CalendarDayButton = forwardRef<HTMLButtonElement, CalendarDayButton
             )}
           </div>
         )}
-      </div>
+      </Button>
     )
   }
 )

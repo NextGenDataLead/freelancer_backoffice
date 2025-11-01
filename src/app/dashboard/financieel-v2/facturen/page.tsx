@@ -13,6 +13,7 @@ import { FileText, Plus, Euro, Clock, AlertTriangle, Send, Receipt } from 'lucid
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { ClientInvoicingSummary } from '@/lib/types/financial'
+import { toast } from 'sonner'
 
 export default function FacturenPage() {
   const searchParams = useSearchParams()
@@ -97,9 +98,12 @@ export default function FacturenPage() {
       }
 
       setViewingInvoice(null)
+      toast.success('Invoice status updated successfully')
       window.location.reload()
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error updating status')
+      toast.error('Failed to update invoice status', {
+        description: err instanceof Error ? err.message : 'Unknown error'
+      })
       throw err
     }
   }
@@ -157,10 +161,11 @@ export default function FacturenPage() {
             <button
               type="button"
               className="action-chip"
+              style={{ background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)' }}
               onClick={handleOpenComprehensiveWizard}
             >
               <Plus className="h-4 w-4 mr-2" />
-              Start Factuur Wizard
+              Start Invoice Wizard
             </button>
           </div>
         </div>
@@ -171,9 +176,9 @@ export default function FacturenPage() {
             <GlassmorphicMetricCard
               icon={Euro}
               iconColor="rgba(59, 130, 246, 0.7)"
-              title="Factureerbaar"
+              title="Billable"
               value={metricsLoading ? '...' : formatCurrency(metrics?.factureerbaar || 0)}
-              subtitle="Klaar voor facturering"
+              subtitle="Ready for invoicing"
               badge={{
                 label: 'Ready',
                 color: 'rgba(59, 130, 246, 0.25)',
@@ -189,7 +194,7 @@ export default function FacturenPage() {
               iconColor="rgba(16, 185, 129, 0.7)"
               title="Total Unbilled"
               value={metricsLoading ? '...' : formatCurrency(metrics?.totale_registratie || 0)}
-              subtitle="Alle onfactureerd tijd"
+              subtitle="All unbilled time"
               badge={{
                 label: 'Pending',
                 color: 'rgba(16, 185, 129, 0.25)',
@@ -203,11 +208,11 @@ export default function FacturenPage() {
             <GlassmorphicMetricCard
               icon={AlertTriangle}
               iconColor="rgba(251, 146, 60, 0.7)"
-              title="Achterstallig"
+              title="Overdue"
               value={metricsLoading ? '...' : formatCurrency(metrics?.achterstallig || 0)}
-              subtitle={metricsLoading ? '...' : `${metrics?.achterstallig_count || 0} facturen over vervaldatum`}
+              subtitle={metricsLoading ? '...' : `${metrics?.achterstallig_count || 0} invoices past due date`}
               badge={{
-                label: metrics?.achterstallig > 0 ? 'Actie!' : 'OK',
+                label: metrics?.achterstallig > 0 ? 'Action!' : 'OK',
                 color: metrics?.achterstallig > 0 ? 'rgba(251, 146, 60, 0.35)' : 'rgba(251, 146, 60, 0.25)',
               }}
               gradient="linear-gradient(135deg, rgba(251, 146, 60, 0.12), rgba(249, 115, 22, 0.08))"
@@ -231,8 +236,8 @@ export default function FacturenPage() {
           >
             <FileText className="h-6 w-6 mr-3" style={{ color: 'rgba(59, 130, 246, 0.7)' }} />
             <div>
-              <h3 className="font-semibold text-slate-100">Beheer Templates</h3>
-              <p className="text-sm text-slate-400">Factuur templates aanpassen</p>
+              <h3 className="font-semibold text-slate-100">Manage Templates</h3>
+              <p className="text-sm text-slate-400">Customize invoice templates</p>
             </div>
           </button>
         </CardContent>
@@ -241,7 +246,7 @@ export default function FacturenPage() {
       <article className="glass-card" style={{ gridColumn: 'span 4', gridRow: 'span 1' }} aria-labelledby="reminders-title">
         <div className="card-header">
           <h2 className="card-header__title" id="reminders-title">
-            Herinneringen
+            Reminders
           </h2>
         </div>
         <CardContent className="pt-6">
@@ -252,8 +257,8 @@ export default function FacturenPage() {
           >
             <Send className="h-6 w-6 mr-3" style={{ color: 'rgba(251, 146, 60, 0.7)' }} />
             <div>
-              <h3 className="font-semibold text-slate-100">Betalingsherinneringen</h3>
-              <p className="text-sm text-slate-400">Verstuur herinneringen</p>
+              <h3 className="font-semibold text-slate-100">Payment Reminders</h3>
+              <p className="text-sm text-slate-400">Send payment reminders</p>
             </div>
           </button>
         </CardContent>
@@ -262,7 +267,7 @@ export default function FacturenPage() {
       <article className="glass-card" style={{ gridColumn: 'span 4', gridRow: 'span 1' }} aria-labelledby="vat-title">
         <div className="card-header">
           <h2 className="card-header__title" id="vat-title">
-            BTW Overzicht
+            VAT Overview
           </h2>
         </div>
         <CardContent className="pt-6">
@@ -273,8 +278,8 @@ export default function FacturenPage() {
           >
             <Receipt className="h-6 w-6 mr-3" style={{ color: 'rgba(16, 185, 129, 0.7)' }} />
             <div>
-              <h3 className="font-semibold text-slate-100">BTW Gegevens</h3>
-              <p className="text-sm text-slate-400">Bekijk BTW aangifte</p>
+              <h3 className="font-semibold text-slate-100">VAT Details</h3>
+              <p className="text-sm text-slate-400">View VAT declaration</p>
             </div>
           </button>
         </CardContent>
@@ -288,7 +293,7 @@ export default function FacturenPage() {
             All Invoices
           </h2>
           <p className="card-header__subtitle">
-            Beheer je facturen en houd je financiële overzicht bij
+            Manage your invoices and maintain your financial overview
           </p>
         </div>
         <CardContent className="pt-6">
@@ -318,7 +323,7 @@ export default function FacturenPage() {
             )}
           >
             <DialogHeader>
-              <DialogTitle>Nieuwe Handmatige Factuur</DialogTitle>
+              <DialogTitle>New Manual Invoice</DialogTitle>
             </DialogHeader>
             <InvoiceForm
               onSuccess={handleInvoiceCreated}
@@ -348,7 +353,7 @@ export default function FacturenPage() {
             )}
           >
             <DialogHeader>
-              <DialogTitle>Factuur Bewerken</DialogTitle>
+              <DialogTitle>Edit Invoice</DialogTitle>
             </DialogHeader>
             <InvoiceForm
               invoice={editingInvoice}
@@ -383,11 +388,11 @@ export default function FacturenPage() {
             )}
           >
             <DialogHeader>
-              <DialogTitle>Betalingsherinneringen</DialogTitle>
+              <DialogTitle>Payment Reminders</DialogTitle>
             </DialogHeader>
             <div className="p-8 text-center text-slate-400">
               <Send className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Herinneringen functionaliteit komt binnenkort beschikbaar.</p>
+              <p>Payment reminders are available in the invoice list. Click the bell icon next to overdue invoices to send reminders.</p>
             </div>
           </DialogContent>
         </Dialog>

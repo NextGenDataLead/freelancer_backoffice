@@ -19,10 +19,10 @@ interface RouteParams {
 }
 
 /**
- * PATCH /api/invoices/[id]/status
+ * PATCH/PUT /api/invoices/[id]/status
  * Updates invoice status with business logic validation
  */
-export async function PATCH(request: Request, { params }: RouteParams) {
+async function handleStatusUpdate(request: Request, { params }: RouteParams) {
   try {
     // Get authenticated user profile
     const profile = await getCurrentUserProfile()
@@ -66,8 +66,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // Validate status transitions
     const validTransitions: Record<string, string[]> = {
       'draft': ['sent', 'cancelled'],
-      'sent': ['paid', 'overdue', 'cancelled'],
-      'overdue': ['paid', 'cancelled'],
+      'sent': ['paid', 'partial', 'overdue', 'cancelled'],
+      'partial': ['paid', 'overdue', 'cancelled'],
+      'overdue': ['paid', 'partial', 'cancelled'],
+      'overdue_reminder_1': ['paid', 'partial', 'cancelled'],
+      'overdue_reminder_2': ['paid', 'partial', 'cancelled'],
+      'overdue_reminder_3': ['paid', 'partial', 'cancelled'],
       'paid': [], // Cannot transition from paid
       'cancelled': ['draft'] // Can only restore to draft
     }
@@ -80,17 +84,19 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     // Prepare update data with status-specific logic
-    const updateData: Partial<Invoice & { sent_at?: string; paid_at?: string }> = {
+    const updateData: Partial<Invoice & { sent_at?: string; paid_at?: string; paid_amount?: number }> = {
       status: newStatus
     }
 
-    // Set timestamps based on status
+    // Set timestamps and amounts based on status
     switch (newStatus) {
       case 'sent':
         updateData.sent_at = getCurrentDate().toISOString()
         break
       case 'paid':
         updateData.paid_at = getCurrentDate().toISOString()
+        // When marking as paid, set paid_amount to total_amount
+        updateData.paid_amount = parseFloat(existingInvoice.total_amount.toString())
         break
       case 'cancelled':
         // Clear payment/sent timestamps when cancelled
@@ -98,9 +104,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         updateData.paid_at = null
         break
       case 'draft':
-        // Restore to draft - clear all timestamps
+        // Restore to draft - clear all timestamps and payments
         updateData.sent_at = null
         updateData.paid_at = null
+        updateData.paid_amount = 0
         break
     }
 
@@ -177,6 +184,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
   }
 }
 
+// Export both PATCH and PUT methods (PUT for backward compatibility)
+export const PATCH = handleStatusUpdate
+export const PUT = handleStatusUpdate
+
 /**
  * GET /api/invoices/[id]/status
  * Gets current invoice status and available transitions
@@ -218,8 +229,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     // Determine available transitions
     const validTransitions: Record<string, string[]> = {
       'draft': ['sent', 'cancelled'],
-      'sent': ['paid', 'overdue', 'cancelled'],
-      'overdue': ['paid', 'cancelled'],
+      'sent': ['paid', 'partial', 'overdue', 'cancelled'],
+      'partial': ['paid', 'overdue', 'cancelled'],
+      'overdue': ['paid', 'partial', 'cancelled'],
+      'overdue_reminder_1': ['paid', 'partial', 'cancelled'],
+      'overdue_reminder_2': ['paid', 'partial', 'cancelled'],
+      'overdue_reminder_3': ['paid', 'partial', 'cancelled'],
       'paid': [],
       'cancelled': ['draft']
     }

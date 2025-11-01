@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -118,10 +119,14 @@ export function DueRecurringExpensesCarousel({ onExpenseCreated, variant = 'defa
       }
 
       // Show success message
-      alert(`${result.data.count} uitgave(n) succesvol aangemaakt!`)
+      toast.success('Expenses created!', {
+        description: `Successfully created ${result.data.count} expense(s)`
+      })
     } catch (error) {
       console.error('Error creating expenses:', error)
-      alert(error instanceof Error ? error.message : 'Fout bij aanmaken van uitgaven')
+      toast.error('Failed to create expenses', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     } finally {
       setCreating(null)
     }

@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { TimeEntryForm } from '@/components/financial/time/time-entry-form'
@@ -250,7 +251,9 @@ export function TimeTabContent() {
 
   const handleStartTimerSubmit = () => {
     if (!startTimerClientId) {
-      alert('Selecteer eerst een klant')
+      toast.error('Validation error', {
+        description: 'Please select a client first'
+      })
       return
     }
 
@@ -258,7 +261,9 @@ export function TimeTabContent() {
     const project = projects.find(p => p.id === startTimerProjectId)
 
     if (!client) {
-      alert('Geselecteerde klant niet gevonden')
+      toast.error('Error', {
+        description: 'Selected client not found'
+      })
       return
     }
 
@@ -328,7 +333,9 @@ export function TimeTabContent() {
           if (response.ok) {
             const result = await response.json()
             console.log('Time entry created successfully:', result)
-            alert(`Tijdregistratie aangemaakt voor ${targetDate.toLocaleDateString('nl-NL')}!`)
+            toast.success('Time registered successfully!', {
+              description: `Time entry created for ${targetDate.toLocaleDateString('nl-NL')}`
+            })
             handleRefresh() // Refresh the time entries list and stats
             setCalendarRefreshTrigger(prev => prev + 1) // Refresh calendar
           } else {
@@ -337,7 +344,9 @@ export function TimeTabContent() {
           }
         } catch (error) {
           console.error('Error creating time entry:', error)
-          alert(`Er ging iets mis: ${error instanceof Error ? error.message : 'Onbekende fout'}`)
+          toast.error('Failed to create time entry', {
+            description: error instanceof Error ? error.message : 'An error occurred'
+          })
         }
       }
 
@@ -461,7 +470,9 @@ export function TimeTabContent() {
         })
 
         if (response.ok) {
-          alert(`Tijd succesvol geregistreerd! ${hours} uur voor "${selectedClient}"`)
+          toast.success('Time registered successfully!', {
+            description: `${hours} hours for "${selectedClient}"`
+          })
           setTimeout(() => {
             handleRefresh()
           }, 100)
@@ -471,7 +482,9 @@ export function TimeTabContent() {
         }
       } catch (error) {
         console.error('Error registering time:', error)
-        alert(`Er ging iets mis bij het registreren: ${error instanceof Error ? error.message : 'Onbekende fout'}`)
+        toast.error('Failed to register time', {
+          description: error instanceof Error ? error.message : 'An error occurred'
+        })
       }
     }
 
@@ -492,7 +505,9 @@ export function TimeTabContent() {
     setShowComprehensiveWizard(false)
     // Show success message and refresh data
     console.log('Generated invoices:', invoices)
-    alert(`Succesvol ${invoices.length} factuur(facturen) aangemaakt!`)
+    toast.success('Invoices created successfully!', {
+      description: `Successfully created ${invoices.length} invoice(s)`
+    })
     // Refresh the time entries list and stats
     handleRefresh()
   }
@@ -614,7 +629,7 @@ export function TimeTabContent() {
         <div>
           <h3 className="text-lg font-semibold">Tijdregistratie</h3>
           <p className="text-muted-foreground text-sm">
-            Registreer gewerkte uren met ingebouwde timer en projectkoppeling
+            Track worked hours with built-in timer and project linking
           </p>
         </div>
 

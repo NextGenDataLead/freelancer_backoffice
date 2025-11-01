@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { GlassmorphicMetricCard } from '@/components/dashboard/glassmorphic-metric-card'
 import { useExpenseMetrics } from '@/hooks/use-expense-metrics'
 import { formatEuropeanCurrency } from '@/lib/utils/formatEuropeanNumber'
@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils'
 export default function UitgavenPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const pathname = usePathname()
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingExpense, setEditingExpense] = useState<any>(null)
   const { metrics, loading } = useExpenseMetrics()
@@ -63,72 +64,87 @@ export default function UitgavenPage() {
     setEditingExpense(expense)
   }
 
-  const getCategoryDisplayName = (category: string) => {
-    const categories: Record<string, string> = {
-      'kantoorbenodigdheden': 'Kantoorbenodigdheden',
-      'reiskosten': 'Reiskosten',
-      'maaltijden_zakelijk': 'Maaltijden & Zakelijk Entertainment',
-      'marketing_reclame': 'Marketing & Reclame',
-      'software_ict': 'Software & ICT',
-      'afschrijvingen': 'Afschrijvingen Bedrijfsmiddelen',
-      'verzekeringen': 'Verzekeringen',
-      'professionele_diensten': 'Professionele Diensten',
-      'werkruimte_kantoor': 'Werkruimte & Kantoorkosten',
-      'voertuigkosten': 'Voertuigkosten',
-      'telefoon_communicatie': 'Telefoon & Communicatie',
-      'vakliteratuur': 'Vakliteratuur',
-      'werkkleding': 'Werkkleding',
-      'relatiegeschenken_representatie': 'Relatiegeschenken & Representatie',
-      'overige_zakelijk': 'Overige Zakelijke Kosten'
-    }
-    return categories[category] || category
-  }
-
   // Calculate trend indicator
   const expenseTrend = metrics?.currentMonth.percentageChange || 0
   const isTrendPositive = expenseTrend < 0 // For expenses, lower is better
 
   return (
     <section className="main-grid" aria-label="Expenses content">
-      {/* Monthly Stats Cards */}
-      <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1' }}>
-        <div className="card-header">
-          <div className="flex gap-3 ml-auto">
+      {/* Tab Navigation */}
+      <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1', padding: '0.75rem 1.5rem' }}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className="action-chip"
-              style={{ background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)' }}
+              className={cn(
+                'relative px-4 py-2.5 text-sm font-medium transition-all duration-300 rounded-xl',
+                pathname === '/dashboard/financieel-v2/uitgaven'
+                  ? 'text-slate-100'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+              onClick={() => router.push('/dashboard/financieel-v2/uitgaven')}
+            >
+              {pathname === '/dashboard/financieel-v2/uitgaven' && (
+                <span
+                  className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-sm"
+                  style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+                />
+              )}
+              <span className="relative">All Expenses</span>
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'relative px-4 py-2.5 text-sm font-medium transition-all duration-300 rounded-xl flex items-center gap-2',
+                pathname === '/dashboard/financieel-v2/terugkerende-uitgaven'
+                  ? 'text-slate-100'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
               onClick={() => router.push('/dashboard/financieel-v2/terugkerende-uitgaven')}
             >
-              <Repeat className="h-4 w-4 mr-2" />
-              Terugkerende Uitgaven
-            </button>
-            <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
-              <DialogTrigger asChild>
-                <button type="button" className="action-chip">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nieuwe Uitgave
-                </button>
-              </DialogTrigger>
-              <DialogContent
-                className={cn(
-                  'max-w-2xl max-h-[90vh] overflow-y-auto',
-                  'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
-                )}
-              >
-                <DialogHeader>
-                  <DialogTitle>Nieuwe Uitgave Toevoegen</DialogTitle>
-                </DialogHeader>
-                <ExpenseForm
-                  onSuccess={handleExpenseCreated}
-                  onCancel={() => setShowCreateForm(false)}
-                  variant="glass"
+              {pathname === '/dashboard/financieel-v2/terugkerende-uitgaven' && (
+                <span
+                  className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-sm"
+                  style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
                 />
-              </DialogContent>
-            </Dialog>
+              )}
+              <Repeat className="h-4 w-4 relative" />
+              <span className="relative">Recurring</span>
+            </button>
           </div>
-        </div>
 
+          <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="action-chip"
+                style={{ background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)' }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Expense
+              </button>
+            </DialogTrigger>
+            <DialogContent
+              className={cn(
+                'max-w-2xl max-h-[90vh] overflow-y-auto',
+                'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
+              )}
+            >
+              <DialogHeader>
+                <DialogTitle>Add New Expense</DialogTitle>
+              </DialogHeader>
+              <ExpenseForm
+                onSuccess={handleExpenseCreated}
+                onCancel={() => setShowCreateForm(false)}
+                variant="glass"
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
+      </article>
+
+      {/* Monthly Stats Cards */}
+      <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '1.5rem' }}>
           {/* Card 1: This Month */}
           <div style={{ gridColumn: 'span 3' }}>
@@ -160,7 +176,7 @@ export default function UitgavenPage() {
               iconColor="rgba(34, 211, 238, 0.7)"
               title="VAT Paid"
               value={loading ? '...' : formatEuropeanCurrency(metrics?.vatPaid.deductibleAmount || 0)}
-              subtitle="BTW aftrekbaar"
+              subtitle="VAT deductible"
               badge={{
                 label: 'Deductible',
                 color: 'rgba(34, 211, 238, 0.25)',
@@ -203,122 +219,14 @@ export default function UitgavenPage() {
         </div>
       </article>
 
-      {/* Category Insights - 3 Cards */}
-      <article className="glass-card" style={{ gridColumn: 'span 4', gridRow: 'span 1' }} aria-labelledby="top-categories-title">
-        <div className="card-header">
-          <h2 className="card-header__title" id="top-categories-title">
-            Top Categories
-          </h2>
-        </div>
-        <CardContent className="pt-6">
-          <div className="space-y-3">
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="h-4 bg-muted animate-pulse rounded w-32"></div>
-                    <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
-                  </div>
-                ))}
-              </div>
-            ) : metrics?.categories.topCategories.length ? (
-              metrics.categories.topCategories.slice(0, 4).map((category, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <span className="text-sm text-slate-300">{getCategoryDisplayName(category.category)}</span>
-                  <span className="text-sm font-medium text-slate-100">{formatEuropeanCurrency(category.totalAmount)}</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-sm text-slate-400">Geen uitgaven deze maand</div>
-            )}
-          </div>
-        </CardContent>
-      </article>
-
-      <article className="glass-card" style={{ gridColumn: 'span 4', gridRow: 'span 1' }} aria-labelledby="ocr-status-title">
-        <div className="card-header">
-          <h2 className="card-header__title" id="ocr-status-title">
-            OCR Status
-          </h2>
-        </div>
-        <CardContent className="pt-6">
-          <div className="space-y-3">
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="h-4 bg-muted animate-pulse rounded w-32"></div>
-                    <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
-                  </div>
-                ))}
-              </div>
-            ) : metrics?.ocrProcessed.totalCount ? (
-              <>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-green-400">Automatisch verwerkt</span>
-                  <span className="text-sm font-medium text-slate-100">{metrics.ocrProcessed.ocrCount} bonnetjes</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-red-400">Handmatig ingevoerd</span>
-                  <span className="text-sm font-medium text-slate-100">{metrics.ocrProcessed.totalCount - metrics.ocrProcessed.ocrCount} bonnetjes</span>
-                </div>
-                <div className="flex items-center justify-between font-medium pt-2 border-t border-white/10">
-                  <span className="text-sm text-slate-300">Totaal dit kwartaal</span>
-                  <span className="text-sm text-slate-100">{metrics.ocrProcessed.totalCount} uitgaven</span>
-                </div>
-              </>
-            ) : (
-              <div className="text-sm text-slate-400">Geen uitgaven deze maand</div>
-            )}
-          </div>
-        </CardContent>
-      </article>
-
-      <article className="glass-card" style={{ gridColumn: 'span 4', gridRow: 'span 1' }} aria-labelledby="vat-overview-title">
-        <div className="card-header">
-          <h2 className="card-header__title" id="vat-overview-title">
-            BTW Overview
-          </h2>
-        </div>
-        <CardContent className="pt-6">
-          <div className="space-y-3">
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <div className="h-4 bg-muted animate-pulse rounded w-20"></div>
-                    <div className="h-4 bg-muted animate-pulse rounded w-16"></div>
-                  </div>
-                ))}
-              </div>
-            ) : metrics?.vatPaid.breakdown.length ? (
-              <>
-                {metrics.vatPaid.breakdown.map((vat, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <span className="text-sm text-slate-300">{Math.round(vat.rate * 100)}% BTW</span>
-                    <span className="text-sm font-medium text-slate-100">{formatEuropeanCurrency(vat.amount)}</span>
-                  </div>
-                ))}
-                <div className="flex items-center justify-between font-medium pt-2 border-t border-white/10">
-                  <span className="text-sm text-slate-300">Totaal aftrekbaar</span>
-                  <span className="text-sm text-slate-100">{formatEuropeanCurrency(metrics.vatPaid.deductibleAmount)}</span>
-                </div>
-              </>
-            ) : (
-              <div className="text-sm text-slate-400">Geen BTW betaald deze maand</div>
-            )}
-          </div>
-        </CardContent>
-      </article>
-
-      {/* Expense List */}
+      {/* Expense List - Pivot Table */}
       <article className="glass-card" style={{ gridColumn: 'span 12', gridRow: 'span 1' }} aria-labelledby="all-expenses-title">
         <div className="card-header">
           <h2 className="card-header__title" id="all-expenses-title">
             All Expenses
           </h2>
           <p className="card-header__subtitle">
-            Beheer je zakelijke uitgaven en bonnen
+            Manage your business expenses and receipts
           </p>
         </div>
         <CardContent className="pt-6">
@@ -335,7 +243,7 @@ export default function UitgavenPage() {
           )}
         >
           <DialogHeader>
-            <DialogTitle>Uitgave Bewerken</DialogTitle>
+            <DialogTitle>Edit Expense</DialogTitle>
           </DialogHeader>
           {editingExpense && (
             <ExpenseForm

@@ -5,56 +5,56 @@ import { z } from 'zod'
 
 export const businessProfileSchema = z.object({
   // Business Identity
-  business_name: z.string().min(1, 'Bedrijfsnaam is verplicht').max(100, 'Bedrijfsnaam is te lang'),
+  business_name: z.string().min(1, 'Business name is required').max(100, 'Business name is too long'),
   kvk_number: z.string()
     .optional()
-    .refine((val) => !val || /^\d{8}$/.test(val), 'KvK nummer moet 8 cijfers zijn'),
+    .refine((val) => !val || /^\d{8}$/.test(val), 'KvK number must be 8 digits'),
   btw_number: z.string()
     .optional()
-    .refine((val) => !val || /^NL\d{9}B\d{2}$/.test(val), 'BTW nummer moet format NL123456789B12 hebben'),
+    .refine((val) => !val || /^NL\d{9}B\d{2}$/.test(val), 'BTW number must have format NL123456789B12'),
   business_type: z.enum(['sole_trader', 'partnership', 'bv', 'other']).optional(),
-  
+
   // Address Information
-  address: z.string().max(200, 'Adres is te lang').optional(),
+  address: z.string().max(200, 'Address is too long').optional(),
   postal_code: z.string()
     .optional()
-    .refine((val) => !val || /^\d{4}\s?[A-Z]{2}$/i.test(val), 'Ongeldige postcode format'),
-  city: z.string().max(100, 'Stad is te lang').optional(),
+    .refine((val) => !val || /^\d{4}\s?[A-Z]{2}$/i.test(val), 'Invalid postal code format'),
+  city: z.string().max(100, 'City name is too long').optional(),
   country_code: z.string().length(2).default('NL'),
   phone: z.string()
     .optional()
-    .refine((val) => !val || /^[\+]?[\d\s\-\(\)]+$/.test(val), 'Ongeldig telefoonnummer format'),
-  website: z.string().url('Ongeldige website URL').optional().or(z.literal('')),
-  
+    .refine((val) => !val || /^[\+]?[\d\s\-\(\)]+$/.test(val), 'Invalid phone number format'),
+  website: z.string().url('Invalid website URL').optional().or(z.literal('')),
+
   // Financial Configuration
-  hourly_rate: z.number().min(0, 'Uurtarief moet positief zijn').max(1000, 'Uurtarief is te hoog').optional(),
+  hourly_rate: z.number().min(0, 'Hourly rate must be positive').max(1000, 'Hourly rate is too high').optional(),
   financial_year_start: z.string()
     .optional()
-    .refine((val) => !val || /^\d{2}-\d{2}$/.test(val), 'Selecteer een geldige maand en dag'),
+    .refine((val) => !val || /^\d{2}-\d{2}$/.test(val), 'Select a valid month and day'),
   kor_enabled: z.boolean().default(false),
-  
+
   // Invoice Settings
-  default_payment_terms: z.number().min(1, 'Minimaal 1 dag').max(365, 'Maximaal 365 dagen').default(30),
-  late_payment_interest: z.number().min(0, 'Rente moet positief zijn').max(50, 'Rente te hoog').default(2.0),
-  default_invoice_description: z.string().max(500, 'Omschrijving is te lang').optional(),
-  custom_footer_text: z.string().max(500, 'Footer tekst is te lang').optional(),
-  terms_conditions: z.string().max(5000, 'Algemene voorwaarden zijn te lang').optional()
+  default_payment_terms: z.number().min(1, 'Minimum 1 day').max(365, 'Maximum 365 days').default(30),
+  late_payment_interest: z.number().min(0, 'Interest must be positive').max(50, 'Interest too high').default(2.0),
+  default_invoice_description: z.string().max(500, 'Description is too long').optional(),
+  custom_footer_text: z.string().max(500, 'Footer text is too long').optional(),
+  terms_conditions: z.string().max(5000, 'Terms and conditions are too long').optional()
 })
 
 export type BusinessProfileData = z.infer<typeof businessProfileSchema>
 
 export const businessTypes = [
-  { value: 'sole_trader', label: 'Eenmanszaak / ZZP' },
-  { value: 'partnership', label: 'Vennootschap onder Firma (VOF)' },
-  { value: 'bv', label: 'Besloten Vennootschap (BV)' },
-  { value: 'other', label: 'Overig' }
+  { value: 'sole_trader', label: 'Sole Proprietorship / Freelancer' },
+  { value: 'partnership', label: 'General Partnership (VOF)' },
+  { value: 'bv', label: 'Private Limited Company (BV)' },
+  { value: 'other', label: 'Other' }
 ] as const
 
 export const paymentTermsOptions = [
-  { value: 14, label: '14 dagen' },
-  { value: 30, label: '30 dagen' },
-  { value: 60, label: '60 dagen' },
-  { value: 90, label: '90 dagen' }
+  { value: 14, label: '14 days' },
+  { value: 30, label: '30 days' },
+  { value: 60, label: '60 days' },
+  { value: 90, label: '90 days' }
 ] as const
 
 // Helper function to validate Dutch KvK number

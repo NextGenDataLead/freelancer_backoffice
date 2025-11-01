@@ -39,18 +39,9 @@ export function isReadyForInvoicing(
       const entryYear = entryDate.getFullYear()  
       const entryMonth = entryDate.getMonth() // Keep 0-based for consistency
       
-      const isFromPreviousMonth = (entryYear < currentYear) || 
+      const isFromPreviousMonth = (entryYear < currentYear) ||
         (entryYear === currentYear && entryMonth < currentMonth)
-      
-      // Debug monthly logic specifically
-      console.log('🐛 Monthly logic debug:', {
-        currentYear,
-        currentMonth: currentMonth + 1, // Show 1-based for readability
-        entryYear,
-        entryMonth: entryMonth + 1, // Show 1-based for readability
-        isFromPreviousMonth
-      })
-      
+
       if (isFromPreviousMonth) {
         return { ready: true, reason: `Maandelijkse facturering - entry uit ${getMonthName(entryMonth + 1)} ${entryYear}` }
       } else {

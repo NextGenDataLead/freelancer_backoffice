@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -209,6 +210,17 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
             return sum + (invoice.total_amount - (invoice.paid_amount || 0))
           }, 0)
 
+          // Calculate average payment days from paid invoices (SAME AS DASHBOARD)
+          const paidInvoices = invoices.filter((inv: any) => inv.paid_at)
+          const averagePaymentDays = paidInvoices.length > 0
+            ? Math.round(paidInvoices.reduce((sum: number, inv: any) => {
+                const dueDate = new Date(inv.due_date)
+                const paidDate = new Date(inv.paid_at)
+                const daysDiff = Math.floor((paidDate.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
+                return sum + daysDiff
+              }, 0) / paidInvoices.length)
+            : 0
+
           // Calculate lastActivity first (needed for engagement analysis)
           const lastActivity = thisMonthEntries.length > 0
             ? thisMonthEntries[thisMonthEntries.length - 1].entry_date
@@ -224,10 +236,18 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
             healthScore -= 20
           }
 
-          // Payment behavior (25 points max) - same as dashboard
-          // Note: We don't have payment average days here, so we'll use simplified logic
+          // Payment behavior (25 points max) - UPDATED TO MATCH DASHBOARD
           if (overdueAmount > 0) {
             healthScore -= Math.min(overdueInvoices.length * 5, 20)
+          }
+          // Add payment timing penalty based on average days (same as dashboard)
+          if (averagePaymentDays > 45) {
+            healthScore -= 15
+          } else if (averagePaymentDays > 30) {
+            healthScore -= 10
+          } else if (averagePaymentDays > 0 && averagePaymentDays <= 0) {
+            // Early payments - small bonus
+            healthScore = Math.min(healthScore + 5, 100)
           }
 
           // Project activity (25 points max) - same as dashboard
@@ -361,7 +381,9 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
 
     } catch (error) {
       console.error('Error updating client status:', error)
-      alert(error instanceof Error ? error.message : 'Error updating client status')
+      toast.error('Failed to update client status', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     } finally {
       setUpdatingClients(prev => {
         const newSet = new Set(prev)
@@ -398,7 +420,9 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
 
     } catch (error) {
       console.error('Error updating hourly rate:', error)
-      alert(error instanceof Error ? error.message : 'Error updating hourly rate')
+      toast.error('Failed to update hourly rate', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     }
   }
 
@@ -440,7 +464,7 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
   }
 
   const handleDeleteClient = async (client: EnhancedClient) => {
-    if (!confirm(`Weet je zeker dat je klant "${client.name}" wilt verwijderen?`)) {
+    if (!confirm(`Weet je zeker dat je klant "${client.company_name}" wilt verwijderen?`)) {
       return
     }
 
@@ -461,7 +485,9 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
         onDeleteClient(client)
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error deleting client')
+      toast.error('Failed to delete client', {
+        description: err instanceof Error ? err.message : 'An error occurred'
+      })
     }
   }
 
@@ -473,10 +499,7 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
   }
 
   const getClientType = (client: EnhancedClient) => {
-    if (client.is_business) {
-      return client.company_name || client.name
-    }
-    return `${client.name} (Particulier)`
+    return client.company_name
   }
 
   const getLocationText = (client: EnhancedClient) => {
@@ -607,18 +630,29 @@ export function ClientList({ onAddClient, onEditClient, onDeleteClient }: Client
                     
                     <TableCell>
                       <div className="space-y-1">
-                        {client.email && (
-                          <div className="flex items-center text-xs text-muted-foreground">
-                            <Mail className="h-3 w-3 mr-1" />
-                            {client.email}
-                          </div>
-                        )}
-                        {client.phone && (
-                          <div className="flex items-center text-xs text-muted-foreground">
-                            <Phone className="h-3 w-3 mr-1" />
-                            {client.phone}
-                          </div>
-                        )}
+                        {(() => {
+                          const clientData = client as any
+                          const primaryContact = clientData?.contacts?.find((c: any) => c.contact_type === 'primary')
+                          const email = primaryContact?.email || client.email
+                          const phone = primaryContact?.phone || client.phone
+
+                          return (
+                            <>
+                              {email && (
+                                <div className="flex items-center text-xs text-muted-foreground">
+                                  <Mail className="h-3 w-3 mr-1" />
+                                  {email}
+                                </div>
+                              )}
+                              {phone && (
+                                <div className="flex items-center text-xs text-muted-foreground">
+                                  <Phone className="h-3 w-3 mr-1" />
+                                  {phone}
+                                </div>
+                              )}
+                            </>
+                          )
+                        })()}
                       </div>
                     </TableCell>
                     

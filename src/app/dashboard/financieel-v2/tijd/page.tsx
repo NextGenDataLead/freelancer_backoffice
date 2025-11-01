@@ -5,15 +5,14 @@ import { useSearchParams } from 'next/navigation'
 import { GlassmorphicMetricCard } from '@/components/dashboard/glassmorphic-metric-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { TimeEntryForm } from '@/components/financial/time/time-entry-form'
-import { UnifiedTimeEntryDialog } from '@/components/financial/time/unified-time-entry-dialog'
-import { TimerDialog } from '@/components/financial/time/timer-dialog'
-import { QuickRegistrationDialog } from '@/components/financial/time/quick-registration-dialog'
+import { UnifiedTimeEntryForm } from '@/components/financial/time/unified-time-entry-form'
 import { CalendarTimeEntryView } from '@/components/financial/time/calendar-time-entry-view'
 import { TimeEntryList } from '@/components/financial/time/time-entry-list'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Clock, Plus, Play, Pause, Square, Euro, Users, Keyboard, List, Calendar as CalendarIcon, TrendingUp } from 'lucide-react'
 import { getCurrentDate } from '@/lib/current-date'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 
 export default function TijdPage() {
   const searchParams = useSearchParams()
@@ -26,7 +25,6 @@ export default function TijdPage() {
   const [selectedDescription, setSelectedDescription] = useState<string>('')
   const [selectedClientId, setSelectedClientId] = useState<string>('')
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
-  const [showUnifiedDialog, setShowUnifiedDialog] = useState(false)
   const [timerPaused, setTimerPaused] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [clients, setClients] = useState<any[]>([])
@@ -36,13 +34,13 @@ export default function TijdPage() {
   const [statsLoading, setStatsLoading] = useState(true)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(undefined)
   const [selectedMonth, setSelectedMonth] = useState<Date>(getCurrentDate())
-  const [calendarMode, setCalendarMode] = useState(false)
   const [calendarRefreshTrigger, setCalendarRefreshTrigger] = useState(0)
-  const [showTimerDialog, setShowTimerDialog] = useState(false)
-  const [timerDialogDate, setTimerDialogDate] = useState<Date | undefined>(undefined)
-  const [showQuickRegistrationDialog, setShowQuickRegistrationDialog] = useState(false)
-  const [quickRegistrationDate, setQuickRegistrationDate] = useState<Date | undefined>(undefined)
   const [selectedFilterDate, setSelectedFilterDate] = useState<Date | undefined>(undefined)
+
+  // Unified form state
+  const [showTimeEntryDialog, setShowTimeEntryDialog] = useState(false)
+  const [timeEntryMode, setTimeEntryMode] = useState<'timer' | 'quick' | 'calendar' | 'new'>('new')
+  const [selectedFormDate, setSelectedFormDate] = useState<Date | undefined>()
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const fetchClients = async () => {
@@ -134,7 +132,7 @@ export default function TijdPage() {
   }, [searchParams])
 
   const handleTimeEntryCreated = (timeEntry: any) => {
-    setShowUnifiedDialog(false)
+    setShowTimeEntryDialog(false)
     setRefreshKey(prev => prev + 1)
     fetchClients()
     fetchTimeStats()
@@ -194,8 +192,9 @@ export default function TijdPage() {
   }
 
   const startTimer = () => {
-    setTimerDialogDate(undefined)
-    setShowTimerDialog(true)
+    setTimeEntryMode('timer')
+    setSelectedFormDate(undefined)
+    setShowTimeEntryDialog(true)
   }
 
   const handleStartTimer = (timerData: {
@@ -204,59 +203,10 @@ export default function TijdPage() {
     projectId: string
     project: string
     description: string
-    billable: boolean
-    invoiced: boolean
     hourlyRate: number
     selectedDate?: Date
-    hours?: number
   }) => {
-    const targetDate = timerData.selectedDate || timerDialogDate
-
-    const today = getCurrentDate()
-    const isToday = !targetDate || (targetDate.toDateString() === today.toDateString())
-
-    if (!isToday && targetDate) {
-      // For past/future dates, save a time entry directly
-      const saveTimeEntry = async () => {
-        try {
-          const timeEntryData = {
-            client_id: timerData.clientId,
-            project_id: timerData.projectId,
-            project_name: timerData.project || '',
-            description: timerData.description || '',
-            entry_date: targetDate.toISOString().split('T')[0],
-            hours: timerData.hours || 1,
-            hourly_rate: timerData.hourlyRate || 0,
-            billable: timerData.billable ?? true,
-            invoiced: timerData.invoiced ?? false
-          }
-
-          const response = await fetch('/api/time-entries', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(timeEntryData)
-          })
-
-          if (response.ok) {
-            alert(`Tijdregistratie aangemaakt voor ${targetDate.toLocaleDateString('nl-NL')}!`)
-            handleRefresh()
-            setCalendarRefreshTrigger(prev => prev + 1)
-          } else {
-            const error = await response.json()
-            throw new Error(error.message || 'Failed to create time entry')
-          }
-        } catch (error) {
-          console.error('Error creating time entry:', error)
-          alert(`Er ging iets mis: ${error instanceof Error ? error.message : 'Onbekende fout'}`)
-        }
-      }
-
-      saveTimeEntry()
-      setTimerDialogDate(undefined)
-      return
-    }
-
-    // For today's date: start the actual timer
+    // For timer mode, we always start the actual timer (not saving a time entry)
     const now = new Date()
 
     setSelectedClientId(timerData.clientId)
@@ -267,6 +217,8 @@ export default function TijdPage() {
 
     const timerSession = {
       ...timerData,
+      billable: true,
+      invoiced: false,
       startTime: now.toISOString(),
       pausedTime: 0,
       isPaused: false
@@ -278,8 +230,6 @@ export default function TijdPage() {
     setStartTime(now)
     setTimerRunning(true)
     setCurrentTime('00:00:00')
-
-    setTimerDialogDate(undefined)
   }
 
   const pauseTimer = () => {
@@ -374,7 +324,9 @@ export default function TijdPage() {
         })
 
         if (response.ok) {
-          alert(`Tijd succesvol geregistreerd! ${hours} uur voor "${selectedClient}"`)
+          toast.success('Time registered successfully!', {
+            description: `${hours} hours for "${selectedClient}"`
+          })
           handleRefresh()
 
           window.dispatchEvent(new CustomEvent('time-entry-created', {
@@ -386,7 +338,9 @@ export default function TijdPage() {
         }
       } catch (error) {
         console.error('Error registering time:', error)
-        alert(`Er ging iets mis bij het registreren: ${error instanceof Error ? error.message : 'Onbekende fout'}`)
+        toast.error('Failed to register time', {
+          description: error instanceof Error ? error.message : 'Unknown error'
+        })
       }
     }
 
@@ -406,8 +360,9 @@ export default function TijdPage() {
   const handleDateSelect = (date: Date) => {
     setSelectedCalendarDate(date)
     setSelectedFilterDate(date)
-    setQuickRegistrationDate(date)
-    setShowQuickRegistrationDialog(true)
+    setTimeEntryMode('calendar')
+    setSelectedFormDate(date)
+    setShowTimeEntryDialog(true)
   }
 
   const handleMonthChange = (date: Date) => {
@@ -415,24 +370,9 @@ export default function TijdPage() {
   }
 
   const handleCreateTimeEntryForDate = (date: Date) => {
-    setQuickRegistrationDate(date)
-    setShowQuickRegistrationDialog(true)
-  }
-
-  const handleCalendarTimeEntrySuccess = (timeEntry: any) => {
-    setShowUnifiedDialog(false)
-    setCalendarMode(false)
-    setSelectedCalendarDate(undefined)
-    setCalendarRefreshTrigger(prev => prev + 1)
-    handleTimeEntryCreated(timeEntry)
-  }
-
-  const handleQuickRegistrationSuccess = () => {
-    setShowQuickRegistrationDialog(false)
-    setQuickRegistrationDate(undefined)
-    setCalendarRefreshTrigger(prev => prev + 1)
-    handleRefresh()
-    fetchTimeStats()
+    setTimeEntryMode('calendar')
+    setSelectedFormDate(date)
+    setShowTimeEntryDialog(true)
   }
 
   return (
@@ -446,20 +386,13 @@ export default function TijdPage() {
               className="action-chip"
               style={{ background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)' }}
               onClick={() => {
-                setQuickRegistrationDate(undefined)
-                setShowQuickRegistrationDialog(true)
+                setTimeEntryMode('quick')
+                setSelectedFormDate(undefined)
+                setShowTimeEntryDialog(true)
               }}
             >
               <Clock className="h-4 w-4 mr-2" />
-              Snelle Registratie
-            </button>
-            <button
-              type="button"
-              className="action-chip"
-              onClick={() => setShowUnifiedDialog(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nieuwe Tijdregistratie
+              New registration
             </button>
           </div>
         </div>
@@ -471,11 +404,11 @@ export default function TijdPage() {
               icon={Clock}
               iconColor="rgba(59, 130, 246, 0.7)"
               title="This Week"
-              value={statsLoading ? '...' : `${timeStats?.thisWeek?.hours || 0}h`}
+              value={statsLoading ? '...' : `${timeStats?.thisWeek?.billableHours || 0}h`}
               subtitle={statsLoading ? '...' : (
                 timeStats?.thisWeek?.difference >= 0
-                  ? `+${timeStats.thisWeek.difference}h vs vorige week`
-                  : `${timeStats.thisWeek.difference}h vs vorige week`
+                  ? `+${timeStats.thisWeek.difference}h vs last week`
+                  : `${timeStats.thisWeek.difference}h vs last week`
               )}
               badge={{
                 label: 'Week',
@@ -491,8 +424,8 @@ export default function TijdPage() {
               icon={Clock}
               iconColor="rgba(16, 185, 129, 0.7)"
               title="This Month"
-              value={statsLoading ? '...' : `${timeStats?.thisMonth?.hours || 0}h`}
-              subtitle={statsLoading ? '...' : `€${(timeStats?.thisMonth?.revenue || 0).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} aan uren`}
+              value={statsLoading ? '...' : `${timeStats?.thisMonth?.billableHours || 0}h`}
+              subtitle={statsLoading ? '...' : `€${(timeStats?.thisMonth?.billableRevenue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in hours`}
               badge={{
                 label: 'MTD',
                 color: 'rgba(16, 185, 129, 0.25)',
@@ -501,16 +434,16 @@ export default function TijdPage() {
             />
           </div>
 
-          {/* Card 3: Unbilled */}
+          {/* Card 3: Factureerbaar */}
           <div style={{ gridColumn: 'span 3' }}>
             <GlassmorphicMetricCard
               icon={Euro}
               iconColor="rgba(251, 146, 60, 0.7)"
-              title="Unbilled"
-              value={statsLoading ? '...' : `${timeStats?.unbilled?.hours || 0}h`}
-              subtitle={statsLoading ? '...' : `€${(timeStats?.unbilled?.revenue || 0).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} open staand`}
+              title="Ready to Invoice"
+              value={statsLoading ? '...' : `${timeStats?.factureerbaar?.hours || 0}h`}
+              subtitle={statsLoading ? '...' : `€${(timeStats?.factureerbaar?.revenue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} pending invoice`}
               badge={{
-                label: 'Pending',
+                label: 'Ready',
                 color: 'rgba(251, 146, 60, 0.25)',
               }}
               gradient="linear-gradient(135deg, rgba(251, 146, 60, 0.12), rgba(249, 115, 22, 0.08))"
@@ -524,7 +457,7 @@ export default function TijdPage() {
               iconColor="rgba(139, 92, 246, 0.7)"
               title="Active Projects"
               value={statsLoading ? '...' : timeStats?.projects?.count || 0}
-              subtitle={statsLoading ? '...' : `Voor ${timeStats?.projects?.clients || 0} verschillende klanten`}
+              subtitle={statsLoading ? '...' : `For ${timeStats?.projects?.clients || 0} different clients`}
               badge={{
                 label: 'Projects',
                 color: 'rgba(139, 92, 246, 0.25)',
@@ -554,16 +487,16 @@ export default function TijdPage() {
                   ? `${selectedProject} - ${selectedClient}`
                   : (timerRunning || timerPaused) && selectedClient
                     ? selectedClient
-                    : 'Geen actieve sessie'}
+                    : 'No active session'}
               </p>
               <p className="text-xs text-slate-400">
                 {(timerRunning || timerPaused) && selectedDescription
                   ? selectedDescription
                   : timerRunning && startTime
-                    ? `Gestart om ${startTime.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}`
+                    ? `Started at ${startTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
                     : timerPaused
-                      ? 'Gepauzeerd - klik hervatten om door te gaan'
-                      : 'Klik op "Start Timer" om te beginnen'}
+                      ? 'Paused - click resume to continue'
+                      : 'Click "Start Timer" to begin'}
               </p>
             </div>
             <div className="flex space-x-2">
@@ -577,12 +510,12 @@ export default function TijdPage() {
                     {timerRunning ? (
                       <>
                         <Pause className="h-4 w-4 mr-2" />
-                        Pauzeer
+                        Pause
                       </>
                     ) : (
                       <>
                         <Play className="h-4 w-4 mr-2" />
-                        Hervatten
+                        Resume
                       </>
                     )}
                   </button>
@@ -593,7 +526,7 @@ export default function TijdPage() {
                     onClick={stopAndSaveTimer}
                   >
                     <Square className="h-4 w-4 mr-2" />
-                    Stop & Opslaan
+                    Stop & Save
                   </button>
                 </>
               ) : (
@@ -616,7 +549,7 @@ export default function TijdPage() {
         <div className="card-header">
           <h2 className="card-header__title flex items-center" id="calendar-title">
             <CalendarIcon className="h-5 w-5 mr-2" />
-            Kalenderweergave
+            Calendar View
           </h2>
         </div>
         <CardContent className="pt-6">
@@ -640,7 +573,7 @@ export default function TijdPage() {
           {selectedFilterDate && (
             <div className="flex items-center gap-2 text-sm text-slate-400">
               <CalendarIcon className="h-4 w-4" />
-              <span>Gefilterd op: {selectedFilterDate.toLocaleDateString('nl-NL', {
+              <span>Filtered by: {selectedFilterDate.toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -652,7 +585,7 @@ export default function TijdPage() {
                 style={{ height: '24px', fontSize: '0.75rem', padding: '0 0.5rem' }}
                 onClick={() => setSelectedFilterDate(undefined)}
               >
-                ✕ Wis filter
+                ✕ Clear filter
               </button>
             </div>
           )}
@@ -668,80 +601,23 @@ export default function TijdPage() {
         </CardContent>
       </article>
 
-      {/* Unified Time Entry Dialog */}
-      <Dialog open={showUnifiedDialog} onOpenChange={(open) => {
-        setShowUnifiedDialog(open)
-        if (!open) {
-          setCalendarMode(false)
-          setSelectedCalendarDate(undefined)
-        }
-      }}>
-        <DialogContent
-          className={cn(
-            'max-w-2xl max-h-[90vh] overflow-y-auto',
-            'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95',
-            'border border-white/10 backdrop-blur-2xl',
-            'shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
-          )}
-        >
-          <DialogHeader>
-            <DialogTitle>Nieuwe Tijdregistratie</DialogTitle>
-          </DialogHeader>
-          <UnifiedTimeEntryDialog
-            open={showUnifiedDialog}
-            onOpenChange={(open) => {
-              setShowUnifiedDialog(open)
-              if (!open) {
-                setCalendarMode(false)
-                setSelectedCalendarDate(undefined)
-              }
-            }}
-            selectedDate={selectedCalendarDate}
-            calendarMode={calendarMode}
-            onSuccess={calendarMode ? handleCalendarTimeEntrySuccess : handleTimeEntryCreated}
-            onStartTimer={handleStartTimer}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Time Entry Dialog */}
-      {editingTimeEntry && (
-        <Dialog open={!!editingTimeEntry} onOpenChange={() => setEditingTimeEntry(null)}>
-          <DialogContent
-            className={cn(
-              'max-w-2xl max-h-[90vh] overflow-y-auto',
-              'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95',
-              'border border-white/10 backdrop-blur-2xl',
-              'shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
-            )}
-          >
-            <DialogHeader>
-              <DialogTitle>Tijdregistratie Bewerken</DialogTitle>
-            </DialogHeader>
-            <UnifiedTimeEntryDialog
-              open={!!editingTimeEntry}
-              onOpenChange={() => setEditingTimeEntry(null)}
-              timeEntry={editingTimeEntry}
-              onSuccess={handleTimeEntryUpdated}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Timer Dialog */}
-      <TimerDialog
-        open={showTimerDialog}
-        onOpenChange={setShowTimerDialog}
-        selectedDate={timerDialogDate}
+      {/* Unified Time Entry Form */}
+      <UnifiedTimeEntryForm
+        open={showTimeEntryDialog}
+        onOpenChange={(open) => {
+          setShowTimeEntryDialog(open)
+          if (!open) {
+            setSelectedCalendarDate(undefined)
+            setCalendarRefreshTrigger(prev => prev + 1)
+          }
+        }}
+        mode={timeEntryMode}
+        selectedDate={selectedFormDate}
+        onSuccess={(timeEntry) => {
+          handleTimeEntryCreated(timeEntry)
+          setCalendarRefreshTrigger(prev => prev + 1)
+        }}
         onStartTimer={handleStartTimer}
-      />
-
-      {/* Quick Registration Dialog */}
-      <QuickRegistrationDialog
-        open={showQuickRegistrationDialog}
-        onOpenChange={setShowQuickRegistrationDialog}
-        selectedDate={quickRegistrationDate}
-        onSuccess={handleQuickRegistrationSuccess}
       />
     </section>
   )

@@ -137,7 +137,7 @@ export async function POST(request: Request) {
             .eq('client_id', invoiceData.client_id)
 
           if (timeError || !timeEntries) {
-            errors.push(`Failed to fetch time entries for client ${client.name}`)
+            errors.push(`Failed to fetch time entries for client ${client.company_name}`)
             continue
           }
 
@@ -231,7 +231,7 @@ export async function POST(request: Request) {
           .single()
 
         if (invoiceError) {
-          errors.push(`Failed to create invoice for client ${client.name}: ${invoiceError.message}`)
+          errors.push(`Failed to create invoice for client ${client.company_name}: ${invoiceError.message}`)
           continue
         }
 

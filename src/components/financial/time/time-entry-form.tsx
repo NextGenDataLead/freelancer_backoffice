@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -176,20 +177,26 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
     // Validate required fields before starting timer
     const currentClientId = form.getValues('client_id')
     const currentProjectId = form.getValues('project_id')
-    
+
     if (!currentClientId) {
-      alert('Selecteer eerst een klant voordat je de timer start')
+      toast.error('Validation error', {
+        description: 'Please select a client before starting the timer'
+      })
       return
     }
-    
+
     if (!currentProjectId) {
-      alert('Selecteer eerst een project voordat je de timer start')
+      toast.error('Validation error', {
+        description: 'Please select a project before starting the timer'
+      })
       return
     }
     
     const currentDescription = form.getValues('description')
     if (!currentDescription || currentDescription.trim() === '') {
-      alert('Voer eerst een beschrijving in voordat je de timer start')
+      toast.error('Validation error', {
+        description: 'Please enter a description before starting the timer'
+      })
       return
     }
     
@@ -274,7 +281,9 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
       }
     } catch (error) {
       console.error('Time entry form error:', error)
-      alert(error instanceof Error ? error.message : 'Er is een fout opgetreden')
+      toast.error('Failed to save time entry', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     } finally {
       setIsSubmitting(false)
     }

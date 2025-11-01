@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -116,7 +117,9 @@ export function ProjectList({
 
     } catch (error) {
       console.error('Error updating project status:', error)
-      alert(error instanceof Error ? error.message : 'Error updating project status')
+      toast.error('Failed to update project status', {
+        description: error instanceof Error ? error.message : 'An error occurred'
+      })
     } finally {
       setUpdatingProjects(prev => {
         const newSet = new Set(prev)
@@ -151,7 +154,9 @@ export function ProjectList({
         onDeleteProject(project)
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Error deleting project')
+      toast.error('Failed to delete project', {
+        description: err instanceof Error ? err.message : 'An error occurred'
+      })
     }
   }
 
