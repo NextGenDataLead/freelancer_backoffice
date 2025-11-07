@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { RecurringExpenseForm } from './recurring-expense-form'
 import { RecurringExpensesList } from './recurring-expenses-list'
 import { PreviewModal } from './preview-modal'
+import { DeleteConfirmationDialog } from './delete-confirmation-dialog'
 import { formatEuropeanCurrency } from '@/lib/utils/formatEuropeanNumber'
 import { Plus, ArrowLeft, Repeat, TrendingUp, Calendar, Euro } from 'lucide-react'
 import Link from 'next/link'
@@ -31,6 +33,7 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
   const [previewingTemplate, setPreviewingTemplate] = useState<any>(null)
+  const [deletingTemplate, setDeletingTemplate] = useState<RecurringTemplate | null>(null)
   const [templates, setTemplates] = useState<RecurringTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -90,21 +93,32 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
     setPreviewingTemplate(template)
   }
 
-  const handleDeleteTemplate = async (id: string) => {
-    if (!confirm('Weet je zeker dat je deze terugkerende uitgave wilt verwijderen?')) {
-      return
+  const handleDeleteTemplate = (id: string) => {
+    const template = templates.find(t => t.id === id)
+    if (template) {
+      setDeletingTemplate(template)
     }
+  }
+
+  const confirmDelete = async () => {
+    if (!deletingTemplate) return
 
     try {
-      const response = await fetch(`/api/recurring-expenses/templates/${id}`, {
+      const response = await fetch(`/api/recurring-expenses/templates/${deletingTemplate.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
+        toast.success('Template deleted successfully')
         fetchTemplates()
+      } else {
+        toast.error('Failed to delete template')
       }
     } catch (error) {
       console.error('Error deleting template:', error)
+      toast.error('An error occurred while deleting the template')
+    } finally {
+      setDeletingTemplate(null)
     }
   }
 
@@ -117,10 +131,14 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
       })
 
       if (response.ok) {
+        toast.success('Template updated successfully')
         fetchTemplates()
+      } else {
+        toast.error('Failed to update template')
       }
     } catch (error) {
       console.error('Error toggling template:', error)
+      toast.error('An error occurred while updating the template')
     }
   }
 
@@ -133,19 +151,19 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
             <Link href="/dashboard/financieel-v2">
               <Button variant="ghost" size="sm">
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Terug naar Dashboard
+                Back to Dashboard
               </Button>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Terugkerende Uitgaven</h1>
+              <h1 className="text-3xl font-bold tracking-tight">Recurring Expenses</h1>
               <p className="text-muted-foreground mt-1">
-                Beheer abonnementen, huur en andere vaste kosten voor nauwkeurige cashflow voorspellingen
+                Manage subscriptions, rent and other fixed costs for accurate cashflow forecasting
               </p>
             </div>
           </div>
           <Button onClick={() => setShowCreateForm(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Nieuwe Template
+            New Template
           </Button>
         </div>
       )}
@@ -154,20 +172,20 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Totaal Templates</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Templates</CardTitle>
             <Repeat className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalTemplates}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.activeTemplates} actief
+              {stats.activeTemplates} active
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Maandelijks</CardTitle>
+            <CardTitle className="text-sm font-medium">Monthly</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -175,14 +193,14 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
               {formatEuropeanCurrency(stats.totalMonthlyAmount)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Gemiddelde vaste kosten
+              Average fixed costs
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Jaarlijks</CardTitle>
+            <CardTitle className="text-sm font-medium">Yearly</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -190,7 +208,7 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
               {formatEuropeanCurrency(stats.totalAnnualCost)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Totale jaarkosten
+              Total annual cost
             </p>
           </CardContent>
         </Card>
@@ -205,7 +223,7 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
               {formatEuropeanCurrency(stats.totalMonthlyAmount * 3)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Kwartaal voorspelling
+              Quarterly forecast
             </p>
           </CardContent>
         </Card>
@@ -225,7 +243,7 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
       <Dialog open={showCreateForm} onOpenChange={setShowCreateForm}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nieuwe Terugkerende Uitgave</DialogTitle>
+            <DialogTitle>New Recurring Expense</DialogTitle>
           </DialogHeader>
           <RecurringExpenseForm
             onSuccess={handleTemplateCreated}
@@ -235,16 +253,25 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
       </Dialog>
 
       {/* Edit Dialog */}
-      <Dialog open={!!editingTemplate} onOpenChange={(open) => !open && setEditingTemplate(null)}>
+      <Dialog
+        open={!!editingTemplate}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingTemplate(null)
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Terugkerende Uitgave Bewerken</DialogTitle>
+            <DialogTitle>Edit Recurring Expense</DialogTitle>
           </DialogHeader>
-          <RecurringExpenseForm
-            template={editingTemplate}
-            onSuccess={handleTemplateUpdated}
-            onCancel={() => setEditingTemplate(null)}
-          />
+          {editingTemplate && (
+            <RecurringExpenseForm
+              template={editingTemplate}
+              onSuccess={handleTemplateUpdated}
+              onCancel={() => setEditingTemplate(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -256,6 +283,14 @@ export function RecurringExpensesContent({ showHeader = true, className = '' }: 
           onClose={() => setPreviewingTemplate(null)}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={!!deletingTemplate}
+        onOpenChange={(open) => !open && setDeletingTemplate(null)}
+        onConfirm={confirmDelete}
+        templateName={deletingTemplate?.name}
+      />
     </div>
   )
 }

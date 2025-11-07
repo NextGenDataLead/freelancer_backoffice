@@ -35,9 +35,8 @@ export async function GET(request: NextRequest) {
       .from('recurring_expense_templates')
       .select(`
         *,
-        category:expense_categories(id, name),
-        supplier:supplier_id(id, name, company_name),
-        client:client_id(id, name, company_name)
+        category:expense_categories(id, name)
+
       `)
       .eq('tenant_id', profile.tenant_id)
       .order('created_at', { ascending: false })

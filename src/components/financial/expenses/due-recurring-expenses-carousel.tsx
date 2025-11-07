@@ -112,7 +112,7 @@ export function DueRecurringExpensesCarousel({ onExpenseCreated, variant = 'defa
         window.dispatchEvent(new CustomEvent('expense:created', {
           detail: {
             templateId,
-            expensesCreated: result?.data?.count || outstandingOccurrences.length,
+            expensesCreated: result?.data?.count || 0,
             source: 'recurring_template'
           }
         }))

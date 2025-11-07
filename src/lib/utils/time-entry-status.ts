@@ -22,14 +22,14 @@ export function isReadyForInvoicing(
   
   switch (frequency) {
     case 'on_demand':
-      return { ready: true, reason: 'Klant factureert op verzoek - altijd klaar' }
+      return { ready: true, reason: 'Client invoices on demand - always ready' }
       
     case 'weekly': {
       const daysDiff = Math.floor((currentDate.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24))
       if (daysDiff >= 7) {
-        return { ready: true, reason: `Wekelijkse facturering - entry is ${daysDiff} dagen oud` }
+        return { ready: true, reason: `Weekly invoicing - entry is ${daysDiff} days old` }
       } else {
-        return { ready: false, reason: `Wekelijkse facturering - nog ${7 - daysDiff} dagen te gaan` }
+        return { ready: false, reason: `Weekly invoicing - ${7 - daysDiff} days remaining` }
       }
     }
     
@@ -43,16 +43,16 @@ export function isReadyForInvoicing(
         (entryYear === currentYear && entryMonth < currentMonth)
 
       if (isFromPreviousMonth) {
-        return { ready: true, reason: `Maandelijkse facturering - entry uit ${getMonthName(entryMonth + 1)} ${entryYear}` }
+        return { ready: true, reason: `Monthly invoicing - entry from ${getMonthName(entryMonth + 1)} ${entryYear}` }
       } else {
         const nextMonth = currentMonth === 11 ? 0 : currentMonth + 1 // 0-based months
         const nextYear = currentMonth === 11 ? currentYear + 1 : currentYear
-        return { ready: false, reason: `Maandelijkse facturering - wordt factureerbaar in ${getMonthName(nextMonth + 1)} ${nextYear}` }
+        return { ready: false, reason: `Monthly invoicing - will be billable in ${getMonthName(nextMonth + 1)} ${nextYear}` }
       }
     }
     
     default:
-      return { ready: true, reason: 'Onbekende factureringsfrequentie' }
+      return { ready: true, reason: 'Unknown invoicing frequency' }
   }
 }
 
@@ -74,11 +74,11 @@ export function getTimeEntryStatus(
   if (timeEntry.invoiced || timeEntry.invoice_id) {
     return {
       status: 'gefactureerd',
-      label: 'Gefactureerd',
+      label: 'Invoiced',
       color: 'purple',
       reason: timeEntry.invoice_id
-        ? `Gefactureerd op factuur ${timeEntry.invoice_id}`
-        : 'Reeds gefactureerd'
+        ? `Invoiced on invoice ${timeEntry.invoice_id}`
+        : 'Already invoiced'
     }
   }
   
@@ -86,9 +86,9 @@ export function getTimeEntryStatus(
   if (!timeEntry.billable) {
     return {
       status: 'niet-factureerbaar',
-      label: 'Niet-factureerbaar',
+      label: 'Non-billable',
       color: 'red',
-      reason: 'Markeerd als niet-factureerbaar'
+      reason: 'Marked as non-billable'
     }
   }
   
@@ -100,14 +100,14 @@ export function getTimeEntryStatus(
   if (ready) {
     return {
       status: 'factureerbaar',
-      label: 'Factureerbaar',
+      label: 'Billable',
       color: 'green',
       reason
     }
   } else {
     return {
       status: 'factureerbaar',
-      label: 'Nog niet factureerbaar',
+      label: 'Not yet billable',
       color: 'orange',
       reason
     }
@@ -115,14 +115,14 @@ export function getTimeEntryStatus(
 }
 
 /**
- * Helper function to get Dutch month names
+ * Helper function to get month names
  */
 function getMonthName(month: number): string {
   const monthNames = [
-    '', 'januari', 'februari', 'maart', 'april', 'mei', 'juni',
-    'juli', 'augustus', 'september', 'oktober', 'november', 'december'
+    '', 'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
   ]
-  return monthNames[month] || 'onbekend'
+  return monthNames[month] || 'unknown'
 }
 
 /**

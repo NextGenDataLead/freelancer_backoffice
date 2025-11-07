@@ -26,6 +26,7 @@ import {
   getDayTooltipContent
 } from '@/lib/utils/calendar'
 import type { CalendarViewProps } from '@/lib/types/calendar'
+import { getCurrentDate } from '@/lib/current-date'
 
 interface CalendarTimeEntryViewProps {
   selectedMonth: Date
@@ -99,6 +100,38 @@ export function CalendarTimeEntryView({
     onMonthChange(date)
   }
 
+  // Handle previous month click
+  const handlePreviousMonth = () => {
+    // Update the hook's internal state
+    goToPreviousMonth()
+
+    // Calculate the new month to notify parent
+    const newMonth = new Date(currentMonth)
+    newMonth.setMonth(newMonth.getMonth() - 1)
+    onMonthChange(newMonth)
+  }
+
+  // Handle next month click
+  const handleNextMonth = () => {
+    // Update the hook's internal state
+    goToNextMonth()
+
+    // Calculate the new month to notify parent
+    const newMonth = new Date(currentMonth)
+    newMonth.setMonth(newMonth.getMonth() + 1)
+    onMonthChange(newMonth)
+  }
+
+  // Handle today click
+  const handleTodayClick = () => {
+    // Update the hook's internal state
+    goToToday()
+
+    // Notify parent with today's date
+    const today = getCurrentDate()
+    onMonthChange(new Date(today))
+  }
+
   // Get calendar modifiers for styling
   const modifiers = getCalendarModifiers(monthData)
 
@@ -110,24 +143,26 @@ export function CalendarTimeEntryView({
           <Button
             variant="outline"
             size="icon"
-            onClick={goToPreviousMonth}
-            disabled={loading}
+            onClick={handlePreviousMonth}
+            disabled={false}
+            aria-label="Previous month"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          
+
           <div className="flex items-center gap-2">
             <CalendarIcon className="h-5 w-5 text-muted-foreground" />
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-xl font-semibold" data-testid="calendar-month">
               {format(currentMonth, 'MMMM yyyy')}
             </h2>
           </div>
-          
+
           <Button
             variant="outline"
             size="icon"
-            onClick={goToNextMonth}
-            disabled={loading}
+            onClick={handleNextMonth}
+            disabled={false}
+            aria-label="Next month"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -155,7 +190,7 @@ export function CalendarTimeEntryView({
           <Button
             variant="outline"
             size="sm"
-            onClick={goToToday}
+            onClick={handleTodayClick}
             disabled={loading}
           >
             Today
@@ -203,6 +238,8 @@ export function CalendarTimeEntryView({
             classNames={{
               months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 flex-1",
               month: "space-y-4 w-full flex flex-col",
+              nav: "hidden", // Hide the built-in calendar navigation since we have custom navigation above
+              caption: "hidden", // Hide the built-in month caption since we have custom header above
               table: "w-full h-full border-collapse space-y-1",
               head_row: "",
               head_cell: "rounded-md w-full font-normal text-[0.8rem] text-muted-foreground",
@@ -210,7 +247,7 @@ export function CalendarTimeEntryView({
               cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected].day-range-middle)]:rounded-none",
               day: "h-16 w-full p-0 font-normal aria-selected:opacity-100 hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
               day_range_start: "day-range-start",
-              day_range_middle: "day-range-middle", 
+              day_range_middle: "day-range-middle",
               day_range_end: "day-range-end",
               day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
               day_today: "bg-accent text-accent-foreground font-medium",

@@ -10,6 +10,7 @@ import { Play, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { getCurrentDate } from '@/lib/current-date'
 import { toast } from 'sonner'
+import type { TimeEntryWithClient } from '@/lib/types/financial'
 
 interface Client {
   id: string
@@ -38,10 +39,12 @@ interface TimerData {
 interface UnifiedTimeEntryFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  mode: 'timer' | 'quick' | 'calendar' | 'new'
+  mode: 'timer' | 'quick' | 'calendar' | 'new' | 'edit'
   selectedDate?: Date
+  timeEntry?: TimeEntryWithClient | null
   onSuccess?: (timeEntry: any) => void
   onStartTimer?: (timerData: TimerData) => void
+  clients?: Client[] // Optional: pass clients from parent to avoid refetching
 }
 
 export function UnifiedTimeEntryForm({
@@ -49,8 +52,10 @@ export function UnifiedTimeEntryForm({
   onOpenChange,
   mode,
   selectedDate,
+  timeEntry,
   onSuccess,
-  onStartTimer
+  onStartTimer,
+  clients: propClients
 }: UnifiedTimeEntryFormProps) {
   // State
   const [clients, setClients] = useState<Client[]>([])
@@ -63,20 +68,23 @@ export function UnifiedTimeEntryForm({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [clientsLoading, setClientsLoading] = useState(true)
   const [projectsLoading, setProjectsLoading] = useState(false)
+  const [entryDate, setEntryDate] = useState<string>(format(getCurrentDate(), 'yyyy-MM-dd'))
 
-  // Determine date based on mode
-  const entryDate = mode === 'calendar' && selectedDate
-    ? format(selectedDate, 'yyyy-MM-dd')
-    : format(getCurrentDate(), 'yyyy-MM-dd')
+  const isEditMode = mode === 'edit' && !!timeEntry
 
   // Determine if hours field should be visible
   const showHoursField = mode !== 'timer'
 
   // Determine button text
-  const buttonText = mode === 'timer' ? 'Start Timer' : 'Register Time'
+  const buttonText = mode === 'timer'
+    ? 'Start Timer'
+    : isEditMode
+      ? 'Save Changes'
+      : 'Register Time'
 
   // Determine dialog title
   const getDialogTitle = () => {
+    if (isEditMode) return 'Edit Time Entry'
     if (mode === 'timer') return 'Start Timer'
     if (mode === 'calendar' && selectedDate) {
       return `Register time for ${selectedDate.toLocaleDateString('en-US')}`
@@ -90,6 +98,14 @@ export function UnifiedTimeEntryForm({
     const fetchClients = async () => {
       if (!open) return
 
+      // If clients were passed as props, use them instead of fetching
+      if (propClients && propClients.length > 0) {
+        setClients(propClients)
+        setClientsLoading(false)
+        return
+      }
+
+      // Otherwise fetch from API
       try {
         setClientsLoading(true)
         const clientsResponse = await fetch('/api/clients?limit=100&active=true')
@@ -108,7 +124,7 @@ export function UnifiedTimeEntryForm({
     }
 
     fetchClients()
-  }, [open])
+  }, [open, propClients])
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -119,8 +135,79 @@ export function UnifiedTimeEntryForm({
       setHours(1.0)
       setHourlyRate(0)
       setProjects([])
+      setEntryDate(format(getCurrentDate(), 'yyyy-MM-dd'))
     }
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+
+    if (mode === 'calendar' && selectedDate) {
+      setEntryDate(format(selectedDate, 'yyyy-MM-dd'))
+      return
+    }
+
+    if (isEditMode && timeEntry?.entry_date) {
+      const dateValue =
+        typeof timeEntry.entry_date === 'string'
+          ? timeEntry.entry_date
+          : format(timeEntry.entry_date, 'yyyy-MM-dd')
+      setEntryDate(dateValue)
+      return
+    }
+
+    setEntryDate(format(getCurrentDate(), 'yyyy-MM-dd'))
+  }, [open, mode, selectedDate, isEditMode, timeEntry])
+
+  useEffect(() => {
+    if (!open || !isEditMode || !timeEntry) return
+
+    const clientId = timeEntry.client_id ?? ''
+    setSelectedClientId(clientId)
+    setSelectedProjectId(timeEntry.project_id ?? '')
+    setDescription(timeEntry.description || '')
+
+    const parsedHours =
+      typeof timeEntry.hours === 'number'
+        ? timeEntry.hours
+        : parseFloat(String(timeEntry.hours ?? '0')) || 0
+    setHours(parsedHours)
+
+    const rateSource =
+      typeof timeEntry.hourly_rate === 'number'
+        ? timeEntry.hourly_rate
+        : (timeEntry.hourly_rate
+            ? parseFloat(String(timeEntry.hourly_rate))
+            : undefined)
+
+    const effectiveRate =
+      rateSource ??
+      (typeof timeEntry.effective_hourly_rate === 'number'
+        ? timeEntry.effective_hourly_rate
+        : (timeEntry.effective_hourly_rate
+            ? parseFloat(String(timeEntry.effective_hourly_rate))
+            : undefined)) ??
+      0
+
+    setHourlyRate(
+      typeof effectiveRate === 'number' && !Number.isNaN(effectiveRate)
+        ? effectiveRate
+        : 0
+    )
+
+    const loadProjects = async () => {
+      if (clientId) {
+        await fetchProjects(clientId)
+        if (timeEntry.project_id) {
+          setSelectedProjectId(timeEntry.project_id)
+        }
+      } else {
+        setProjects([])
+      }
+    }
+
+    void loadProjects()
+  }, [open, isEditMode, timeEntry])
 
   const fetchProjects = async (clientId: string) => {
     try {
@@ -189,10 +276,103 @@ export function UnifiedTimeEntryForm({
       return
     }
 
+    if (!selectedProjectId) {
+      toast.error('Validation error', {
+        description: 'Please select a project. Project is mandatory for time entries.'
+      })
+      return
+    }
+
     if (mode !== 'timer' && (!hours || hours <= 0)) {
       toast.error('Validation error', {
         description: 'Please enter a valid number of hours'
       })
+      return
+    }
+
+    if (isEditMode && timeEntry) {
+      const project = projects.find(p => p.id === selectedProjectId)
+      const payload: Record<string, unknown> = {
+        description,
+        entry_date: entryDate,
+        hours,
+        hourly_rate: hourlyRate,
+        billable: true,
+        invoiced: false
+      }
+
+      if (project) {
+        payload.project_id = project.id
+        payload.project_name = project.name
+      } else if (timeEntry.project_id) {
+        payload.project_id = timeEntry.project_id
+        payload.project_name = timeEntry.project_name || ''
+      }
+
+      if (selectedClientId && selectedClientId !== timeEntry.client_id) {
+        payload.client_id = selectedClientId
+      }
+
+      setIsSubmitting(true)
+      try {
+        console.log('Submitting time entry update payload:', payload)
+        const response = await fetch(`/api/time-entries/${timeEntry.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+
+        const responseText = await response.text()
+        console.log('Update response status', response.status, response.ok)
+        if (response.ok) {
+          let data: any = null
+          try {
+            data = responseText ? JSON.parse(responseText) : null
+          } catch (parseError) {
+            console.error('Failed to parse update response JSON:', parseError)
+          }
+
+          onOpenChange(false)
+
+          toast.success('Time entry updated!', {
+            description: 'Changes saved successfully'
+          })
+
+          if (data?.data) {
+            onSuccess?.(data.data)
+          } else {
+            onSuccess?.(data)
+          }
+
+          setTimeout(() => {
+            setSelectedClientId('')
+            setSelectedProjectId('')
+            setDescription('')
+            setHours(1.0)
+            setHourlyRate(0)
+          }, 300)
+        } else {
+          let errorMessage = 'Unknown error'
+          try {
+            const errorData = responseText ? JSON.parse(responseText) : null
+            errorMessage = errorData?.error || errorMessage
+            console.error('Failed to update time entry:', response.status, errorData)
+          } catch {
+            console.error('Failed to update time entry:', response.status, responseText)
+            errorMessage = responseText || errorMessage
+          }
+          toast.error('Failed to update time entry', {
+            description: errorMessage
+          })
+        }
+      } catch (error) {
+        console.error('Error updating time entry:', error)
+        toast.error('Something went wrong', {
+          description: error instanceof Error ? error.message : 'Unknown error'
+        })
+      } finally {
+        setIsSubmitting(false)
+      }
       return
     }
 
@@ -208,6 +388,10 @@ export function UnifiedTimeEntryForm({
         return
       }
 
+      // Close dialog first
+      onOpenChange(false)
+
+      // Start timer
       onStartTimer?.({
         clientId: selectedClientId,
         clientName: client.company_name || client.name,
@@ -216,7 +400,15 @@ export function UnifiedTimeEntryForm({
         description,
         hourlyRate
       })
-      onOpenChange(false)
+
+      // Reset form state after dialog closes
+      setTimeout(() => {
+        setSelectedClientId('')
+        setSelectedProjectId('')
+        setDescription('')
+        setHours(1.0)
+        setHourlyRate(0)
+      }, 300)
     } else {
       // Create time entry
       const project = projects.find(p => p.id === selectedProjectId)
@@ -244,11 +436,29 @@ export function UnifiedTimeEntryForm({
 
         if (response.ok) {
           const data = await response.json()
-          toast.success('Time entry created!', {
-            description: `${hours} hours registered successfully`
-          })
-          onSuccess?.(data.data)
+
+          // Capture values before closing
+          const createdHours = hours
+
+          // Close dialog first
           onOpenChange(false)
+
+          // Show success toast
+          toast.success('Time entry created!', {
+            description: `${createdHours} hours registered successfully`
+          })
+
+          // Notify parent
+          onSuccess?.(data.data)
+
+          // Reset form state after dialog closes
+          setTimeout(() => {
+            setSelectedClientId('')
+            setSelectedProjectId('')
+            setDescription('')
+            setHours(1.0)
+            setHourlyRate(0)
+          }, 300)
         } else {
           const error = await response.json()
           toast.error('Failed to create time entry', {
@@ -300,10 +510,10 @@ export function UnifiedTimeEntryForm({
           {/* Project Select */}
           {selectedClientId && (
             <div className="space-y-2">
-              <Label>Project</Label>
+              <Label>Project *</Label>
               <Select value={selectedProjectId} onValueChange={handleProjectSelect}>
                 <SelectTrigger>
-                  <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select a project (optional)"} />
+                  <SelectValue placeholder={projectsLoading ? "Loading projects..." : "Select a project (required)"} />
                 </SelectTrigger>
                 <SelectContent style={{ zIndex: 10000 }}>
                   {projectsLoading ? (
@@ -324,6 +534,11 @@ export function UnifiedTimeEntryForm({
                   )}
                 </SelectContent>
               </Select>
+              {selectedClientId && projects.length === 0 && !projectsLoading && (
+                <p className="text-sm text-amber-600 dark:text-amber-500">
+                  ⚠️ This client has no projects. Please create a project before registering time.
+                </p>
+              )}
             </div>
           )}
 
@@ -331,6 +546,7 @@ export function UnifiedTimeEntryForm({
           <div className="space-y-2">
             <Label>Description</Label>
             <Input
+              name="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={mode === 'timer' ? 'What will you work on?' : 'What did you work on?'}
@@ -342,6 +558,7 @@ export function UnifiedTimeEntryForm({
             <div className="space-y-2">
               <Label>Number of hours *</Label>
               <Input
+                name="hours"
                 type="number"
                 min="0"
                 step="0.25"
@@ -377,7 +594,7 @@ export function UnifiedTimeEntryForm({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} disabled={isSubmitting || !selectedClientId}>
+            <Button onClick={handleSubmit} disabled={isSubmitting || !selectedClientId || !selectedProjectId}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

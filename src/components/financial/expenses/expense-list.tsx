@@ -13,6 +13,7 @@ import {
   Trash2,
   Calendar
 } from 'lucide-react'
+import { DeleteConfirmationModal } from '@/components/ui/modal'
 import type { ExpenseWithSupplier } from '@/lib/types/financial'
 import { formatEuropeanCurrency } from '@/lib/utils/formatEuropeanNumber'
 import { SkeletonExpenseList } from './skeleton-expense-card'
@@ -97,6 +98,7 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<ExpenseWithSupplier | null>(null)
 
   // Persistent state with localStorage
   const [expandedMonthsArray, setExpandedMonthsArray] = useLocalStorage<string[]>('expense-expanded-months', [])
@@ -483,14 +485,14 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
     })
   }
 
-  const handleDelete = async (expenseId: string) => {
-    if (!confirm('Are you sure you want to delete this expense?')) {
-      return
-    }
+  const handleDelete = async (expense: ExpenseWithSupplier) => {
+    setConfirmDelete(expense)
+  }
 
-    setDeletingExpenseId(expenseId)
+  const performDelete = async (expense: ExpenseWithSupplier) => {
+    setDeletingExpenseId(expense.id)
     try {
-      const response = await fetch(`/api/expenses/${expenseId}`, {
+      const response = await fetch(`/api/expenses/${expense.id}`, {
         method: 'DELETE'
       })
 
@@ -504,7 +506,7 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
       console.error('Error deleting expense:', error)
       toast.error('Failed to delete expense')
     } finally {
-      setDeletingExpenseId(null)
+    setDeletingExpenseId(null)
     }
   }
 
@@ -889,7 +891,7 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleDelete(expense.id)
+                          handleDelete(expense)
                         }}
                         disabled={deletingExpenseId === expense.id}
                         className="p-1.5 rounded hover:bg-red-900/30 text-slate-400 hover:text-red-400 transition-colors disabled:opacity-50"
@@ -931,6 +933,24 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
           </div>
         )}
       </div>
+
+      {confirmDelete && (
+        <DeleteConfirmationModal
+          open={!!confirmDelete}
+          onOpenChange={(open) => {
+            if (!open) {
+              setConfirmDelete(null)
+            }
+          }}
+          itemName="expense"
+          description={`Are you sure you want to delete "${confirmDelete.description || 'this expense'}"? This action cannot be undone.`}
+          onConfirm={async () => {
+            await performDelete(confirmDelete)
+            setConfirmDelete(null)
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </>
   )
 }

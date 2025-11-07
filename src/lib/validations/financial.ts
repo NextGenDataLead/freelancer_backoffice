@@ -219,7 +219,7 @@ export const UpdateInvoiceStatusSchema = z.object({
 // ====================
 
 export const CreateExpenseSchema = z.object({
-  supplier_id: z.string().uuid("Invalid supplier ID").optional(),
+  
   vendor_name: z.string().min(1, "Vendor name is required").max(255, "Vendor name too long"),
   supplier_country: z.string().length(2, "Invalid country code").optional(), // ISO 2-letter country code
   expense_date: z.union([
@@ -237,7 +237,7 @@ export const CreateExpenseSchema = z.object({
 
 export const UpdateExpenseSchema = z.object({
   id: z.string().uuid("Invalid expense ID"),
-  supplier_id: z.string().uuid("Invalid supplier ID").optional(),
+  client_id: z.string().uuid("Invalid client ID").optional(),
   vendor_name: z.string().min(1, "Vendor name is required").max(255, "Vendor name too long").optional(),
   expense_date: z.union([
     z.date(),

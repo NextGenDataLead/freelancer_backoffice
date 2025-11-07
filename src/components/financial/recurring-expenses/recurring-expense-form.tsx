@@ -84,6 +84,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
       })
 
       if (response.ok) {
+        toast.success(template ? 'Template updated successfully' : 'Template created successfully')
         onSuccess()
       } else {
         const error = await response.json()
@@ -106,23 +107,23 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
       {/* Basic Info */}
       <div className="space-y-4">
         <div>
-          <Label htmlFor="name">Naam *</Label>
+          <Label htmlFor="name">Name *</Label>
           <Input
             id="name"
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            placeholder="bijv. Kantoorhuur, Adobe CC, etc."
+            placeholder="e.g. Office Rent, Adobe CC, etc."
             required
           />
         </div>
 
         <div>
-          <Label htmlFor="description">Omschrijving</Label>
+          <Label htmlFor="description">Description</Label>
           <Textarea
             id="description"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="Optionele beschrijving..."
+            placeholder="Optional description..."
             rows={2}
           />
         </div>
@@ -131,7 +132,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
       {/* Amount & Frequency */}
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <Label htmlFor="amount">Bedrag (excl. BTW) *</Label>
+          <Label htmlFor="amount">Amount (excl. VAT) *</Label>
           <Input
             id="amount"
             type="number"
@@ -145,7 +146,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
         </div>
 
         <div>
-          <Label htmlFor="frequency">Frequentie *</Label>
+          <Label htmlFor="frequency">Frequency *</Label>
           <Select
             value={formData.frequency}
             onValueChange={(value) => setFormData({ ...formData, frequency: value })}
@@ -154,10 +155,10 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="weekly">Wekelijks</SelectItem>
-              <SelectItem value="monthly">Maandelijks</SelectItem>
-              <SelectItem value="quarterly">Kwartaal</SelectItem>
-              <SelectItem value="yearly">Jaarlijks</SelectItem>
+              <SelectItem value="weekly">Weekly</SelectItem>
+              <SelectItem value="monthly">Monthly</SelectItem>
+              <SelectItem value="quarterly">Quarterly</SelectItem>
+              <SelectItem value="yearly">Yearly</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -166,7 +167,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
       {/* Dates */}
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <Label htmlFor="start_date">Startdatum *</Label>
+          <Label htmlFor="start_date">Start Date *</Label>
           <Input
             id="start_date"
             type="date"
@@ -177,7 +178,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
         </div>
 
         <div>
-          <Label htmlFor="end_date">Einddatum (optioneel)</Label>
+          <Label htmlFor="end_date">End Date (optional)</Label>
           <Input
             id="end_date"
             type="date"
@@ -185,7 +186,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
             onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Laat leeg voor onbepaalde tijd
+            Leave empty for indefinite period
           </p>
         </div>
       </div>
@@ -193,7 +194,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
       {/* Monthly day preference */}
       {formData.frequency === 'monthly' && (
         <div>
-          <Label htmlFor="day_of_month">Dag van de maand (optioneel)</Label>
+          <Label htmlFor="day_of_month">Day of Month (optional)</Label>
           <Input
             id="day_of_month"
             type="number"
@@ -201,17 +202,17 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
             max="31"
             value={formData.day_of_month}
             onChange={(e) => setFormData({ ...formData, day_of_month: e.target.value })}
-            placeholder="bijv. 1 voor eerste dag van maand"
+            placeholder="e.g. 1 for first day of month"
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Bijvoorbeeld: 1 = eerste dag, 15 = 15e dag
+            For example: 1 = first day, 15 = 15th day
           </p>
         </div>
       )}
 
       {/* Escalation */}
       <div>
-        <Label htmlFor="escalation">Jaarlijkse verhoging % (optioneel)</Label>
+        <Label htmlFor="escalation">Annual Increase % (optional)</Label>
         <Input
           id="escalation"
           type="number"
@@ -220,20 +221,20 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
           max="100"
           value={formData.amount_escalation_percentage}
           onChange={(e) => setFormData({ ...formData, amount_escalation_percentage: e.target.value })}
-          placeholder="bijv. 2.5 voor 2.5% per jaar"
+          placeholder="e.g. 2.5 for 2.5% per year"
         />
         <p className="text-xs text-muted-foreground mt-1">
-          Voor inflatie-aanpassingen of contractuele verhogingen
+          For inflation adjustments or contractual increases
         </p>
       </div>
 
       {/* VAT Settings */}
       <div className="space-y-4 p-4 border rounded-lg">
-        <h3 className="font-medium">BTW Instellingen</h3>
+        <h3 className="font-medium">VAT Settings</h3>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <Label htmlFor="vat_rate">BTW Tarief %</Label>
+            <Label htmlFor="vat_rate">VAT Rate %</Label>
             <Input
               id="vat_rate"
               type="number"
@@ -246,7 +247,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
           </div>
 
           <div>
-            <Label htmlFor="business_use">Zakelijk gebruik %</Label>
+            <Label htmlFor="business_use">Business Use %</Label>
             <Input
               id="business_use"
               type="number"
@@ -259,7 +260,7 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
         </div>
 
         <div className="flex items-center justify-between">
-          <Label htmlFor="vat_deductible">BTW aftrekbaar?</Label>
+          <Label htmlFor="vat_deductible">VAT Deductible?</Label>
           <Switch
             id="vat_deductible"
             checked={formData.is_vat_deductible}
@@ -271,9 +272,9 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
       {/* Active Status */}
       <div className="flex items-center justify-between p-4 border rounded-lg">
         <div>
-          <Label htmlFor="is_active">Template actief</Label>
+          <Label htmlFor="is_active">Template Active</Label>
           <p className="text-sm text-muted-foreground">
-            Alleen actieve templates worden meegenomen in cashflow voorspelling
+            Only active templates are included in cashflow forecast
           </p>
         </div>
         <Switch
@@ -286,11 +287,11 @@ export function RecurringExpenseForm({ template, onSuccess, onCancel }: Recurrin
       {/* Actions */}
       <div className="flex gap-3 justify-end pt-4">
         <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
-          Annuleren
+          Cancel
         </Button>
         <Button type="submit" disabled={loading}>
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {template ? 'Bijwerken' : 'Aanmaken'}
+          {template ? 'Update' : 'Create'}
         </Button>
       </div>
     </form>

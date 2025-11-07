@@ -1,0 +1,69 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e7]:
+        - heading "Sign in to SaaS Template" [level=1] [ref=e8]
+        - paragraph [ref=e9]: Welcome back! Please sign in to continue
+      - generic [ref=e10]:
+        - generic [ref=e12]:
+          - button "Sign in with Apple" [ref=e13] [cursor=pointer]:
+            - img "Sign in with Apple" [ref=e14]
+          - button "Sign in with Google" [ref=e15] [cursor=pointer]:
+            - img "Sign in with Google" [ref=e16]
+          - button "Sign in with Microsoft" [ref=e17] [cursor=pointer]:
+            - img "Sign in with Microsoft" [ref=e18]
+        - paragraph [ref=e21]: or
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - generic [ref=e27]:
+              - generic [ref=e29]: Email address
+              - textbox "Email address" [ref=e30]:
+                - /placeholder: Enter your email address
+                - text: test@example.com
+            - generic [ref=e33]:
+              - generic [ref=e35]: Password
+              - generic [ref=e36]:
+                - textbox "Password" [active] [ref=e37]:
+                  - /placeholder: Enter your password
+                  - text: testpassword123
+                - button "Show password" [ref=e38] [cursor=pointer]:
+                  - img [ref=e39]
+          - button "Continue" [ref=e43] [cursor=pointer]:
+            - generic [ref=e44]:
+              - text: Continue
+              - img [ref=e45]
+    - generic [ref=e47]:
+      - generic [ref=e48]:
+        - generic [ref=e49]: Don’t have an account?
+        - link "Sign up" [ref=e50] [cursor=pointer]:
+          - /url: http://localhost:3000/sign-up
+      - generic [ref=e52]:
+        - generic [ref=e54]:
+          - paragraph [ref=e55]: Secured by
+          - link "Clerk logo" [ref=e56] [cursor=pointer]:
+            - /url: https://go.clerk.com/components
+            - img [ref=e57]
+        - paragraph [ref=e62]: Development mode
+  - banner "Cookie consent banner" [ref=e63]:
+    - generic [ref=e65]:
+      - generic [ref=e66]:
+        - img [ref=e67]
+        - generic [ref=e69]:
+          - heading "We value your privacy" [level=3] [ref=e70]
+          - paragraph [ref=e71]: We use cookies to enhance your browsing experience, analyze site traffic, and personalize content. You can choose to accept all cookies or customize your preferences.
+      - generic [ref=e72]:
+        - button "Customize cookie preferences" [ref=e73] [cursor=pointer]:
+          - img
+          - text: Customize
+        - button "Reject all non-essential cookies" [ref=e74] [cursor=pointer]: Reject All
+        - button "Accept all cookies" [ref=e75] [cursor=pointer]: Accept All
+  - region "Notifications alt+T"
+  - generic [ref=e76]:
+    - img [ref=e78]
+    - button "Open Tanstack query devtools" [ref=e126] [cursor=pointer]:
+      - img [ref=e127]
+  - alert [ref=e175]
+```

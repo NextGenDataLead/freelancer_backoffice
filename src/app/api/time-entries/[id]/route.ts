@@ -135,7 +135,7 @@ export async function PUT(
         *,
         clients (
           id,
-          name,
+          name:company_name,
           company_name,
           is_business,
           hourly_rate

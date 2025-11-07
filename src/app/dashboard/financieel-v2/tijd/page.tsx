@@ -39,7 +39,7 @@ export default function TijdPage() {
 
   // Unified form state
   const [showTimeEntryDialog, setShowTimeEntryDialog] = useState(false)
-  const [timeEntryMode, setTimeEntryMode] = useState<'timer' | 'quick' | 'calendar' | 'new'>('new')
+  const [timeEntryMode, setTimeEntryMode] = useState<'timer' | 'quick' | 'calendar' | 'new' | 'edit'>('new')
   const [selectedFormDate, setSelectedFormDate] = useState<Date | undefined>()
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -133,14 +133,19 @@ export default function TijdPage() {
 
   const handleTimeEntryCreated = (timeEntry: any) => {
     setShowTimeEntryDialog(false)
+    setEditingTimeEntry(null)
+    setTimeEntryMode('new')
     setRefreshKey(prev => prev + 1)
     fetchClients()
     fetchTimeStats()
   }
 
   const handleTimeEntryUpdated = (timeEntry: any) => {
+    setShowTimeEntryDialog(false)
     setEditingTimeEntry(null)
+    setTimeEntryMode('new')
     setRefreshKey(prev => prev + 1)
+    fetchClients()
     fetchTimeStats()
   }
 
@@ -150,7 +155,19 @@ export default function TijdPage() {
   }
 
   const handleEditTimeEntry = (timeEntry: any) => {
+    console.log('Opening edit dialog for time entry:', timeEntry)
     setEditingTimeEntry(timeEntry)
+    setTimeEntryMode('edit')
+    if (timeEntry?.entry_date) {
+      const parsedDate = new Date(timeEntry.entry_date)
+      if (!Number.isNaN(parsedDate.getTime())) {
+        setSelectedFormDate(parsedDate)
+      }
+    } else {
+      setSelectedFormDate(undefined)
+    }
+    setSelectedCalendarDate(undefined)
+    setShowTimeEntryDialog(true)
   }
 
   // Timer effect to update display every second
@@ -392,7 +409,7 @@ export default function TijdPage() {
               }}
             >
               <Clock className="h-4 w-4 mr-2" />
-              New registration
+              New Time Entry
             </button>
           </div>
         </div>
@@ -608,16 +625,25 @@ export default function TijdPage() {
           setShowTimeEntryDialog(open)
           if (!open) {
             setSelectedCalendarDate(undefined)
+            setSelectedFormDate(undefined)
+            setEditingTimeEntry(null)
+            setTimeEntryMode('new')
             setCalendarRefreshTrigger(prev => prev + 1)
           }
         }}
         mode={timeEntryMode}
         selectedDate={selectedFormDate}
+        timeEntry={editingTimeEntry}
         onSuccess={(timeEntry) => {
-          handleTimeEntryCreated(timeEntry)
+          if (timeEntryMode === 'edit') {
+            handleTimeEntryUpdated(timeEntry)
+          } else {
+            handleTimeEntryCreated(timeEntry)
+          }
           setCalendarRefreshTrigger(prev => prev + 1)
         }}
         onStartTimer={handleStartTimer}
+        clients={clients}
       />
     </section>
   )

@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { ExpenseForm } from '@/components/financial/expenses/expense-form'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { RecurringExpensesList } from '@/components/financial/recurring-expenses/recurring-expenses-list'
+import { RecurringExpenseForm } from '@/components/financial/recurring-expenses/recurring-expense-form'
 import { PreviewModal } from '@/components/financial/recurring-expenses/preview-modal'
+import { DeleteConfirmationDialog } from '@/components/financial/recurring-expenses/delete-confirmation-dialog'
 import { formatEuropeanCurrency } from '@/lib/utils/formatEuropeanNumber'
 import { Plus, Repeat, TrendingUp, Calendar, Euro, Receipt } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -29,6 +32,7 @@ export default function TerugkerendeUitgavenPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
   const [previewingTemplate, setPreviewingTemplate] = useState<any>(null)
+  const [deletingTemplate, setDeletingTemplate] = useState<RecurringTemplate | null>(null)
   const [templates, setTemplates] = useState<RecurringTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
@@ -75,6 +79,11 @@ export default function TerugkerendeUitgavenPage() {
     fetchTemplates()
   }
 
+  const handleTemplateUpdated = () => {
+    setEditingTemplate(null)
+    fetchTemplates()
+  }
+
   const handleEditTemplate = (template: any) => {
     setEditingTemplate(template)
   }
@@ -83,21 +92,32 @@ export default function TerugkerendeUitgavenPage() {
     setPreviewingTemplate(template)
   }
 
-  const handleDeleteTemplate = async (id: string) => {
-    if (!confirm('Weet je zeker dat je deze terugkerende uitgave wilt verwijderen?')) {
-      return
+  const handleDeleteTemplate = (id: string) => {
+    const template = templates.find(t => t.id === id)
+    if (template) {
+      setDeletingTemplate(template)
     }
+  }
+
+  const confirmDelete = async () => {
+    if (!deletingTemplate) return
 
     try {
-      const response = await fetch(`/api/recurring-expenses/templates/${id}`, {
+      const response = await fetch(`/api/recurring-expenses/templates/${deletingTemplate.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
+        toast.success('Template deleted successfully')
         fetchTemplates()
+      } else {
+        toast.error('Failed to delete template')
       }
     } catch (error) {
       console.error('Error deleting template:', error)
+      toast.error('An error occurred while deleting the template')
+    } finally {
+      setDeletingTemplate(null)
     }
   }
 
@@ -110,10 +130,14 @@ export default function TerugkerendeUitgavenPage() {
       })
 
       if (response.ok) {
+        toast.success('Template updated successfully')
         fetchTemplates()
+      } else {
+        toast.error('Failed to update template')
       }
     } catch (error) {
       console.error('Error toggling template:', error)
+      toast.error('An error occurred while updating the template')
     }
   }
 
@@ -296,6 +320,32 @@ export default function TerugkerendeUitgavenPage() {
         </CardContent>
       </article>
 
+      {/* Edit Dialog */}
+      <Dialog
+        open={!!editingTemplate}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingTemplate(null)
+          }
+        }}
+      >
+        <DialogContent className={cn(
+          'max-w-2xl max-h-[90vh] overflow-y-auto',
+          'bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-slate-950/95 border border-white/10 backdrop-blur-2xl shadow-[0_40px_120px_rgba(15,23,42,0.45)] text-slate-100'
+        )}>
+          <DialogHeader>
+            <DialogTitle>Edit Recurring Expense</DialogTitle>
+          </DialogHeader>
+          {editingTemplate && (
+            <RecurringExpenseForm
+              template={editingTemplate}
+              onSuccess={handleTemplateUpdated}
+              onCancel={() => setEditingTemplate(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Preview Modal */}
       {previewingTemplate && (
         <PreviewModal
@@ -304,6 +354,15 @@ export default function TerugkerendeUitgavenPage() {
           onClose={() => setPreviewingTemplate(null)}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={!!deletingTemplate}
+        onOpenChange={(open) => !open && setDeletingTemplate(null)}
+        onConfirm={confirmDelete}
+        title="Delete Template?"
+        templateName={deletingTemplate?.name}
+      />
     </section>
   )
 }

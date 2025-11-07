@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { startOfMonth, endOfMonth, format } from 'date-fns'
+import { getCurrentDate } from '@/lib/current-date'
 import type { 
   CalendarTimeEntry, 
   CalendarMonthData,
@@ -48,13 +49,13 @@ interface UseCalendarTimeEntriesReturn {
 }
 
 export function useCalendarTimeEntries({
-  initialMonth = new Date(),
+  initialMonth = getCurrentDate(),
   autoRefresh = true,
   refreshInterval = 30000 // 30 seconds
 }: UseCalendarTimeEntriesOptions = {}): UseCalendarTimeEntriesReturn {
   
   // State management
-  const [currentMonth, setCurrentMonth] = useState<Date>(initialMonth)
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date(initialMonth))
   const [timeEntries, setTimeEntries] = useState<CalendarTimeEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -155,7 +156,7 @@ export function useCalendarTimeEntries({
   }, [])
 
   const goToToday = useCallback(() => {
-    setCurrentMonth(new Date())
+    setCurrentMonth(new Date(getCurrentDate()))
   }, [])
 
   // Data operations

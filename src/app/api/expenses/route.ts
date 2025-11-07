@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     // Build query without supplier join (expenses are for tenant, not clients)
     let query = supabaseAdmin
       .from('expenses')
-      .select('id, tenant_id, title, description, expense_date, amount, currency, category_id, expense_type, payment_method, status, submitted_by, submitted_at, project_code, cost_center, vendor_name, reference_number, requires_reimbursement, client_id, tags, metadata, vat_rate, vat_amount, vat_type, is_vat_deductible, business_percentage, supplier_country_code, supplier_vat_number, is_reverse_charge, requires_manual_review, verified_at, verified_by, created_at, updated_at', { count: 'exact' })
+      .select('id, tenant_id, title, description, expense_date, amount, currency, category_id, expense_type, payment_method, status, submitted_by, submitted_at, project_code, cost_center, vendor_name, reference_number, requires_reimbursement, tags, metadata, vat_rate, vat_amount, vat_type, is_vat_deductible, business_percentage, supplier_country_code, supplier_vat_number, is_reverse_charge, requires_manual_review, verified_at, verified_by, created_at, updated_at', { count: 'exact' })
       .eq('tenant_id', profile.tenant_id)
       .order('expense_date', { ascending: false })
 
@@ -50,9 +50,7 @@ export async function GET(request: Request) {
       query = query.eq('expense_type', validatedQuery.category)
     }
 
-    if (validatedQuery.supplier_id) {
-      query = query.eq('client_id', validatedQuery.supplier_id)
-    }
+
 
     if (validatedQuery.date_from) {
       query = query.gte('expense_date', validatedQuery.date_from)
@@ -202,7 +200,7 @@ export async function POST(request: Request) {
       supplier_country: validatedData.supplier_country || 'NL',
       acquisition_type: acquisitionType,
       // Optional fields - only include if they have values
-      ...(validatedData.supplier_id && { supplier_id: validatedData.supplier_id }),
+
       ...(validatedData.receipt_url && { receipt_url: validatedData.receipt_url })
     }
 
@@ -275,7 +273,7 @@ export async function POST(request: Request) {
         next_occurrence: config.start_date,
         ocr_metadata: ocrMetadata, // Still store OCR metadata for audit trail
         // Optional: link to supplier if we have supplier_id
-        ...(validatedData.supplier_id && { supplier_id: validatedData.supplier_id })
+
       }
 
       console.log('Template data to be inserted:', JSON.stringify(templateData, null, 2))

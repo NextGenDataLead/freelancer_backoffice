@@ -44,18 +44,6 @@ export async function GET(request: Request, { params }: RouteParams) {
       .from('expenses')
       .select(`
         *,
-        supplier:clients(
-          id,
-          name,
-          company_name,
-          email,
-          phone,
-          address,
-          postal_code,
-          city,
-          country_code,
-          vat_number
-        ),
         verified_by_user:profiles!expenses_verified_by_fkey(
           id,
           first_name,
@@ -126,52 +114,106 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
     }
 
-    // Verify supplier exists and belongs to tenant (if provided)
-    if (validatedData.supplier_id) {
-      const { data: supplier, error: supplierError } = await supabaseAdmin
-        .from('clients')
-        .select('id, name')
-        .eq('id', validatedData.supplier_id)
-        .eq('tenant_id', profile.tenant_id)
-        .eq('is_supplier', true)
-        .single()
 
-      if (supplierError || !supplier) {
-        const notFoundError = ApiErrors.NotFound('Supplier')
-        return NextResponse.json(notFoundError, { status: notFoundError.status })
-      }
-    }
 
     // Remove id from validated data for update
     const { id, ...updateData } = validatedData
-    
-    // Calculate VAT amount if amount or VAT rate changed
-    if (updateData.amount !== undefined || updateData.vat_rate !== undefined) {
-      const amount = updateData.amount ?? existingExpense.amount
-      const vatRate = updateData.vat_rate ?? existingExpense.vat_rate
-      
-      updateData.vat_amount = Math.round(amount * vatRate * 100) / 100
-      updateData.total_amount = amount + updateData.vat_amount
+
+    const dbUpdates: Record<string, any> = {}
+
+    if (updateData.vendor_name !== undefined) {
+      dbUpdates.vendor_name = updateData.vendor_name
     }
+
+    if (updateData.expense_date !== undefined) {
+      const formattedDate = updateData.expense_date instanceof Date
+        ? updateData.expense_date.toISOString().split('T')[0]
+        : updateData.expense_date.toString().split('T')[0]
+      dbUpdates.expense_date = formattedDate
+    }
+
+    if (updateData.description !== undefined) {
+      dbUpdates.description = updateData.description
+      dbUpdates.title = updateData.description
+    }
+
+    if (updateData.category !== undefined) {
+      dbUpdates.expense_type = updateData.category
+    }
+
+    if (updateData.is_deductible !== undefined) {
+      dbUpdates.is_vat_deductible = updateData.is_deductible
+    }
+
+
+
+    if (updateData.receipt_url !== undefined) {
+      dbUpdates.receipt_url = updateData.receipt_url
+    }
+
+    const existingAmount = parseFloat(existingExpense.amount)
+    const existingVatRate = parseFloat(existingExpense.vat_rate ?? 0)
+    const amountValueRaw = updateData.amount ?? existingAmount
+    const vatRateValueRaw = updateData.vat_rate ?? existingVatRate
+    const amountValue = typeof amountValueRaw === 'string' ? parseFloat(amountValueRaw) : amountValueRaw
+    const vatRateValue = typeof vatRateValueRaw === 'string' ? parseFloat(vatRateValueRaw) : vatRateValueRaw
+
+    if ((updateData.amount !== undefined || updateData.vat_rate !== undefined || updateData.vat_amount !== undefined) && (!Number.isFinite(amountValue) || !Number.isFinite(vatRateValue))) {
+      console.error('[expenses:update] invalid numeric values', { amount: amountValueRaw, vatRate: vatRateValueRaw })
+      const validationError = ApiErrors.ValidationError('Invalid amount or VAT rate')
+      return NextResponse.json(validationError, { status: validationError.status })
+    }
+
+    if (updateData.amount !== undefined) {
+      dbUpdates.amount = amountValue
+    }
+
+    if (updateData.vat_rate !== undefined) {
+      dbUpdates.vat_rate = vatRateValue
+    }
+
+    if (updateData.amount !== undefined || updateData.vat_rate !== undefined || updateData.vat_amount !== undefined) {
+      const computedVatAmount = Math.round(amountValue * vatRateValue * 100) / 100
+      let finalVatAmount = computedVatAmount
+
+      if (updateData.vat_amount !== undefined) {
+        const providedVatAmount = typeof updateData.vat_amount === 'string'
+          ? parseFloat(updateData.vat_amount)
+          : updateData.vat_amount
+
+        if (!Number.isFinite(providedVatAmount)) {
+          console.error('[expenses:update] invalid vat_amount value', { vat_amount: updateData.vat_amount })
+          const validationError = ApiErrors.ValidationError('Invalid VAT amount')
+          return NextResponse.json(validationError, { status: validationError.status })
+        }
+
+        finalVatAmount = providedVatAmount
+      }
+
+      dbUpdates.vat_amount = finalVatAmount
+      dbUpdates.vat_rate = vatRateValue
+      dbUpdates.vat_type = vatRateValue === -1 ? 'reverse_charge' : 'standard'
+      dbUpdates.is_reverse_charge = vatRateValue === -1
+    }
+
+    if (Object.keys(dbUpdates).length === 0) {
+      const response = createApiResponse(existingExpense, 'Expense updated successfully')
+      return NextResponse.json(response)
+    }
+
+    console.log('[expenses:update] applying updates:', dbUpdates)
 
     // Update expense
     const { data: updatedExpense, error: updateError } = await supabaseAdmin
       .from('expenses')
       .update({
-        ...updateData,
+        ...dbUpdates,
         updated_at: getCurrentDate().toISOString()
       })
       .eq('id', expenseId)
       .eq('tenant_id', profile.tenant_id)
       .select(`
-        *,
-        supplier:clients(
-          id,
-          name,
-          company_name,
-          email,
-          country_code
-        )
+        *
       `)
       .single()
 
@@ -179,6 +221,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       console.error('Error updating expense:', updateError)
       return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
     }
+
+    console.log('[expenses:update] update succeeded for expense', expenseId)
 
     // Create audit log
     await createTransactionLog(
@@ -316,6 +360,52 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
   } catch (error) {
     console.error('Expense deletion error:', error)
+    return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+  }
+}
+
+/**
+ * PATCH /api/expenses/[id]
+ * Updates the status of a specific expense by ID
+ */
+export async function PATCH(request: Request, { params }: RouteParams) {
+  try {
+    // Get authenticated user profile
+    const profile = await getCurrentUserProfile()
+    
+    if (!profile) {
+      return NextResponse.json(ApiErrors.Unauthorized, { status: ApiErrors.Unauthorized.status })
+    }
+
+    const expenseId = params.id
+    const body = await request.json()
+
+    // Validate request data
+    const { status } = body
+    if (status !== 'approved' && status !== 'draft') {
+      const validationError = ApiErrors.ValidationError('Invalid status')
+      return NextResponse.json(validationError, { status: validationError.status })
+    }
+
+    // Update expense status
+    const { data: updatedExpense, error: updateError } = await supabaseAdmin
+      .from('expenses')
+      .update({ status, updated_at: getCurrentDate().toISOString() })
+      .eq('id', expenseId)
+      .eq('tenant_id', profile.tenant_id)
+      .select('*')
+      .single()
+
+    if (updateError) {
+      console.error('Error updating expense status:', updateError)
+      return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+    }
+
+    const response = createApiResponse(updatedExpense, 'Expense status updated successfully')
+    return NextResponse.json(response)
+
+  } catch (error) {
+    console.error('Expense status update error:', error)
     return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
   }
 }

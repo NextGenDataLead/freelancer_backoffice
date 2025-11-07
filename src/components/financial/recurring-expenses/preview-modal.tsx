@@ -57,9 +57,9 @@ export function PreviewModal({ template, open, onClose }: PreviewModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Voorspelling: {template?.name}</DialogTitle>
+          <DialogTitle>Preview Recurring Expense: {template?.name}</DialogTitle>
         </DialogHeader>
 
         {loading ? (
@@ -73,7 +73,7 @@ export function PreviewModal({ template, open, onClose }: PreviewModalProps) {
               <div className="p-4 border rounded-lg">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                   <TrendingUp className="h-4 w-4" />
-                  Jaarkosten
+                  Annual Cost
                 </div>
                 <div className="text-2xl font-bold">
                   {formatEuropeanCurrency(previewData.metrics.annual_cost)}
@@ -83,7 +83,7 @@ export function PreviewModal({ template, open, onClose }: PreviewModalProps) {
               <div className="p-4 border rounded-lg">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                   <Calendar className="h-4 w-4" />
-                  Maandgemiddelde
+                  Monthly Average
                 </div>
                 <div className="text-2xl font-bold">
                   {formatEuropeanCurrency(previewData.metrics.average_monthly_cost)}
@@ -93,7 +93,7 @@ export function PreviewModal({ template, open, onClose }: PreviewModalProps) {
               <div className="p-4 border rounded-lg">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                   <Euro className="h-4 w-4" />
-                  Totaal (6 mnd)
+                  Total (6 months)
                 </div>
                 <div className="text-2xl font-bold">
                   {formatEuropeanCurrency(previewData.metrics.total_cost)}
@@ -103,7 +103,7 @@ export function PreviewModal({ template, open, onClose }: PreviewModalProps) {
 
             {/* Occurrences */}
             <div>
-              <h3 className="font-medium mb-3">Volgende 6 voorkomens</h3>
+              <h3 className="font-medium mb-3">Next 6 Occurrences</h3>
               <div className="space-y-2">
                 {previewData.occurrences.map((occurrence, index) => (
                   <div
@@ -112,7 +112,7 @@ export function PreviewModal({ template, open, onClose }: PreviewModalProps) {
                   >
                     <div>
                       <div className="font-medium">
-                        {new Date(occurrence.date).toLocaleDateString('nl-NL', {
+                        {new Date(occurrence.date).toLocaleDateString('en-US', {
                           weekday: 'long',
                           year: 'numeric',
                           month: 'long',
@@ -120,12 +120,12 @@ export function PreviewModal({ template, open, onClose }: PreviewModalProps) {
                         })}
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        Excl. BTW: {formatEuropeanCurrency(occurrence.amount)}
+                        Excl. VAT: {formatEuropeanCurrency(occurrence.amount)}
                         {occurrence.vat_amount > 0 && (
-                          <> • BTW: {formatEuropeanCurrency(occurrence.vat_amount)}</>
+                          <> • VAT: {formatEuropeanCurrency(occurrence.vat_amount)}</>
                         )}
                         {occurrence.deductible_vat_amount > 0 && (
-                          <> • Aftrekbaar: {formatEuropeanCurrency(occurrence.deductible_vat_amount)}</>
+                          <> • Deductible: {formatEuropeanCurrency(occurrence.deductible_vat_amount)}</>
                         )}
                       </div>
                     </div>
@@ -139,12 +139,12 @@ export function PreviewModal({ template, open, onClose }: PreviewModalProps) {
 
             {/* Info */}
             <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-              💡 Deze voorspelling wordt automatisch toegevoegd aan je cashflow forecast
+              💡 This forecast is automatically added to your cashflow forecast
             </div>
           </div>
         ) : (
           <div className="text-center py-12 text-muted-foreground">
-            Kon geen voorspelling laden
+            Could not load preview
           </div>
         )}
       </DialogContent>

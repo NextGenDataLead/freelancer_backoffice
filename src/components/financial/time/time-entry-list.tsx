@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { DeleteConfirmationModal } from '@/components/ui/modal'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { 
@@ -13,13 +14,6 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table'
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger,
-  DropdownMenuPortal 
-} from '@/components/ui/dropdown-menu'
 import {
   Clock,
   MoreHorizontal,
@@ -55,6 +49,10 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{
+    id: string
+    description: string
+  } | null>(null)
 
   // Filter time entries by date if dateFilter is provided
   const filteredTimeEntries = useMemo(() => {
@@ -135,11 +133,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
     fetchTimeEntries()
   }, [limit]) // Component will remount due to key change, so this will run again
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this time entry?')) {
-      return
-    }
-
+  const performDelete = async (id: string) => {
     try {
       const response = await fetch(`/api/time-entries/${id}`, {
         method: 'DELETE'
@@ -158,6 +152,15 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
       })
     }
   }
+
+  const requestDelete = (entry: TimeEntryWithClient) => {
+    setConfirmDelete({
+      id: entry.id,
+      description: entry.description || formatDate(entry.entry_date)
+    })
+  }
+
+  const closeConfirmation = () => setConfirmDelete(null)
 
   const handleToggleBillable = async (timeEntry: TimeEntryWithClient) => {
     try {
@@ -262,7 +265,8 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
   }
 
   return (
-    <Card>
+    <>
+      <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -394,7 +398,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                             <FolderOpen className="h-4 w-4 text-muted-foreground" />
                             <div className="font-medium">
                               {entry.project_name}
-                              <div className="text-xs text-muted-foreground">Vrije tekst</div>
+                              <div className="text-xs text-muted-foreground">Free text</div>
                             </div>
                           </>
                         ) : (
@@ -423,7 +427,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                             {entry.effective_hourly_rate && entry.effective_hourly_rate !== entry.hourly_rate && (
                               <div className="text-xs text-muted-foreground flex items-center gap-1">
                                 <Info className="h-3 w-3" />
-                                Effectief tarief
+                                Effective rate
                               </div>
                             )}
                           </div>
@@ -433,10 +437,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                     
                     <TableCell className="text-right font-medium">
                       {entry.effective_hourly_rate || entry.hourly_rate ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <Euro className="h-3 w-3" />
-                          {formatCurrency(entry.hours * (entry.effective_hourly_rate || entry.hourly_rate))}
-                        </div>
+                        formatCurrency(entry.hours * (entry.effective_hourly_rate || entry.hourly_rate))
                       ) : '-'}
                     </TableCell>
                     
@@ -516,11 +517,13 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                     
                     <TableCell>
                       <div className="relative">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-8 w-8 p-0"
                           onClick={() => setOpenDropdown(openDropdown === entry.id ? null : entry.id)}
+                          aria-label="More options"
+                          data-entry-id={entry.id}
                         >
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
@@ -537,26 +540,30 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                               </div>
                             ) : (
                               <>
-                                <div
-                                  className="px-3 py-2 text-sm hover:bg-gray-100 cursor-pointer flex items-center"
+                                <button
+                                  type="button"
+                                  className="px-3 py-2 text-sm hover:bg-gray-100 flex w-full items-center text-left"
                                   onClick={() => {
                                     onEdit?.(entry)
                                     setOpenDropdown(null)
                                   }}
+                                  aria-label="Edit time entry"
                                 >
                                   <Edit2 className="h-4 w-4 mr-2" />
                                   Edit
-                                </div>
-                                <div
-                                  className="px-3 py-2 text-sm hover:bg-red-50 cursor-pointer flex items-center text-red-600"
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-3 py-2 text-sm hover:bg-red-50 flex w-full items-center text-left text-red-600"
                                   onClick={() => {
-                                    handleDelete(entry.id)
+                                    requestDelete(entry)
                                     setOpenDropdown(null)
                                   }}
+                                  aria-label="Delete time entry"
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
                                   Delete
-                                </div>
+                                </button>
                               </>
                             )}
                           </div>
@@ -570,6 +577,25 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
           </div>
         )}
       </CardContent>
-    </Card>
+      </Card>
+
+      {confirmDelete && (
+        <DeleteConfirmationModal
+          open={!!confirmDelete}
+          onOpenChange={(open) => {
+            if (!open) {
+              closeConfirmation()
+            }
+          }}
+          itemName="time entry"
+          description={`Are you sure you want to delete "${confirmDelete.description}"? This action cannot be undone.`}
+          onConfirm={async () => {
+            await performDelete(confirmDelete.id)
+            closeConfirmation()
+          }}
+          onCancel={closeConfirmation}
+        />
+      )}
+    </>
   )
 }

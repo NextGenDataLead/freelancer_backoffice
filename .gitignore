@@ -71,8 +71,8 @@ src/app/dashboard/page-complex.tsx
 src/app/test/
 # src/middleware.ts
 
-# Optional: Uncomment if you want to ignore all test files during development
-# src/__tests__/
+# Test files - not tracked in git
+src/__tests__/
 # tests/
 
 # Clerk configuration (can include secrets)
@@ -177,3 +177,4 @@ out/
 *~
 *.swp
 *.swo
+.auth/

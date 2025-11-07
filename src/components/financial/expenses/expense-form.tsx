@@ -92,8 +92,82 @@ const VAT_RATES = [
   { value: -1, label: 'BTW Verlegd (Reverse Charge)' }
 ]
 
+const getTodayDateString = () => new Date().toISOString().split('T')[0]
+
+const normalizeNumberField = (value: unknown, fallback = 0) => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+
+  if (value === null || value === undefined) {
+    return fallback
+  }
+
+  return fallback
+}
+
+const normalizeDateField = (value: unknown) => {
+  if (!value) {
+    return getTodayDateString()
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().split('T')[0]
+  }
+
+  if (typeof value === 'string') {
+    const parsed = new Date(value)
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0]
+    }
+  }
+
+  return getTodayDateString()
+}
+
 export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, variant = 'default', defaultRecurring = false }: ExpenseFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isApproved, setIsApproved] = useState(expense?.status === 'approved')
+
+  useEffect(() => {
+    setIsApproved(expense?.status === 'approved')
+  }, [expense])
+
+  const handleUnapprove = async () => {
+    if (!expense) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch(`/api/expenses/${expense.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'draft' }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to un-approve expense')
+      }
+
+      const result = await response.json()
+      onSuccess?.(result.data)
+      toast.success('Expense un-approved successfully')
+    } catch (error) {
+      console.error('Expense un-approve error:', error)
+      toast.error('Failed to un-approve expense', {
+        description: error instanceof Error ? error.message : 'An error occurred',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
   // Removed suppliers state - using vendor_name instead
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [ocrProcessing, setOcrProcessing] = useState(false)
@@ -102,7 +176,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
   const [recurringConfig, setRecurringConfig] = useState({
     template_name: '',
     frequency: 'monthly' as 'weekly' | 'monthly' | 'quarterly' | 'yearly',
-    start_date: new Date().toISOString().split('T')[0],
+    start_date: getTodayDateString(),
     end_date: '',
     day_of_month: undefined as number | undefined,
     amount_escalation_percentage: undefined as number | undefined
@@ -112,15 +186,49 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
     resolver: zodResolver(CreateExpenseSchema),
     defaultValues: {
       vendor_name: expense?.vendor_name || '',
-      expense_date: expense?.expense_date || new Date().toISOString().split('T')[0],
+      expense_date: normalizeDateField(expense?.expense_date),
       description: expense?.description || '',
       category: expense?.category || 'overige_zakelijk',
-      amount: expense?.amount || 0,
-      vat_amount: expense?.vat_amount || 0,
-      vat_rate: expense?.vat_rate || 0.21,
+      amount: normalizeNumberField(expense?.amount),
+      vat_amount: normalizeNumberField(expense?.vat_amount),
+      vat_rate: normalizeNumberField(expense?.vat_rate, 0.21),
       is_deductible: expense?.is_deductible ?? true,
+
+      receipt_url: expense?.receipt_url ?? undefined,
     },
   })
+
+  useEffect(() => {
+    if (expense) {
+      form.reset({
+        vendor_name: expense.vendor_name || '',
+        expense_date: normalizeDateField(expense.expense_date),
+        description: expense.description || '',
+        category: expense.category || 'overige_zakelijk',
+        amount: normalizeNumberField(expense.amount),
+        vat_amount: normalizeNumberField(expense.vat_amount),
+        vat_rate: normalizeNumberField(expense.vat_rate, 0.21),
+        is_deductible: expense.is_deductible ?? true,
+
+        receipt_url: expense.receipt_url ?? undefined,
+      })
+      setIsRecurring(Boolean((expense as any)?.metadata?.template_id))
+    } else {
+      form.reset({
+        vendor_name: '',
+        expense_date: getTodayDateString(),
+        description: '',
+        category: 'overige_zakelijk',
+        amount: 0,
+        vat_amount: 0,
+        vat_rate: 0.21,
+        is_deductible: true,
+
+        receipt_url: undefined,
+      })
+      setIsRecurring(defaultRecurring)
+    }
+  }, [expense, defaultRecurring, form])
 
   // Removed supplier fetching - using vendor_name input instead
 
@@ -341,7 +449,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
           vat_rate: data.vat_rate,
           is_deductible: data.is_deductible,
           // Optional fields from update schema
-          supplier_id: data.supplier_id,
+
           receipt_url: data.receipt_url
         }
       } else {
@@ -355,8 +463,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
           vat_amount: vatAmount,
           vat_rate: data.vat_rate,
           is_deductible: data.is_deductible,
-          // Optional fields from schema
-          supplier_id: data.supplier_id,
+
           receipt_url: data.receipt_url,
           supplier_country: supplierCountry,
           // Recurring configuration
@@ -511,7 +618,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                   className="hidden"
                   accept="image/*,.pdf"
                   onChange={handleFileUpload}
-                  disabled={ocrProcessing}
+                  disabled={isApproved || ocrProcessing}
                 />
               </label>
             </div>
@@ -580,6 +687,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                       </FormLabel>
                       <FormControl>
                         <Input
+                          disabled={isApproved}
                           className={cn(isGlass && glassInputClass)}
                           placeholder="Bijv. Albert Heijn, Adobe, Microsoft..."
                           {...field} 
@@ -603,7 +711,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                         Datum
                       </FormLabel>
                       <FormControl>
-                        <Input type="date" className={cn(isGlass && glassInputClass)} {...field} />
+                        <Input type="date" disabled={isApproved} className={cn(isGlass && glassInputClass)} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -628,6 +736,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                     <FormLabel>Beschrijving</FormLabel>
                     <FormControl>
                       <Textarea
+                        disabled={isApproved}
                         className={cn('resize-none', isGlass && `${glassInputClass} placeholder:text-slate-300`)}
                         placeholder="Kantoorbenodigdheden voor Q1..."
                         rows={2}
@@ -645,7 +754,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Categorie</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isApproved}>
                       <FormControl>
                         <SelectTrigger className={cn(isGlass && glassSelectTriggerClass)}>
                           <SelectValue placeholder="Selecteer categorie" />
@@ -674,6 +783,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                       <FormLabel>Bedrag (excl. BTW)</FormLabel>
                       <FormControl>
                         <Input
+                          disabled={isApproved}
                           className={cn(isGlass && glassInputClass)}
                           type="number"
                           min="0"
@@ -709,6 +819,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                       <Select 
                         onValueChange={(value) => field.onChange(parseFloat(value))}
                         value={field.value.toString()}
+                        disabled={isApproved}
                       >
                         <FormControl>
                           <SelectTrigger className={cn(isGlass && glassSelectTriggerClass)}>
@@ -797,6 +908,7 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                       <Checkbox
                         checked={field.value}
                         onCheckedChange={field.onChange}
+                        disabled={isApproved}
                       />
                     </FormControl>
                   </FormItem>
@@ -929,16 +1041,27 @@ export function ExpenseForm({ expense, onSuccess, onCancel, enableOCR = false, v
                 </Card>
               )}
 
-              {/* Form Actions */}
               <div className="flex gap-3 pt-4">
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1"
-                >
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {expense ? 'Uitgave bijwerken' : 'Uitgave toevoegen'}
-                </Button>
+                {isApproved ? (
+                  <Button
+                    type="button"
+                    onClick={handleUnapprove}
+                    disabled={isSubmitting}
+                    className="flex-1"
+                  >
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Un-approve
+                  </Button>
+                ) : (
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1"
+                  >
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {expense ? 'Uitgave bijwerken' : 'Uitgave toevoegen'}
+                  </Button>
+                )}
 
                 {onCancel && (
                   <Button
