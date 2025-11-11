@@ -35,8 +35,12 @@ export async function GET(request: Request) {
     // Parse query parameters
     const { searchParams } = new URL(request.url)
     const queryParams = Object.fromEntries(searchParams.entries())
-    
+
+    console.log('📅 Expense filter query params:', queryParams)
+
     const validatedQuery = ExpensesQuerySchema.parse(queryParams)
+
+    console.log('📅 Validated query:', validatedQuery)
 
     // Build query without supplier join (expenses are for tenant, not clients)
     let query = supabaseAdmin
@@ -53,11 +57,17 @@ export async function GET(request: Request) {
 
 
     if (validatedQuery.date_from) {
+      console.log('📅 Applying date_from filter:', validatedQuery.date_from)
       query = query.gte('expense_date', validatedQuery.date_from)
     }
 
     if (validatedQuery.date_to) {
-      query = query.lte('expense_date', validatedQuery.date_to)
+      console.log('📅 Applying date_to filter:', validatedQuery.date_to)
+      // Add one day to make the filter inclusive of the entire end date
+      const nextDay = new Date(validatedQuery.date_to)
+      nextDay.setDate(nextDay.getDate() + 1)
+      const nextDayStr = nextDay.toISOString().split('T')[0]
+      query = query.lt('expense_date', nextDayStr)
     }
 
     if (validatedQuery.verified !== undefined) {
@@ -75,6 +85,11 @@ export async function GET(request: Request) {
     query = query.range(from, to)
 
     const { data: expenses, error, count } = await query
+
+    console.log('📅 Query result: Found', count, 'expenses')
+    if (expenses && expenses.length > 0) {
+      console.log('📅 First few expense dates:', expenses.slice(0, 3).map(e => e.expense_date))
+    }
 
     if (error) {
       console.error('Error fetching expenses:', error)

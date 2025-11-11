@@ -72,7 +72,7 @@ src/app/test/
 # src/middleware.ts
 
 # Test files - not tracked in git
-src/__tests__/
+# src/__tests__/
 # tests/
 
 # Clerk configuration (can include secrets)

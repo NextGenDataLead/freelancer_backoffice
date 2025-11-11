@@ -63,6 +63,8 @@ export function ExpenseFilterBar({
 }: ExpenseFilterBarProps) {
   const [localSearch, setLocalSearch] = useState(filters.search)
   const [isExpanded, setIsExpanded] = useState(false)
+  const [dateFromOpen, setDateFromOpen] = useState(false)
+  const [dateToOpen, setDateToOpen] = useState(false)
 
   // Debounce search input
   useEffect(() => {
@@ -74,6 +76,21 @@ export function ExpenseFilterBar({
 
     return () => clearTimeout(timer)
   }, [localSearch, filters, onFiltersChange])
+
+  // Keep filter panel expanded when filters are active
+  useEffect(() => {
+    const hasNonSearchFilters =
+      filters.categories.length > 0 ||
+      filters.dateFrom ||
+      filters.dateTo ||
+      filters.amountMin !== null ||
+      filters.amountMax !== null ||
+      filters.status !== 'all'
+
+    if (hasNonSearchFilters) {
+      setIsExpanded(true)
+    }
+  }, [filters])
 
   const handleClearFilters = useCallback(() => {
     setLocalSearch('')
@@ -103,6 +120,16 @@ export function ExpenseFilterBar({
     (filters.dateFrom || filters.dateTo ? 1 : 0) +
     (filters.amountMin !== null || filters.amountMax !== null ? 1 : 0) +
     (filters.status !== 'all' ? 1 : 0)
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Filter state updated:', {
+      dateFrom: filters.dateFrom,
+      dateTo: filters.dateTo,
+      hasActiveFilters,
+      activeFilterCount
+    })
+  }, [filters.dateFrom, filters.dateTo, hasActiveFilters, activeFilterCount])
 
   return (
     <div
@@ -216,7 +243,7 @@ export function ExpenseFilterBar({
             <label className="text-sm font-medium mb-2 block" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
               Date From
             </label>
-            <Popover>
+            <Popover open={dateFromOpen} onOpenChange={setDateFromOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -230,9 +257,12 @@ export function ExpenseFilterBar({
                 <Calendar
                   mode="single"
                   selected={filters.dateFrom ? new Date(filters.dateFrom) : undefined}
-                  onSelect={(date) =>
-                    onFiltersChange({ ...filters, dateFrom: date?.toISOString().split('T')[0] || null })
-                  }
+                  onSelect={(date) => {
+                    const newDateFrom = date?.toISOString().split('T')[0] || null
+                    console.log('Date From selected:', newDateFrom)
+                    onFiltersChange({ ...filters, dateFrom: newDateFrom })
+                    setDateFromOpen(false) // Close popover after selection
+                  }}
                   initialFocus
                 />
               </PopoverContent>
@@ -244,7 +274,7 @@ export function ExpenseFilterBar({
             <label className="text-sm font-medium mb-2 block" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
               Date To
             </label>
-            <Popover>
+            <Popover open={dateToOpen} onOpenChange={setDateToOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -258,9 +288,12 @@ export function ExpenseFilterBar({
                 <Calendar
                   mode="single"
                   selected={filters.dateTo ? new Date(filters.dateTo) : undefined}
-                  onSelect={(date) =>
-                    onFiltersChange({ ...filters, dateTo: date?.toISOString().split('T')[0] || null })
-                  }
+                  onSelect={(date) => {
+                    const newDateTo = date?.toISOString().split('T')[0] || null
+                    console.log('Date To selected:', newDateTo)
+                    onFiltersChange({ ...filters, dateTo: newDateTo })
+                    setDateToOpen(false) // Close popover after selection
+                  }}
                   initialFocus
                 />
               </PopoverContent>

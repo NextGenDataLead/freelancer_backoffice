@@ -474,8 +474,8 @@ export const InvoicesQuerySchema = PaginationSchema.extend({
 export const ExpensesQuerySchema = PaginationSchema.extend({
   category: ExpenseCategorySchema.optional(),
   supplier_id: z.string().uuid().optional(),
-  date_from: z.string().datetime().optional(),
-  date_to: z.string().datetime().optional(),
+  date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), // Date format: YYYY-MM-DD
+  date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),   // Date format: YYYY-MM-DD
   verified: z.coerce.boolean().optional()
 });
 

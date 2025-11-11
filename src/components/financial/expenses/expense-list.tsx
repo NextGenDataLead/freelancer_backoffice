@@ -231,10 +231,15 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
   }, [loadingMore, hasMore, currentPage, fetchExpenses])
 
   const handleFiltersChange = useCallback((newFilters: ExpenseFilters) => {
-    setFilters(newFilters)
+    console.log('handleFiltersChange called with:', newFilters)
+
     // Reset pagination when filters change
     setCurrentPage(1)
     setExpenses([])
+    setHasMore(true)
+
+    // Update filters state (this will trigger the useEffect that fetches)
+    setFilters(newFilters)
 
     // Update URL params for deep linking
     const params = new URLSearchParams()
@@ -435,10 +440,9 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
 
   // Refetch when filters change
   useEffect(() => {
-    if (currentPage === 1) {
-      fetchExpenses(1, false)
-    }
-  }, [filters]) // eslint-disable-line react-hooks/exhaustive-deps
+    console.log('Filters changed, refetching expenses...', filters)
+    fetchExpenses(1, false)
+  }, [filters, fetchExpenses])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -523,16 +527,6 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
     )
   }
 
-  if (groupedExpenses.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-        <Receipt className="h-12 w-12 mb-4" />
-        <p className="text-lg">No expenses found</p>
-        <p className="text-sm">Add your first expense to get started</p>
-      </div>
-    )
-  }
-
   return (
     <>
       {/* Bulk Action Bar */}
@@ -544,13 +538,26 @@ export function ExpenseList({ onAddExpense, onEditExpense, onViewExpense }: Expe
       />
 
       <div className="space-y-4">
-        {/* Filter Bar */}
+        {/* Filter Bar - Always visible, even when no results */}
         <ExpenseFilterBar
           filters={filters}
           onFiltersChange={handleFiltersChange}
           totalCount={totalCount}
           filteredCount={expenses.length}
         />
+
+        {/* Empty state when no expenses found */}
+        {groupedExpenses.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+            <Receipt className="h-12 w-12 mb-4" />
+            <p className="text-lg">No expenses found</p>
+            <p className="text-sm">
+              {totalCount > 0
+                ? 'Try adjusting your filters to see more results'
+                : 'Add your first expense to get started'}
+            </p>
+          </div>
+        )}
 
       {/* Expense count indicator */}
       {totalCount > 0 && (
