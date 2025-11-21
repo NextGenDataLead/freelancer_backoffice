@@ -125,7 +125,6 @@ async function handleStatusUpdate(request: Request, { params }: RouteParams) {
         items:invoice_items(*),
         client:clients!inner(
           id,
-          name,
           company_name,
           email,
           country_code

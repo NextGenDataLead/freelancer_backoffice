@@ -347,18 +347,25 @@ test.describe('Expenses Page - Filtering', () => {
   })
 
   test('should persist filters in URL and restore on reload', async ({ page }) => {
-    // Apply category filter
-    try {
-      const categoryFilterButton = page.locator('button[role="combobox"]').filter({ hasText: /Category|Categorie/ }).first()
-      await categoryFilterButton.click({ timeout: 3000 })
-
-      const categoryOption = page.locator('[role="option"]').first()
-      await categoryOption.click()
-      await page.waitForTimeout(500)
-    } catch (error) {
-      console.log('Category filter not applied, skipping URL persistence test')
-      return
+    // Ensure filter drawer/panel is open
+    const filterToggle = page.locator('button:has-text("Filters"), button:has-text("Filter"), button:has-text("Toon filters"), button:has-text("Verberg filters")').first()
+    const categoryLabel = page.locator('[data-testid="category-filter-label"]').first()
+    if (!(await categoryLabel.isVisible().catch(() => false))) {
+      if (await filterToggle.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await filterToggle.click({ force: true })
+      }
+      await expect(categoryLabel).toBeVisible({ timeout: 5000 })
     }
+
+    // Apply category filter – required for this test
+    const categoryFilterButton = page.locator('[data-testid="category-filter-trigger"]').first()
+    await expect(categoryFilterButton).toBeVisible({ timeout: 3000 })
+    await categoryFilterButton.click()
+
+    const categoryOptions = page.locator('[role="option"]').filter({ hasNotText: /All categories|Alle categorieën/i })
+    await expect(categoryOptions.first()).toBeVisible({ timeout: 3000 })
+    await categoryOptions.first().click()
+    await page.waitForTimeout(500)
 
     // Apply date filter
     try {

@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     // Verify client exists and belongs to tenant
     const { data: client, error: clientError } = await supabaseAdmin
       .from('clients')
-      .select('id, name, company_name')
+      .select('id, company_name')
       .eq('id', validatedQuery.client_id)
       .eq('tenant_id', profile.tenant_id)
       .single()
@@ -54,7 +54,6 @@ export async function GET(request: Request) {
         *,
         client:clients!client_id(
           id,
-          name,
           company_name
         )
       `)

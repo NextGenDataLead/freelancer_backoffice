@@ -45,7 +45,7 @@ export function DashboardStats({ className }: DashboardStatsProps) {
         const [profitLossRes, invoicesRes, clientsRes, timeEntriesRes] = await Promise.all([
           fetch(`/api/reports/profit-loss?date_from=${startOfMonth}&date_to=${endOfMonth}`),
           fetch('/api/invoices?limit=1000'),
-          fetch('/api/clients?limit=1000'),
+          fetch('/api/clients?all=true'),
           fetch(`/api/time-entries?date_from=${startOfMonth}&date_to=${endOfMonth}&billable=true&invoiced=false&limit=1000`)
         ])
 

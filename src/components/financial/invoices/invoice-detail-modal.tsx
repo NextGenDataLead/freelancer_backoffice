@@ -42,6 +42,7 @@ import {
 import type { InvoiceWithClient, PaymentReminder } from '@/lib/types/financial'
 import { PaymentRecordingModal } from './payment-recording-modal'
 import { PaymentReminderModal } from './payment-reminder-modal'
+import { SendInvoiceEmailModal } from './send-invoice-email-modal'
 
 interface InvoiceDetailModalProps {
   invoice: InvoiceWithClient | null
@@ -61,6 +62,7 @@ export function InvoiceDetailModal({
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showReminderModal, setShowReminderModal] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
   const [reminders, setReminders] = useState<PaymentReminder[]>([])
   const [isLoadingReminders, setIsLoadingReminders] = useState(false)
 
@@ -219,8 +221,13 @@ export function InvoiceDetailModal({
   }
 
   const handleSendEmail = () => {
-    // TODO: Implement email sending
-    console.log('Send email for invoice:', invoice.id)
+    setShowEmailModal(true)
+  }
+
+  const handleEmailSuccess = () => {
+    setShowEmailModal(false)
+    // Refresh invoice or close modal
+    window.location.reload()
   }
 
   const handlePrint = () => {
@@ -288,7 +295,7 @@ export function InvoiceDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="invoice-detail-modal">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -305,6 +312,7 @@ export function InvoiceDetailModal({
                 variant="outline"
                 size="sm"
                 onClick={handlePrint}
+                data-testid="print-button"
               >
                 <Printer className="h-4 w-4 mr-2" />
                 Print
@@ -313,6 +321,7 @@ export function InvoiceDetailModal({
                 variant="outline"
                 size="sm"
                 onClick={handleDownloadPDF}
+                data-testid="pdf-button"
               >
                 <Download className="h-4 w-4 mr-2" />
                 PDF
@@ -591,18 +600,36 @@ export function InvoiceDetailModal({
               )}
               
               {invoice.status === 'draft' && (
-                <Button
-                  variant="outline"
-                  onClick={() => handleStatusUpdate('sent')}
-                  disabled={isUpdatingStatus}
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Verzenden
-                </Button>
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleStatusUpdate('sent')}
+                    disabled={isUpdatingStatus}
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Verzenden
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleSendEmail}
+                    data-testid="send-email-button"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Verstuur Email
+                  </Button>
+                </>
               )}
-              
+
               {invoice.status === 'sent' && (
                 <>
+                  <Button
+                    variant="outline"
+                    onClick={handleSendEmail}
+                    data-testid="send-email-button"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Verstuur Email
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={() => setShowPaymentModal(true)}
@@ -625,6 +652,14 @@ export function InvoiceDetailModal({
 
               {invoice.status === 'overdue' && (
                 <>
+                  <Button
+                    variant="outline"
+                    onClick={handleSendEmail}
+                    data-testid="send-email-button"
+                  >
+                    <Mail className="h-4 w-4 mr-2" />
+                    Verstuur Email
+                  </Button>
                   <Button
                     variant="outline"
                     onClick={() => setShowPaymentModal(true)}
@@ -668,6 +703,14 @@ export function InvoiceDetailModal({
         isOpen={showReminderModal}
         onClose={() => setShowReminderModal(false)}
         onSuccess={handleReminderSuccess}
+      />
+
+      {/* Send Invoice Email Modal */}
+      <SendInvoiceEmailModal
+        invoice={invoice}
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        onSuccess={handleEmailSuccess}
       />
     </Dialog>
   )

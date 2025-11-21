@@ -217,7 +217,7 @@ export function ClientsTabContent() {
       setHealthLoading(true)
 
       // Fetch clients
-      const clientsResponse = await fetch('/api/clients?limit=100&active=true')
+      const clientsResponse = await fetch('/api/clients?all=true')
       if (!clientsResponse.ok) throw new Error('Failed to fetch clients')
       const clientsResult = await clientsResponse.json()
       const clients = clientsResult.data || []

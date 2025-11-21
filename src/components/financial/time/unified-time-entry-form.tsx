@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -69,6 +69,7 @@ export function UnifiedTimeEntryForm({
   const [clientsLoading, setClientsLoading] = useState(true)
   const [projectsLoading, setProjectsLoading] = useState(false)
   const [entryDate, setEntryDate] = useState<string>(format(getCurrentDate(), 'yyyy-MM-dd'))
+  const [clientSearch, setClientSearch] = useState('')
 
   const isEditMode = mode === 'edit' && !!timeEntry
 
@@ -108,7 +109,7 @@ export function UnifiedTimeEntryForm({
       // Otherwise fetch from API
       try {
         setClientsLoading(true)
-        const clientsResponse = await fetch('/api/clients?limit=100&active=true')
+        const clientsResponse = await fetch('/api/clients?all=true')
 
         if (clientsResponse.ok) {
           const clientsData = await clientsResponse.json()
@@ -136,6 +137,7 @@ export function UnifiedTimeEntryForm({
       setHourlyRate(0)
       setProjects([])
       setEntryDate(format(getCurrentDate(), 'yyyy-MM-dd'))
+      setClientSearch('')
     }
   }, [open])
 
@@ -476,6 +478,14 @@ export function UnifiedTimeEntryForm({
     }
   }
 
+  const filteredClients = useMemo(() => {
+    if (!clientSearch.trim()) return clients
+    const term = clientSearch.toLowerCase()
+    return clients.filter(client =>
+      (client.company_name || client.name || '').toLowerCase().includes(term)
+    )
+  }, [clients, clientSearch])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md" style={{ zIndex: 9999 }}>
@@ -497,11 +507,26 @@ export function UnifiedTimeEntryForm({
                 ) : clients.length === 0 ? (
                   <div className="p-2 text-sm text-muted-foreground">No clients found</div>
                 ) : (
-                  clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.company_name || client.name}
-                    </SelectItem>
-                  ))
+                  <div className="space-y-2">
+                    <div className="px-2 pt-2">
+                      <Input
+                        placeholder="Search clients..."
+                        value={clientSearch}
+                        onChange={(event) => setClientSearch(event.target.value)}
+                      />
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                      {filteredClients.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">No matching clients</div>
+                      ) : (
+                        filteredClients.map((client) => (
+                          <SelectItem key={client.id} value={client.id}>
+                            {client.company_name || client.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 )}
               </SelectContent>
             </Select>

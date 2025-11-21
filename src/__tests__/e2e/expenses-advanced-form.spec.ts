@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test'
 import path from 'path'
 import { clickDropdownOption } from './helpers/ui-interactions'
+// import { loginToApplication } from './helpers/auth-helpers'
 
 test.setTimeout(30000)
 

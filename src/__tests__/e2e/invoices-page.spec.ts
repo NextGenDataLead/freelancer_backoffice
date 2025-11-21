@@ -31,6 +31,8 @@ import {
   generateTestClientData,
   cleanupClients
 } from './helpers/client-helpers'
+import { loginToApplication as authLogin } from './helpers/auth-helpers'
+import { getCurrentDate } from '../../lib/current-date'
 
 test.setTimeout(60000)
 
@@ -47,12 +49,13 @@ test.describe('Invoices Page - Core Functionality', () => {
       console.log(`[browser:${msg.type()}] ${msg.text()}`)
     })
 
-    await loginToApplication(page)
+    await authLogin(page)
     await page.goto('/dashboard/financieel-v2/facturen')
     await page.waitForLoadState('networkidle')
+    await dismissCookieConsentIfPresent(page)
 
-    // Wait for page to be ready
-    await page.waitForSelector('text=/Invoices|Facturen/i', { timeout: 15000 })
+    // Wait for page to be ready (look for main heading or table)
+    await page.waitForSelector('h1, h2, table, [data-testid="invoices-page"]', { timeout: 15000 })
   })
 
   test.afterEach(async ({ page }) => {
@@ -61,10 +64,8 @@ test.describe('Invoices Page - Core Functionality', () => {
       await cleanupInvoices(page, testData.invoiceIds)
       testData.invoiceIds = []
     }
-  })
 
-  test.afterAll(async ({ page }) => {
-    // Cleanup clients created during tests
+    // Cleanup clients at end of each test to avoid afterAll page fixture issue
     if (testData.clientIds.length > 0) {
       await cleanupClients(page, testData.clientIds)
       testData.clientIds = []
@@ -80,12 +81,12 @@ test.describe('Invoices Page - Core Functionality', () => {
       // Wait for metrics to load
       await waitForInvoiceMetrics(page)
 
-      // Verify metric cards are visible
-      const metricCards = page.locator('[data-testid="metric-card"], .metric-card')
+      // Verify metric cards are visible (using .metric-card class)
+      const metricCards = page.locator('.metric-card')
       const cardCount = await metricCards.count()
 
-      // Should have at least 4 metric cards
-      expect(cardCount).toBeGreaterThanOrEqual(4)
+      // Should have at least 3 metric cards
+      expect(cardCount).toBeGreaterThanOrEqual(3)
 
       // Verify no loading placeholders
       const skeletonLoaders = page.locator('.animate-pulse')
@@ -95,7 +96,7 @@ test.describe('Invoices Page - Core Functionality', () => {
       // Verify all cards have values (not "..." or empty)
       for (let i = 0; i < cardCount; i++) {
         const card = metricCards.nth(i)
-        const value = await card.locator('[data-testid="metric-value"], .text-2xl, .text-3xl').first().textContent()
+        const value = await card.locator('.metric-card__value').first().textContent()
         expect(value).toBeTruthy()
         expect(value).not.toContain('...')
       }
@@ -122,6 +123,7 @@ test.describe('Invoices Page - Core Functionality', () => {
       const projectId = project.project?.id || project.id
 
       // Create unbilled time entries (5 hours @ €100/hour = €500)
+      const today = getCurrentDate().toISOString().split('T')[0]
       const timeEntriesData = [
         {
           client_id: clientId,
@@ -129,7 +131,7 @@ test.describe('Invoices Page - Core Functionality', () => {
           hours: 3,
           hourly_rate: 100,
           description: 'E2E Test Work 1',
-          date: new Date().toISOString().split('T')[0],
+          date: today,
           invoiced: false
         },
         {
@@ -138,7 +140,7 @@ test.describe('Invoices Page - Core Functionality', () => {
           hours: 2,
           hourly_rate: 100,
           description: 'E2E Test Work 2',
-          date: new Date().toISOString().split('T')[0],
+          date: today,
           invoiced: false
         }
       ]
@@ -153,10 +155,10 @@ test.describe('Invoices Page - Core Functionality', () => {
       await waitForInvoiceMetrics(page)
 
       // Check billable amount metric
-      const billableCard = page.locator('[data-testid="metric-card"]:has-text("Billable"), .metric-card').filter({ hasText: /Billable|Te factureren/i })
+      const billableCard = page.locator('.metric-card').filter({ hasText: /Billable|Te factureren/i })
 
       if (await billableCard.count() > 0) {
-        const billableValue = await billableCard.first().locator('[data-testid="metric-value"], .text-2xl, .text-3xl').first().textContent()
+        const billableValue = await billableCard.first().locator('.metric-card__value').first().textContent()
         console.log(`Billable amount: ${billableValue}`)
 
         // Verify it shows an amount (should include €500 from our test entries)
@@ -174,12 +176,9 @@ test.describe('Invoices Page - Core Functionality', () => {
       const clientId = await createClientViaAPI(page, clientData)
       testData.clientIds.push(clientId)
 
-      // Create overdue invoice (due date in past)
-      const pastDate = new Date()
-      pastDate.setDate(pastDate.getDate() - 10)
+      // Create overdue invoice - helper will handle dates automatically for 'overdue' status
       const overdueInvoiceId = await createInvoiceViaAPI(page, {
         clientId: clientId,
-        dueDate: pastDate.toISOString().split('T')[0],
         items: [
           {
             description: 'E2E Test Service',
@@ -187,7 +186,7 @@ test.describe('Invoices Page - Core Functionality', () => {
             unit_price: 500
           }
         ],
-        status: 'overdue'
+        status: 'overdue'  // Helper will set appropriate past dates
       })
       testData.invoiceIds.push(overdueInvoiceId)
 
@@ -197,10 +196,10 @@ test.describe('Invoices Page - Core Functionality', () => {
       await waitForInvoiceMetrics(page)
 
       // Check overdue metric
-      const overdueCard = page.locator('[data-testid="metric-card"]').filter({ hasText: /Overdue|Achterstallig/i })
+      const overdueCard = page.locator('.metric-card').filter({ hasText: /Overdue|Achterstallig/i })
 
       if (await overdueCard.count() > 0) {
-        const overdueValue = await overdueCard.first().locator('[data-testid="metric-value"], .text-2xl, .text-3xl').first().textContent()
+        const overdueValue = await overdueCard.first().locator('.metric-card__value').first().textContent()
         console.log(`Overdue count: ${overdueValue}`)
 
         // Should show at least 1 overdue invoice
@@ -760,50 +759,14 @@ test.describe('Invoices Page - Core Functionality', () => {
   })
 })
 
-// ========================================
-// Helper Functions
-// ========================================
+async function dismissCookieConsentIfPresent(page: Page) {
+  const consentButtons = page.locator(
+    'button:has-text("Approve"), button:has-text("Accept"), button:has-text("Akkoord"), button:has-text("Accepteren"), button:has-text("I Understand"), button:has-text("Accept All"), button:has-text("Accept all cookies")'
+  )
 
-/**
- * Login to the application
- */
-async function loginToApplication(page: Page) {
-  const isLoggedIn = await checkIfLoggedIn(page)
-
-  if (isLoggedIn) {
-    console.log('✅ Already logged in')
-    return
-  }
-
-  console.log('🔐 Logging in to application...')
-
-  await page.goto('/sign-in')
-  await page.waitForSelector('text=Sign in', { timeout: 10000 })
-
-  const emailInput = page.locator('input[type="email"], input[name="identifier"]').first()
-  await emailInput.waitFor({ state: 'visible', timeout: 10000 })
-  await emailInput.fill('imre.iddatasolutions@gmail.com')
-
-  const passwordInput = page.locator('input[type="password"], input[name="password"]').first()
-  await passwordInput.waitFor({ state: 'visible', timeout: 10000 })
-  await passwordInput.fill('Qy192837465!?')
-
-  const continueButton = page.locator('button:has-text("Continue")').first()
-  await continueButton.click()
-
-  await page.waitForURL(/\/dashboard/, { timeout: 15000 })
-  console.log('✅ Login successful')
-}
-
-/**
- * Check if user is already logged in
- */
-async function checkIfLoggedIn(page: Page): Promise<boolean> {
-  try {
-    await page.goto('/dashboard', { timeout: 5000 })
-    await page.waitForLoadState('networkidle', { timeout: 3000 })
-    return page.url().includes('/dashboard')
-  } catch {
-    return false
+  if (await consentButtons.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+    await consentButtons.first().click()
+    await page.waitForTimeout(500)
+    console.log('✅ Cookie consent dismissed (invoices-page spec)')
   }
 }

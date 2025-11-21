@@ -6,13 +6,13 @@ import { Button } from '@/components/ui/button'
 import { DeleteConfirmationModal } from '@/components/ui/modal'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table'
 import {
   Clock,
@@ -24,11 +24,17 @@ import {
   Euro,
   FolderOpen,
   Info,
-  Lock
+  Lock,
+  ChevronLeft,
+  ChevronRight,
+  Filter
 } from 'lucide-react'
 import type { TimeEntryWithClient, Client } from '@/lib/types/financial'
 import { getTimeEntryStatus } from '@/lib/utils/time-entry-status'
 import { TimeEntryStatusBadge } from '@/components/financial/time-entries/time-entry-status-badge'
+import { getCurrentDate } from '@/lib/current-date'
+
+type StatusFilter = 'all' | 'ready_to_invoice' | 'billable_not_due' | 'not_billable' | 'invoiced'
 
 interface TimeEntryListProps {
   onEdit?: (timeEntry: TimeEntryWithClient) => void
@@ -43,8 +49,8 @@ const isTimeEntryInvoiced = (timeEntry: TimeEntryWithClient): boolean => {
   return timeEntry.invoiced || !!timeEntry.invoice_id
 }
 
-export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFilter }: TimeEntryListProps) {
-  const [timeEntries, setTimeEntries] = useState<TimeEntryWithClient[]>([])
+export function TimeEntryList({ onEdit, onRefresh, limit, showPagination = true, dateFilter }: TimeEntryListProps) {
+  const [allTimeEntries, setAllTimeEntries] = useState<TimeEntryWithClient[]>([]) // For filter counts
   const [clients, setClients] = useState<Map<string, Client>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,26 +59,86 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
     id: string
     description: string
   } | null>(null)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [currentPage, setCurrentPage] = useState(1)
 
-  // Filter time entries by date if dateFilter is provided
-  const filteredTimeEntries = useMemo(() => {
-    if (!dateFilter) return timeEntries
+  // Filter time entries by date and status from the complete list
+  const filteredEntries = useMemo(() => {
+    console.log('🔍 Filtering all entries - statusFilter:', statusFilter, 'total entries:', allTimeEntries.length)
+    let filtered = allTimeEntries
 
-    // Use local timezone to avoid off-by-one errors
-    const filterDateStr = `${dateFilter.getFullYear()}-${String(dateFilter.getMonth() + 1).padStart(2, '0')}-${String(dateFilter.getDate()).padStart(2, '0')}`
-    return timeEntries.filter(entry =>
-      entry.entry_date === filterDateStr
-    )
-  }, [timeEntries, dateFilter])
-  const [pagination, setPagination] = useState({
-    page: 1,
-    totalPages: 0,
-    total: 0
-  })
+    // Apply date filter
+    if (dateFilter) {
+      const filterDateStr = `${dateFilter.getFullYear()}-${String(dateFilter.getMonth() + 1).padStart(2, '0')}-${String(dateFilter.getDate()).padStart(2, '0')}`
+      filtered = filtered.filter(entry => entry.entry_date === filterDateStr)
+      console.log('📅 After date filter:', filtered.length, 'entries')
+    }
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      console.log('🎯 Applying status filter:', statusFilter)
+      const currentDate = getCurrentDate()
+      filtered = filtered.filter(entry => {
+        // Prefer computed status from database if available
+        if (entry.computed_status && entry.computed_status_color) {
+          switch (statusFilter) {
+            case 'ready_to_invoice':
+              return entry.computed_status === 'factureerbaar' && entry.computed_status_color === 'green'
+            case 'billable_not_due':
+              return entry.computed_status === 'factureerbaar' && entry.computed_status_color === 'orange'
+            case 'not_billable':
+              return entry.computed_status === 'niet-factureerbaar'
+            case 'invoiced':
+              return entry.computed_status === 'gefactureerd'
+            default:
+              return true
+          }
+        }
+
+        // Fallback to client-side calculation if computed status is not available
+        const client = clients.get(entry.client_id || '')
+        if (!client) {
+          // If client data is missing, include the entry (don't filter it out)
+          // This prevents all entries from disappearing when clients haven't loaded
+          console.warn(`⚠️ Client not found for entry ${entry.id}, keeping entry in results`)
+          return true
+        }
+
+        const statusInfo = getTimeEntryStatus(entry, client, currentDate)
+
+        switch (statusFilter) {
+          case 'ready_to_invoice':
+            return statusInfo.status === 'factureerbaar' && statusInfo.color === 'green'
+          case 'billable_not_due':
+            return statusInfo.status === 'factureerbaar' && statusInfo.color === 'orange'
+          case 'not_billable':
+            return statusInfo.status === 'niet-factureerbaar'
+          case 'invoiced':
+            return statusInfo.status === 'gefactureerd'
+          default:
+            return true
+        }
+      })
+      console.log('✅ After status filter:', filtered.length, 'entries')
+    }
+
+    console.log('📊 Final filtered count:', filtered.length)
+    return filtered
+  }, [allTimeEntries, dateFilter, statusFilter, clients])
+
+  // Paginate the filtered entries
+  const paginatedEntries = useMemo(() => {
+    const pageLimit = limit || 50;
+    const start = (currentPage - 1) * pageLimit;
+    const end = start + pageLimit;
+    return filteredEntries.slice(start, end);
+  }, [filteredEntries, currentPage, limit]);
+
+  const totalPages = Math.ceil(filteredEntries.length / (limit || 50));
 
   const fetchClients = async () => {
     try {
-      const response = await fetch('/api/clients?limit=100', {
+      const response = await fetch('/api/clients?all=true', {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' }
       })
@@ -92,34 +158,55 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
     }
   }
 
+  const loadAllTimeEntries = async () => {
+    const combinedEntries: TimeEntryWithClient[] = []
+    const limitPerRequest = 100
+    let nextPage = 1
+    let totalPages = 1
+    const timestamp = Date.now().toString()
+
+    while (nextPage <= totalPages) {
+      const params = new URLSearchParams({
+        page: nextPage.toString(),
+        limit: limitPerRequest.toString(),
+        _t: `${timestamp}-${nextPage}`
+      })
+
+      const response = await fetch(`/api/time-entries?${params.toString()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch time entries')
+      }
+
+      const data = await response.json()
+      combinedEntries.push(...(data.data || []))
+      totalPages = data.pagination?.totalPages || totalPages
+
+      if ((data.data?.length || 0) < limitPerRequest) {
+        break
+      }
+
+      nextPage += 1
+    }
+
+    return combinedEntries
+  }
+
   const fetchTimeEntries = async () => {
     try {
       setLoading(true)
-      
-      // Fetch both time entries and clients in parallel
-      const [timeEntriesPromise, clientsPromise] = await Promise.all([
-        fetch(`/api/time-entries?${new URLSearchParams({
-          ...(limit && { limit: limit.toString() }),
-          _t: Date.now().toString()
-        }).toString()}`, {
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' }
-        }),
+      const [allEntries] = await Promise.all([
+        loadAllTimeEntries(),
         fetchClients()
       ])
-      
-      if (!timeEntriesPromise.ok) {
-        throw new Error('Failed to fetch time entries')
-      }
-      
-      const data = await timeEntriesPromise.json()
-      console.log('Fetched time entries:', data.data?.length || 0, 'entries')
-      setTimeEntries(data.data || [])
-      setPagination({
-        page: data.pagination?.page || 1,
-        totalPages: data.pagination?.totalPages || 0,
-        total: data.pagination?.total || 0
-      })
+
+      console.log('Fetched all entries for counts:', allEntries.length, 'total entries')
+
+      setAllTimeEntries(allEntries)
+      setCurrentPage(1)
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load time entries')
@@ -131,7 +218,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
 
   useEffect(() => {
     fetchTimeEntries()
-  }, [limit]) // Component will remount due to key change, so this will run again
+  }, [limit])
 
   const performDelete = async (id: string) => {
     try {
@@ -206,18 +293,73 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
   }
 
   const getTotalStats = () => {
-    const billableEntries = filteredTimeEntries.filter(entry => entry.billable && !entry.invoiced)
-    const totalHours = filteredTimeEntries.reduce((sum, entry) => sum + entry.hours, 0)
+    const billableEntries = filteredEntries.filter(entry => entry.billable && !entry.invoiced)
+    const totalHours = filteredEntries.reduce((sum, entry) => sum + entry.hours, 0)
     const billableHours = billableEntries.reduce((sum, entry) => sum + entry.hours, 0)
-    const totalValue = filteredTimeEntries.reduce((sum, entry) =>
+    const totalValue = filteredEntries.reduce((sum, entry) =>
       sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
-    const unbilledValue = billableEntries.reduce((sum, entry) => 
+    const unbilledValue = billableEntries.reduce((sum, entry) =>
       sum + (entry.hours * (entry.effective_hourly_rate || entry.hourly_rate || 0)), 0)
 
     return { totalHours, billableHours, totalValue, unbilledValue }
   }
 
   const stats = getTotalStats()
+
+  const statusFilterOptions: { value: StatusFilter; label: string; count: number }[] = useMemo(() => {
+    const currentDate = getCurrentDate()
+    let readyCount = 0
+    let billableNotDueCount = 0
+    let notBillableCount = 0
+    let invoicedCount = 0
+
+    // Use allTimeEntries for accurate counts across all pages
+    allTimeEntries.forEach(entry => {
+      // Prefer computed status from database if available
+      let status = entry.computed_status
+      let color = entry.computed_status_color
+
+      // Fallback to client-side calculation if computed status not available
+      if (!status || !color) {
+        const client = clients.get(entry.client_id || '')
+        if (client) {
+          const statusInfo = getTimeEntryStatus(entry, client, currentDate)
+          status = statusInfo.status
+          color = statusInfo.color
+        } else {
+          // If no client data and no computed status, assume billable (green) as default
+          // This prevents counts from being wrong when client data hasn't loaded yet
+          status = 'factureerbaar'
+          color = 'green'
+        }
+      }
+
+      // Count based on status
+      if (status === 'factureerbaar' && color === 'green') {
+        readyCount++
+      } else if (status === 'factureerbaar' && color === 'orange') {
+        billableNotDueCount++
+      } else if (status === 'niet-factureerbaar') {
+        notBillableCount++
+      } else if (status === 'gefactureerd') {
+        invoicedCount++
+      }
+    })
+
+    return [
+      { value: 'all' as const, label: 'All', count: allTimeEntries.length },
+      { value: 'ready_to_invoice' as const, label: 'Billable', count: readyCount },
+      { value: 'billable_not_due' as const, label: 'Not Yet Billable', count: billableNotDueCount },
+      { value: 'not_billable' as const, label: 'Non-billable', count: notBillableCount },
+      { value: 'invoiced' as const, label: 'Invoiced', count: invoicedCount }
+    ]
+  }, [allTimeEntries, clients])
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage)
+    }
+  }
 
   if (loading) {
     return (
@@ -273,11 +415,42 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
             <Clock className="h-5 w-5" />
             Time Entries
           </div>
-          <div className="text-sm text-muted-foreground">
-            {filteredTimeEntries.length} of {timeEntries.length} entries
-            {limit && ` (max ${limit})`}
+          <div className="text-sm text-muted-foreground" data-testid="time-entry-count-summary">
+            Showing {paginatedEntries.length} of {filteredEntries.length} entries
           </div>
         </CardTitle>
+
+        {/* Status Filter Tabs */}
+        <div className="flex gap-2 mt-4 flex-wrap" data-testid="time-entry-status-filters">
+          {statusFilterOptions.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              data-testid={`status-filter-${option.value}`}
+              onClick={() => {
+                console.log('🖱️ Filter button clicked:', option.label, '(value:', option.value, ')')
+                setStatusFilter(option.value)
+                setCurrentPage(1) // Reset to first page on filter change
+              }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                statusFilter === option.value
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              {option.label}
+              <Badge
+                variant="secondary"
+                className="ml-2"
+                style={{
+                  background: statusFilter === option.value ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'
+                }}
+              >
+                {option.count}
+              </Badge>
+            </button>
+          ))}
+        </div>
         
         {/* Stats Summary */}
         {!limit && (
@@ -322,12 +495,12 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
       </CardHeader>
 
       <CardContent>
-        {filteredTimeEntries.length === 0 ? (
+        {paginatedEntries.length === 0 ? (
           <div className="text-center py-8">
             <Clock className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No time entries yet</h3>
+            <h3 className="text-lg font-semibold mb-2">No time entries found</h3>
             <p className="text-muted-foreground mb-4">
-              Start tracking your hours
+              There are no entries that match the current filter.
             </p>
           </div>
         ) : (
@@ -347,7 +520,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTimeEntries.map((entry) => (
+                {paginatedEntries.map((entry) => (
                   <TableRow key={entry.id} className="hover:bg-muted/50">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
@@ -501,10 +674,28 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                             }
                           }
                           
-                          // Use the comprehensive status determination with full client data
-                          const statusInfo = getTimeEntryStatus(entry, client)
+                          // Prefer computed status from database if available
+                          let statusInfo
+                          if (entry.computed_status && entry.computed_status_color) {
+                            // Use pre-computed status from database
+                            const labelMap = {
+                              'factureerbaar': entry.computed_status_color === 'green' ? 'Billable' : 'Not yet billable',
+                              'niet-factureerbaar': 'Non-billable',
+                              'gefactureerd': 'Invoiced'
+                            }
+                            statusInfo = {
+                              status: entry.computed_status as 'factureerbaar' | 'niet-factureerbaar' | 'gefactureerd',
+                              color: entry.computed_status_color as 'green' | 'orange' | 'red' | 'purple',
+                              label: labelMap[entry.computed_status as keyof typeof labelMap] || 'Unknown',
+                              reason: 'Status calculated by database'
+                            }
+                          } else {
+                            // Fallback to client-side calculation
+                            statusInfo = getTimeEntryStatus(entry, client)
+                          }
+
                           return (
-                            <TimeEntryStatusBadge 
+                            <TimeEntryStatusBadge
                               statusInfo={statusInfo}
                               size="sm"
                               showTooltip={true}
@@ -574,6 +765,66 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination, dateFi
                 ))}
               </TableBody>
             </Table>
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        {showPagination && totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700">
+          <div className="text-sm text-slate-400" data-testid="time-entry-pagination-info">
+            Page {currentPage} of {totalPages} • Showing {paginatedEntries.length} of {filteredEntries.length} entries
+          </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="flex items-center gap-1"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+
+              {/* Page numbers */}
+              <div className="flex gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number
+                  if (totalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i
+                  } else {
+                    pageNum = currentPage - 2 + i
+                  }
+
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handlePageChange(pageNum)}
+                      className="w-10"
+                    >
+                      {pageNum}
+                    </Button>
+                  )
+                })}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="flex items-center gap-1"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

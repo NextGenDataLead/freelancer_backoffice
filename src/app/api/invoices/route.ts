@@ -120,14 +120,30 @@ export async function GET(request: Request) {
 }
 
 /**
+ * Helper: Sleep for exponential backoff
+ */
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * Helper: Check if error is a unique constraint violation
+ */
+function isUniqueConstraintViolation(error: any): boolean {
+  // PostgreSQL unique constraint violation error code is 23505
+  return error?.code === '23505' || error?.message?.includes('duplicate key value')
+}
+
+/**
  * POST /api/invoices
  * Creates a new invoice with items and automatic VAT calculations
+ * Implements retry with exponential backoff to handle invoice number race conditions
  */
 export async function POST(request: Request) {
   try {
     // Get authenticated user profile
     const profile = await getCurrentUserProfile()
-    
+
     if (!profile) {
       return NextResponse.json(ApiErrors.Unauthorized, { status: ApiErrors.Unauthorized.status })
     }
@@ -139,14 +155,14 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    
+
     // Validate request data
     const validatedData = CreateInvoiceSchema.parse(body)
 
     // Verify client exists and belongs to tenant
     const { data: client, error: clientError } = await supabaseAdmin
       .from('clients')
-      .select('id, name, country_code, vat_number, is_business')
+      .select('id, company_name, country_code, vat_number, is_business')
       .eq('id', validatedData.client_id)
       .eq('tenant_id', profile.tenant_id)
       .single()
@@ -155,29 +171,6 @@ export async function POST(request: Request) {
       const notFoundError = ApiErrors.NotFound('Client')
       return NextResponse.json(notFoundError, { status: notFoundError.status })
     }
-
-    // Generate invoice number (simple sequential format)
-    const { data: lastInvoice } = await supabaseAdmin
-      .from('invoices')
-      .select('invoice_number')
-      .eq('tenant_id', profile.tenant_id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    const currentYear = getCurrentDate().getFullYear()
-    let nextNumber = 1
-
-    if (lastInvoice?.invoice_number) {
-      const lastNumber = parseInt(lastInvoice.invoice_number.split('-').pop() || '0')
-      const lastYear = parseInt(lastInvoice.invoice_number.split('-')[0])
-      
-      if (lastYear === currentYear) {
-        nextNumber = lastNumber + 1
-      }
-    }
-
-    const invoiceNumber = `${currentYear}-${nextNumber.toString().padStart(3, '0')}`
 
     // Determine VAT type based on client location and business type
     let vatType: 'standard' | 'reverse_charge' | 'exempt' = 'standard'
@@ -212,81 +205,147 @@ export async function POST(request: Request) {
       vatRate
     )
 
-    // Start database transaction
-    const { data: newInvoice, error: invoiceError } = await supabaseAdmin
-      .from('invoices')
-      .insert({
-        tenant_id: profile.tenant_id,
-        created_by: profile.id,
-        client_id: validatedData.client_id,
-        invoice_number: invoiceNumber,
-        invoice_date: validatedData.invoice_date,
-        due_date: validatedData.due_date,
-        reference: validatedData.reference,
-        notes: validatedData.notes,
-        subtotal,
-        vat_amount: vatAmount,
-        total_amount: totalAmount,
-        vat_type: vatType,
-        vat_rate: vatRate,
-        status: 'draft'
-      })
-      .select()
-      .single()
+    // Retry invoice creation with exponential backoff to handle race conditions
+    const MAX_RETRIES = 3
+    let lastError: any = null
 
-    if (invoiceError) {
-      console.error('Error creating invoice:', invoiceError)
-      return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Generate invoice number (simple sequential format)
+        const { data: lastInvoice } = await supabaseAdmin
+          .from('invoices')
+          .select('invoice_number')
+          .eq('tenant_id', profile.tenant_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+
+        const currentYear = getCurrentDate().getFullYear()
+        let nextNumber = 1
+
+        if (lastInvoice?.invoice_number) {
+          const lastNumber = parseInt(lastInvoice.invoice_number.split('-').pop() || '0')
+          const lastYear = parseInt(lastInvoice.invoice_number.split('-')[0])
+
+          if (lastYear === currentYear) {
+            nextNumber = lastNumber + 1
+          }
+        }
+
+        const invoiceNumber = `${currentYear}-${nextNumber.toString().padStart(3, '0')}`
+
+        // Attempt to create invoice
+        const { data: newInvoice, error: invoiceError } = await supabaseAdmin
+          .from('invoices')
+          .insert({
+            tenant_id: profile.tenant_id,
+            created_by: profile.id,
+            client_id: validatedData.client_id,
+            invoice_number: invoiceNumber,
+            invoice_date: validatedData.invoice_date,
+            due_date: validatedData.due_date,
+            reference: validatedData.reference,
+            notes: validatedData.notes,
+            subtotal,
+            vat_amount: vatAmount,
+            total_amount: totalAmount,
+            vat_type: vatType,
+            vat_rate: vatRate,
+            status: 'draft'
+          })
+          .select()
+          .single()
+
+        // Check for unique constraint violation (invoice number collision)
+        if (invoiceError && isUniqueConstraintViolation(invoiceError)) {
+          lastError = invoiceError
+
+          if (attempt < MAX_RETRIES) {
+            // Exponential backoff: 100ms, 200ms, 400ms
+            const backoffMs = 100 * Math.pow(2, attempt - 1)
+            console.log(`Invoice number collision detected (attempt ${attempt}/${MAX_RETRIES}). Retrying in ${backoffMs}ms...`)
+            await sleep(backoffMs)
+            continue // Retry
+          } else {
+            // Max retries exceeded
+            console.error('Max retries exceeded for invoice creation due to number collisions')
+            throw invoiceError
+          }
+        }
+
+        // Other errors - fail immediately
+        if (invoiceError) {
+          console.error('Error creating invoice:', invoiceError)
+          return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+        }
+
+        // Success! Create invoice items
+        const itemsToInsert = validatedData.items.map(item => ({
+          invoice_id: newInvoice.id,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          line_total: item.quantity * item.unit_price
+        }))
+
+        const { data: invoiceItems, error: itemsError } = await supabaseAdmin
+          .from('invoice_items')
+          .insert(itemsToInsert)
+          .select()
+
+        if (itemsError) {
+          // Rollback invoice creation
+          await supabaseAdmin
+            .from('invoices')
+            .delete()
+            .eq('id', newInvoice.id)
+
+          console.error('Error creating invoice items:', itemsError)
+          return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+        }
+
+        // Create audit log
+        await createTransactionLog(
+          profile.tenant_id,
+          'invoice',
+          newInvoice.id,
+          'created',
+          profile.id,
+          null,
+          { ...newInvoice, items: invoiceItems },
+          request
+        )
+
+        // Return complete invoice with items and client
+        const response = createApiResponse(
+          {
+            ...newInvoice,
+            items: invoiceItems,
+            client
+          } as InvoiceWithItems,
+          'Invoice created successfully'
+        )
+
+        return NextResponse.json(response, { status: 201 })
+
+      } catch (retryError) {
+        // If this is a unique constraint violation and we have retries left, continue
+        if (isUniqueConstraintViolation(retryError) && attempt < MAX_RETRIES) {
+          lastError = retryError
+          const backoffMs = 100 * Math.pow(2, attempt - 1)
+          console.log(`Invoice creation failed with constraint violation (attempt ${attempt}/${MAX_RETRIES}). Retrying in ${backoffMs}ms...`)
+          await sleep(backoffMs)
+          continue
+        }
+
+        // Otherwise, rethrow
+        throw retryError
+      }
     }
 
-    // Create invoice items
-    const itemsToInsert = validatedData.items.map(item => ({
-      invoice_id: newInvoice.id,
-      description: item.description,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      line_total: item.quantity * item.unit_price
-    }))
-
-    const { data: invoiceItems, error: itemsError } = await supabaseAdmin
-      .from('invoice_items')
-      .insert(itemsToInsert)
-      .select()
-
-    if (itemsError) {
-      // Rollback invoice creation
-      await supabaseAdmin
-        .from('invoices')
-        .delete()
-        .eq('id', newInvoice.id)
-
-      console.error('Error creating invoice items:', itemsError)
-      return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
-    }
-
-    // Create audit log
-    await createTransactionLog(
-      profile.tenant_id,
-      'invoice',
-      newInvoice.id,
-      'created',
-      profile.id,
-      null,
-      { ...newInvoice, items: invoiceItems },
-      request
-    )
-
-    // Return complete invoice with items and client
-    const response = createApiResponse(
-      {
-        ...newInvoice,
-        items: invoiceItems,
-        client
-      } as InvoiceWithItems,
-      'Invoice created successfully'
-    )
-
-    return NextResponse.json(response, { status: 201 })
+    // If we get here, all retries failed
+    console.error('Invoice creation failed after all retries:', lastError)
+    return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
 
   } catch (error) {
     if (error instanceof Error && 'issues' in error) {

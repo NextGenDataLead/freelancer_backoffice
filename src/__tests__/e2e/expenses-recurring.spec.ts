@@ -30,17 +30,28 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
     await page.waitForTimeout(1000);
   });
 
-  test.afterAll(async ({ request }) => {
-    // Clean up the shared template only after ALL tests complete
-    if (sharedTemplateId) {
-        try {
-            console.log(`Cleaning up template ${sharedTemplateId} after all tests`);
-            await request.delete(`/api/recurring-expenses/templates/${sharedTemplateId}`);
-        } catch (error) {
-            console.warn(`Failed to cleanup template ${sharedTemplateId}:`, error);
-        }
+test.afterAll(async ({ request }) => {
+  // Clean up the shared template only after ALL tests complete
+  if (sharedTemplateId) {
+    try {
+      console.log(`Cleaning up template ${sharedTemplateId} after all tests`);
+      await request.delete(`/api/recurring-expenses/templates/${sharedTemplateId}`);
+    } catch (error) {
+      console.warn(`Failed to cleanup template ${sharedTemplateId}:`, error);
     }
-  });
+  }
+
+  // Clean up additional templates created via API
+  if (createdTemplateIds.length > 0) {
+    for (const templateId of createdTemplateIds) {
+      try {
+        await request.delete(`/api/recurring-expenses/templates/${templateId}`);
+      } catch (error) {
+        console.warn(`Failed to cleanup template ${templateId}:`, error);
+      }
+    }
+  }
+});
 
   test('1. should create a new recurring template', async ({ page }) => {
     sharedTemplateName = `E2E Test Template ${Date.now()}`;
@@ -51,7 +62,17 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
     await expect(dialog).toBeVisible({ timeout: 15000 });
 
     await dialog.locator('input[name="vendor_name"]').fill('Test Recurring Vendor');
-    await dialog.locator('input[name="expense_date"]').fill('2025-08-15');
+    const createDueDate = () => {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const past = addMonths(now, -2);
+      past.setMonth(now.getMonth() - 1);
+      past.setDate(1);
+      return format(past, 'yyyy-MM-dd');
+    };
+
+    const pastDate = createDueDate();
+    await dialog.locator('input[name="expense_date"]').fill(pastDate);
     await dialog.locator('textarea[name="description"]').fill('Test Recurring Expense');
     await dialog.locator('input[name="amount"]').fill('100');
 
@@ -157,20 +178,46 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
   });
 
   test('5. should process past expenses', async ({ page }) => {
-    expect(sharedTemplateId).toBeTruthy();
+    const pastDate = format(addMonths(new Date(), -2), 'yyyy-MM-dd');
+    const carouselTemplateName = `Carousel Template ${Date.now()}`;
+    const carouselTemplateDescription = 'Carousel Recurring Expense';
+
+    const createResponse = await page.request.post('/api/recurring-expenses/templates', {
+      data: {
+        name: carouselTemplateName,
+        description: carouselTemplateDescription,
+        amount: 125,
+        currency: 'EUR',
+        frequency: 'monthly',
+        start_date: pastDate,
+        next_occurrence: pastDate,
+        vat_rate: 21,
+        is_active: true,
+        is_vat_deductible: true,
+        business_use_percentage: 100
+      }
+    });
+
+    const createJson = await createResponse.json();
+    const carouselTemplateId = createJson?.data?.id || createJson?.template?.id || createJson?.id;
+    expect(carouselTemplateId).toBeTruthy();
+    createdTemplateIds.push(carouselTemplateId as string);
 
     // Go to recurring expenses page where the carousel is shown
     await page.goto('/dashboard/financieel-v2/terugkerende-uitgaven');
     await page.waitForLoadState('networkidle');
 
+    // Click "New Template" button to open the modal with the carousel
+    await page.getByRole('button', { name: /New Template/i }).click();
+
+    // Wait for modal to open and carousel section to load
+    await page.waitForTimeout(5000); // Give modal time to open and carousel to load
+
     // Wait for the "Terugkerende uitgaven te verwerken" section to load
     const recurringSection = page.locator('text=Terugkerende uitgaven te verwerken');
-    const sectionVisible = await recurringSection.isVisible({ timeout: 10000 }).catch(() => false);
+    const sectionVisible = await recurringSection.isVisible({ timeout: 15000 }).catch(() => false);
 
-    if (!sectionVisible) {
-      console.log('No recurring expenses to process section found, skipping test');
-      return;
-    }
+    expect(sectionVisible).toBeTruthy()
 
     // Navigate through carousel items using "Volgende" button until we find our template
     let found = false;
@@ -179,7 +226,7 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
 
     while (!found && attempts < maxAttempts) {
       // Check if current item contains our template name
-      const currentItem = page.locator(`text=${sharedTemplateName}`);
+      const currentItem = page.locator(`text=${carouselTemplateName}`);
       const isVisible = await currentItem.isVisible().catch(() => false);
 
       if (isVisible) {
@@ -202,10 +249,7 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
       attempts++;
     }
 
-    if (!found) {
-      console.log('Template not found in recurring expenses carousel, skipping test');
-      return;
-    }
+    expect(found).toBeTruthy()
 
     // Click the "Toevoegen" button
     const addButton = page.getByRole('button', { name: /Toevoegen/i }).first();
@@ -219,14 +263,25 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
     await page.goto('/dashboard/financieel-v2/uitgaven');
     await page.waitForLoadState('networkidle');
 
-    // Wait for expenses table to load
-    await page.waitForSelector('table tbody tr', { timeout: 15000 });
-    await page.waitForTimeout(1000); // Allow data to render
+    // Wait for expenses to load (expenses are rendered as div cards, not table rows)
+    await page.waitForTimeout(3000); // Allow expenses to load and render
 
-    // Verify expenses were created
-    const expenseRows = page.locator(`tr:has-text("Test Recurring Expense")`);
-    const count = await expenseRows.count();
-    expect(count).toBeGreaterThanOrEqual(1);
+    // The expense is from 2 months ago, so we need to scroll to that month section
+    // Look for the September (or August) 2025 section heading
+    const monthYear = format(addMonths(new Date(), -2), 'MMMM yyyy'); // e.g., "September 2025"
+    const monthSection = page.getByText(monthYear);
+
+    // Scroll the month section into view
+    await monthSection.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500); // Wait for scroll
+
+    // Click on the month header to expand it (it's collapsed by default)
+    await monthSection.click();
+    await page.waitForTimeout(500); // Wait for expansion animation
+
+    // Verify expenses were created by looking for the description
+    const expenseElement = page.getByText(carouselTemplateDescription);
+    await expect(expenseElement.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('6. should delete the recurring template', async ({ page }) => {
@@ -273,7 +328,8 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
     await page.getByRole('button', { name: 'New Template' }).click();
     const dialog = page.locator('[role="dialog"]:has-text("New Recurring Expense")');
     await dialog.locator('input[name="vendor_name"]').fill('Metric Test Vendor');
-    await dialog.locator('input[name="expense_date"]').fill('2025-08-15');
+    const templateStartDate = format(addMonths(new Date(), -2), 'yyyy-MM-dd');
+    await dialog.locator('input[name="expense_date"]').fill(templateStartDate);
     await dialog.locator('textarea[name="description"]').fill('Metric Test Expense');
     await dialog.locator('input[name="amount"]').fill('50');
     await dialog.locator('button[role="combobox"]').first().click();
@@ -423,6 +479,12 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
     const yearlyCard = page.locator('.metric-card__value').nth(2);
     const cashflowCard = page.locator('.metric-card__value').nth(3);
 
+    const extractNumber = (value: string | null) => {
+      if (!value) return 0;
+      const match = value.replace(/[^\d,.]/g, '').replace(',', '').match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+
     const initialTotal = await totalTemplatesCard.textContent();
     const initialMonthly = await monthlyCard.textContent();
     const initialYearly = await yearlyCard.textContent();
@@ -452,7 +514,7 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
 
     // Verify total templates increased
     const newTotal = await totalTemplatesCard.textContent();
-    expect(parseInt(newTotal || '0')).toBeGreaterThan(parseInt(initialTotal || '0'));
+    expect(extractNumber(newTotal)).toBeGreaterThan(extractNumber(initialTotal));
 
     // Verify monthly, yearly, and cashflow cards show numeric values (calculations working)
     const newMonthly = await monthlyCard.textContent();
@@ -579,23 +641,89 @@ test.describe.serial('Recurring Expenses Page - E2E Tests', () => {
   });
 
   test('14. should navigate to edit via carousel Aanpassen button', async ({ page }) => {
-    // Check if carousel exists
-    const recurringSection = page.locator('text=Terugkerende uitgaven te verwerken');
-    const sectionVisible = await recurringSection.isVisible({ timeout: 5000 }).catch(() => false);
+    const pastDate = format(addMonths(new Date(), -2), 'yyyy-MM-dd');
+    const carouselTemplateName = `Aanpassen Carousel ${Date.now()}`;
 
-    if (!sectionVisible) {
-      console.log('No recurring expenses carousel found, skipping test');
-      return;
+    const createResponse = await page.request.post('/api/recurring-expenses/templates', {
+      data: {
+        name: carouselTemplateName,
+        description: 'Aanpassen carousel template',
+        amount: 150,
+        currency: 'EUR',
+        frequency: 'monthly',
+        start_date: pastDate,
+        next_occurrence: pastDate,
+        vat_rate: 21,
+        is_active: true,
+        is_vat_deductible: true,
+        business_use_percentage: 100
+      }
+    });
+
+    const createJson = await createResponse.json();
+    const carouselTemplateId = createJson?.data?.id || createJson?.template?.id || createJson?.id;
+    expect(carouselTemplateId).toBeTruthy();
+    createdTemplateIds.push(carouselTemplateId as string);
+
+    // Ensure the API reports our template as due before visiting the page
+    const dueResponse = await page.request.get('/api/recurring-expenses/due');
+    const dueJson = await dueResponse.json();
+    const templateInDueList = Array.isArray(dueJson?.data)
+      ? dueJson.data.some((item: any) => item?.template?.name === carouselTemplateName)
+      : false;
+    expect(templateInDueList).toBeTruthy();
+
+    await page.goto('/dashboard/financieel-v2/uitgaven');
+    await page.waitForLoadState('networkidle');
+
+    // Open new expense dialog where the carousel lives
+    const newExpenseButton = page.getByRole('button', { name: /New Expense|Nieuwe uitgave/i }).first();
+    await newExpenseButton.click();
+
+    const expenseDialog = page.locator('[role="dialog"]:has-text("New Expense"), [role="dialog"]:has-text("Nieuwe uitgave")');
+    await expect(expenseDialog).toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(5000);
+
+    // Check if carousel exists inside the dialog
+    const recurringSection = expenseDialog.locator('text=Terugkerende uitgaven te verwerken');
+    const sectionVisible = await recurringSection.isVisible({ timeout: 15000 }).catch(() => false);
+
+    expect(sectionVisible).toBeTruthy()
+
+    // Navigate carousel to our template
+    let found = false;
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (!found && attempts < maxAttempts) {
+      const currentItem = expenseDialog.locator(`h3:has-text("${carouselTemplateName}")`);
+      const isVisible = await currentItem.isVisible().catch(() => false);
+
+      if (isVisible) {
+        found = true;
+        break;
+      }
+
+      const nextButton = expenseDialog.getByRole('button', { name: /Volgende/i });
+      const nextExists = await nextButton.isVisible().catch(() => false);
+
+      if (nextExists && !await nextButton.isDisabled()) {
+        await nextButton.click();
+        await page.waitForTimeout(500);
+      } else {
+        break;
+      }
+
+      attempts++;
     }
+
+    expect(found).toBeTruthy();
 
     // Find the "Aanpassen" button in the carousel
-    const aanpassenButton = page.getByRole('button', { name: /Aanpassen/i }).first();
+    const aanpassenButton = expenseDialog.getByRole('button', { name: /Aanpassen/i }).first();
     const buttonExists = await aanpassenButton.isVisible({ timeout: 5000 }).catch(() => false);
 
-    if (!buttonExists) {
-      console.log('No Aanpassen button found in carousel, skipping test');
-      return;
-    }
+    expect(buttonExists).toBeTruthy()
 
     // Click Aanpassen button
     await aanpassenButton.click();

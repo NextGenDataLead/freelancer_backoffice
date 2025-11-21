@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { toast } from 'sonner'
@@ -76,6 +76,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
   const [startTime, setStartTime] = useState<Date | null>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
   const [entryMode, setEntryMode] = useState<'timer' | 'manual'>('manual')
+  const [clientSearchTerm, setClientSearchTerm] = useState('')
 
   const form = useForm<z.infer<typeof CreateTimeEntrySchema>>({
     resolver: zodResolver(CreateTimeEntrySchema),
@@ -97,7 +98,7 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
     const fetchData = async () => {
       try {
         // Fetch clients
-        const clientsResponse = await fetch('/api/clients?limit=100&active=true')
+        const clientsResponse = await fetch('/api/clients?all=true')
         if (clientsResponse.ok) {
           const clientsData = await clientsResponse.json()
           setClients(clientsData.data || [])
@@ -139,7 +140,15 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
   // Update filtered projects when client changes
   const watchedClientId = form.watch('client_id')
   const watchedProjectId = form.watch('project_id')
-  
+
+  const filteredClients = useMemo(() => {
+    if (!clientSearchTerm.trim()) return clients
+    const term = clientSearchTerm.toLowerCase()
+    return clients.filter(client =>
+      (client.company_name || client.name || '').toLowerCase().includes(term)
+    )
+  }, [clients, clientSearchTerm])
+
   useEffect(() => {
     if (watchedClientId) {
       const clientProjects = projects.filter(p => p.client_id === watchedClientId)
@@ -434,14 +443,31 @@ export function TimeEntryForm({ timeEntry, onSuccess, onCancel }: TimeEntryFormP
                               Geen klanten gevonden
                             </div>
                           ) : (
-                            clients.map((client) => (
-                              <SelectItem key={client.id} value={client.id}>
-                                {client.company_name || client.name}
-                                {client.company_name && client.name && (
-                                  <span className="text-muted-foreground ml-2">({client.name})</span>
+                            <div className="space-y-2">
+                              <div className="px-2 pt-2">
+                                <Input
+                                  placeholder="Zoek klant..."
+                                  value={clientSearchTerm}
+                                  onChange={(event) => setClientSearchTerm(event.target.value)}
+                                />
+                              </div>
+                              <div className="max-h-60 overflow-y-auto">
+                                {filteredClients.length === 0 ? (
+                                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                    Geen overeenkomende klanten
+                                  </div>
+                                ) : (
+                                  filteredClients.map((client) => (
+                                    <SelectItem key={client.id} value={client.id}>
+                                      {client.company_name || client.name}
+                                      {client.company_name && client.name && (
+                                        <span className="text-muted-foreground ml-2">({client.name})</span>
+                                      )}
+                                    </SelectItem>
+                                  ))
                                 )}
-                              </SelectItem>
-                            ))
+                              </div>
+                            </div>
                           )}
                         </SelectContent>
                       </Select>

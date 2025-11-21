@@ -212,7 +212,7 @@ export function ExpenseFilterBar({
         <div className="mt-4 pt-4 border-t border-slate-700/50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Category filter */}
           <div>
-            <label className="text-sm font-medium mb-2 block" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+            <label className="text-sm font-medium mb-2 block" style={{ color: 'rgba(255, 255, 255, 0.7)' }} data-testid="category-filter-label">
               Category
             </label>
             <Select
@@ -224,7 +224,7 @@ export function ExpenseFilterBar({
                 })
               }
             >
-              <SelectTrigger className="bg-slate-900/50 border-slate-700 text-slate-200">
+              <SelectTrigger className="bg-slate-900/50 border-slate-700 text-slate-200" data-testid="category-filter-trigger">
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>

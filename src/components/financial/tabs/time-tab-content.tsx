@@ -66,7 +66,7 @@ export function TimeTabContent() {
   const fetchClients = async () => {
     try {
       setClientsLoading(true)
-      const response = await fetch('/api/clients?limit=100')
+      const response = await fetch('/api/clients?all=true')
       if (response.ok) {
         const data = await response.json()
         setClients(data.data || [])

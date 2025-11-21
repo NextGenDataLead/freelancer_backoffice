@@ -82,11 +82,14 @@ export async function GET(request: Request) {
       }
     }
 
-    // Apply pagination
-    const from = (validatedQuery.page - 1) * validatedQuery.limit
-    const to = from + validatedQuery.limit - 1
-    
-    query = query.range(from, to)
+    const fetchAll = validatedQuery.all === true
+
+    // Apply pagination only when not fetching all
+    if (!fetchAll) {
+      const from = (validatedQuery.page - 1) * validatedQuery.limit
+      const to = from + validatedQuery.limit - 1
+      query = query.range(from, to)
+    }
 
     const { data: clients, error, count } = await query
 
@@ -95,16 +98,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch clients' }, { status: 500 })
     }
 
-    const totalPages = count ? Math.ceil(count / validatedQuery.limit) : 0
+    const totalPages = fetchAll ? 1 : (count ? Math.ceil(count / validatedQuery.limit) : 0)
 
     const response: PaginatedFinancialResponse<Client> = {
       data: clients || [],
       success: true,
       message: 'Clients fetched successfully',
       pagination: {
-        page: validatedQuery.page,
-        limit: validatedQuery.limit,
-        total: count || 0,
+        page: fetchAll ? 1 : validatedQuery.page,
+        limit: fetchAll ? (clients?.length || 0) : validatedQuery.limit,
+        total: count || (clients?.length || 0),
         totalPages
       }
     }

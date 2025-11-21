@@ -48,7 +48,6 @@ export async function GET(request: Request, { params }: RouteParams) {
         items:invoice_items(*),
         client:clients!inner(
           id,
-          name,
           company_name,
           email,
           phone,
@@ -223,7 +222,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
         items:invoice_items(*),
         client:clients!inner(
           id,
-          name,
           company_name,
           email,
           country_code,

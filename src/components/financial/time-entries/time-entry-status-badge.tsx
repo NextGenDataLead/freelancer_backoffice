@@ -64,9 +64,12 @@ export function TimeEntryStatusBadge({
   }
   
   const badgeContent = (
-    <Badge 
-      variant="secondary" 
+    <Badge
+      variant="secondary"
       className={`${getVariantClass()} ${getSizeClass()} border font-medium`}
+      data-testid="status-badge"
+      data-status={statusInfo.status}
+      data-color={statusInfo.color}
     >
       {getStatusIcon()}
       {statusInfo.label}

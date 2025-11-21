@@ -185,6 +185,10 @@ export interface TimeEntry {
   billable: boolean; // Default: true
   invoiced: boolean; // Default: false
   invoice_id?: string;
+  // Computed status fields (updated automatically by database)
+  computed_status?: string; // 'factureerbaar' | 'niet-factureerbaar' | 'gefactureerd'
+  computed_status_color?: string; // 'green' | 'orange' | 'red' | 'purple'
+  status_last_calculated?: Date;
   created_at: Date;
   updated_at: Date;
 }

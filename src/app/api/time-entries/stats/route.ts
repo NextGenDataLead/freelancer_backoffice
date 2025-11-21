@@ -105,6 +105,8 @@ export async function GET() {
         invoiced,
         invoice_id,
         client_id,
+        computed_status,
+        computed_status_color,
         clients!inner(
           id,
           invoicing_frequency
@@ -120,6 +122,46 @@ export async function GET() {
     }
 
     console.log('🔍 Unbilled entries query returned:', unbilledEntries?.length || 0, 'entries')
+
+    // Filter for "Factureerbaar" status using computed_status from database
+    // This is now calculated automatically by the database cron job and triggers
+    const factureerbaarEntries = unbilledEntries?.filter(entry => {
+      // Use computed status if available (should always be available now)
+      if (entry.computed_status && entry.computed_status_color) {
+        const isReady = entry.computed_status === 'factureerbaar' && entry.computed_status_color === 'green'
+        console.log('📊 Entry status (from DB):', {
+          entryId: entry.id,
+          status: entry.computed_status,
+          color: entry.computed_status_color,
+          included: isReady
+        })
+        return isReady
+      }
+
+      // Fallback to client-side calculation if computed status is missing
+      // (shouldn't happen in normal operation)
+      const client = (entry as any).clients as Client
+      if (!client) {
+        console.log('⚠️ Entry missing client:', entry.id)
+        return false
+      }
+
+      const statusInfo = getTimeEntryStatus(entry as unknown as TimeEntry, client, now)
+      console.log('📊 Entry status (fallback calculation):', {
+        entryId: entry.id,
+        status: statusInfo.status,
+        color: statusInfo.color,
+        reason: statusInfo.reason,
+        included: statusInfo.status === 'factureerbaar' && statusInfo.color === 'green'
+      })
+      return statusInfo.status === 'factureerbaar' && statusInfo.color === 'green'
+    }) || []
+
+    console.log('✅ Factureerbaar totals:', {
+      totalUnbilled: unbilledEntries?.length || 0,
+      factureerbaarCount: factureerbaarEntries.length,
+      factureerbaarHours: factureerbaarEntries.reduce((sum, e) => sum + e.hours, 0)
+    })
 
     // Query rolling 30-day periods for health score metrics
     // Current 30 days (last 30 days)
@@ -203,33 +245,6 @@ export async function GET() {
       const effectiveRate = entry.effective_hourly_rate || entry.hourly_rate || 0
       return sum + (entry.hours * effectiveRate)
     }, 0) || 0
-
-    // Filter for "Factureerbaar" status - entries ready to invoice based on frequency rules
-    const factureerbaarEntries = unbilledEntries?.filter(entry => {
-      // Build client object from nested data
-      const client = (entry as any).clients as Client
-      if (!client) {
-        console.log('⚠️ Entry missing client:', entry.id)
-        return false
-      }
-
-      // Check if entry is "Factureerbaar" (ready to invoice)
-      const statusInfo = getTimeEntryStatus(entry as unknown as TimeEntry, client, now)
-      console.log('📊 Entry status:', {
-        entryId: entry.id,
-        status: statusInfo.status,
-        color: statusInfo.color,
-        reason: statusInfo.reason,
-        included: statusInfo.status === 'factureerbaar' && statusInfo.color === 'green'
-      })
-      return statusInfo.status === 'factureerbaar' && statusInfo.color === 'green'
-    }) || []
-
-    console.log('✅ Factureerbaar totals:', {
-      totalUnbilled: unbilledEntries?.length || 0,
-      factureerbaarCount: factureerbaarEntries.length,
-      factureerbaarHours: factureerbaarEntries.reduce((sum, e) => sum + e.hours, 0)
-    })
 
     const factureerbaarHours = factureerbaarEntries.reduce((sum, entry) => sum + entry.hours, 0)
     const factureerbaarRevenue = factureerbaarEntries.reduce((sum, entry) => {

@@ -851,6 +851,13 @@ async function selectProjectById(page: Page, projectId: string, projectName: str
   await page.waitForSelector('[role="option"]', { timeout: 15000 })
   await page.waitForLoadState('networkidle')
 
+  // If a search field is available, use it to quickly locate the client
+  const clientSearchInput = page.locator('input[placeholder*="Search"], input[placeholder*="Zoek"]').first()
+  if (await clientSearchInput.count()) {
+    await clientSearchInput.fill(clientName)
+    await page.waitForTimeout(300)
+  }
+
   // Click the client option (using the provided client name)
   const clientOption = page.locator(`[role="option"]`).filter({ hasText: clientName })
   await clientOption.waitFor({ state: 'visible', timeout: 15000 })

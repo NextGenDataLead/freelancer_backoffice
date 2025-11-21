@@ -46,7 +46,7 @@ export default function TijdPage() {
   const fetchClients = async () => {
     try {
       setClientsLoading(true)
-      const response = await fetch('/api/clients?limit=100')
+      const response = await fetch('/api/clients?all=true')
       if (response.ok) {
         const data = await response.json()
         setClients(data.data || [])
@@ -136,6 +136,7 @@ export default function TijdPage() {
     setEditingTimeEntry(null)
     setTimeEntryMode('new')
     setRefreshKey(prev => prev + 1)
+    setSelectedFilterDate(undefined)
     fetchClients()
     fetchTimeStats()
   }
@@ -145,6 +146,7 @@ export default function TijdPage() {
     setEditingTimeEntry(null)
     setTimeEntryMode('new')
     setRefreshKey(prev => prev + 1)
+    setSelectedFilterDate(undefined)
     fetchClients()
     fetchTimeStats()
   }
@@ -612,7 +614,7 @@ export default function TijdPage() {
             key={refreshKey}
             onEdit={handleEditTimeEntry}
             onRefresh={handleRefresh}
-            limit={50}
+            showPagination={true}
             dateFilter={selectedFilterDate}
           />
         </CardContent>

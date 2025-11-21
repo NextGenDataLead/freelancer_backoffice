@@ -9,7 +9,7 @@ import { InvoiceForm } from '@/components/financial/invoices/invoice-form'
 import { InvoiceDetailModal } from '@/components/financial/invoices/invoice-detail-modal'
 import { ClientInvoiceWizard } from '@/components/financial/invoices/client-invoice-wizard'
 import { ComprehensiveInvoicingWizard } from '@/components/financial/invoices/comprehensive-invoicing-wizard'
-import { FileText, Plus, Euro, Clock, AlertTriangle, Send, Receipt } from 'lucide-react'
+import { FileText, Plus, Euro, Clock, AlertTriangle, Send, Receipt, Download } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import type { ClientInvoicingSummary } from '@/lib/types/financial'
@@ -27,6 +27,7 @@ export default function FacturenPage() {
   const [showComprehensiveWizard, setShowComprehensiveWizard] = useState(false)
   const [showManualInvoiceForm, setShowManualInvoiceForm] = useState(false)
   const [showClientInvoiceWizard, setShowClientInvoiceWizard] = useState(false)
+  const [showExportDialog, setShowExportDialog] = useState(false)
 
   // Action modal states
   const [showRemindersModal, setShowRemindersModal] = useState(false)
@@ -145,6 +146,33 @@ export default function FacturenPage() {
     setShowVATOverview(true)
   }
 
+  const handleExportInvoices = async () => {
+    try {
+      const response = await fetch('/api/invoices/export')
+
+      if (!response.ok) {
+        throw new Error('Failed to export invoices')
+      }
+
+      // Create download link
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.style.display = 'none'
+      a.href = url
+      a.download = `invoices-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success('Invoices exported successfully')
+    } catch (error) {
+      console.error('Error exporting invoices:', error)
+      toast.error('Failed to export invoices')
+    }
+  }
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('nl-NL', {
       style: 'currency',
@@ -161,11 +189,30 @@ export default function FacturenPage() {
             <button
               type="button"
               className="action-chip"
+              style={{ background: 'rgba(34, 197, 94, 0.15)', border: '1px solid rgba(34, 197, 94, 0.3)' }}
+              onClick={handleExportInvoices}
+              data-testid="export-button"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </button>
+            <button
+              type="button"
+              className="action-chip"
               style={{ background: 'rgba(139, 92, 246, 0.15)', border: '1px solid rgba(139, 92, 246, 0.3)' }}
               onClick={handleOpenComprehensiveWizard}
             >
               <Plus className="h-4 w-4 mr-2" />
               Start Invoice Wizard
+            </button>
+            <button
+              type="button"
+              className="action-chip"
+              style={{ background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.3)' }}
+              onClick={() => setShowManualInvoiceForm(true)}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Manual Invoice
             </button>
           </div>
         </div>

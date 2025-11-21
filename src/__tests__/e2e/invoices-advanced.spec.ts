@@ -25,6 +25,8 @@ import {
   generateTestClientData,
   cleanupClients
 } from './helpers/client-helpers'
+import { loginToApplication as authLogin, dismissCookieConsent } from './Final/helpers/auth-helpers'
+import { clickDropdownOption } from './helpers/ui-interactions'
 
 test.setTimeout(60000)
 
@@ -45,7 +47,8 @@ test.describe('Invoice Advanced Features', () => {
     await loginToApplication(page)
     await page.goto('/dashboard/financieel-v2/facturen')
     await page.waitForLoadState('networkidle')
-    await page.waitForSelector('text=/Invoices|Facturen/i', { timeout: 15000 })
+    await dismissCookieConsent(page) // Dismiss cookie consent if it appears after navigation
+    await page.waitForSelector('h1, h2, table, [data-testid="invoices-page"]', { timeout: 15000 })
   })
 
   test.afterEach(async ({ page }) => {
@@ -54,10 +57,8 @@ test.describe('Invoice Advanced Features', () => {
       await cleanupInvoices(page, testData.invoiceIds)
       testData.invoiceIds = []
     }
-  })
 
-  test.afterAll(async ({ page }) => {
-    // Cleanup clients created during tests
+    // Cleanup clients at end of each test to avoid afterAll page fixture issue
     if (testData.clientIds.length > 0) {
       await cleanupClients(page, testData.clientIds)
       testData.clientIds = []
@@ -72,6 +73,7 @@ test.describe('Invoice Advanced Features', () => {
           console.warn(`Failed to cleanup template ${templateId}:`, error)
         }
       }
+      testData.templateIds = []
     }
   })
 
@@ -81,10 +83,11 @@ test.describe('Invoice Advanced Features', () => {
     const clientId = await createClientViaAPI(page, clientData)
     testData.clientIds.push(clientId)
 
-    // Create invoice template via API
+    // Create invoice template via API with unique name
+    const uniqueTemplateName = `E2E Test Template ${Date.now()}`
     const templateResponse = await page.request.post('/api/invoice-templates', {
       data: {
-        name: 'E2E Test Template',
+        name: uniqueTemplateName,
         description: 'Template for E2E testing',
         default_payment_terms_days: 14,
         items: [
@@ -104,7 +107,7 @@ test.describe('Invoice Advanced Features', () => {
 
     if (templateResponse.ok()) {
       const template = await templateResponse.json()
-      const templateId = template.template?.id || template.id
+      const templateId = template.data?.template?.id
       testData.templateIds.push(templateId)
 
       console.log(`Created template ${templateId}`)
@@ -112,42 +115,49 @@ test.describe('Invoice Advanced Features', () => {
       // Open manual invoice form
       await openManualInvoiceForm(page)
 
-      // Look for template selector
-      const templateSelector = page.locator('button:has-text("Template"), select[name="template"], [data-testid="template-selector"]')
+      // Wait for form and templates to load
+      await page.waitForSelector('[data-testid="invoice-form"]', { timeout: 5000 })
+      await page.waitForTimeout(2000) // Give time for templates to fetch
 
-      if (await templateSelector.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await templateSelector.click()
-        await page.waitForTimeout(500)
+      // Strict: Template selector must be visible
+      const templateSelector = page.locator('[data-testid="template-selector"]')
+      await expect(templateSelector).toBeVisible({ timeout: 5000 })
 
-        // Select template
-        const templateOption = page.locator(`[role="option"]:has-text("E2E Test Template"), option:has-text("E2E Test Template")`)
+      await templateSelector.click()
+      await page.waitForTimeout(500)
 
-        if (await templateOption.isVisible({ timeout: 2000 }).catch(() => false)) {
-          await templateOption.click()
-          await page.waitForTimeout(1000)
+      // Use search to filter templates
+      const templateSearch = page.locator('[data-testid="template-search"]')
+      await expect(templateSearch).toBeVisible({ timeout: 3000 })
+      await templateSearch.fill(uniqueTemplateName)
+      await page.waitForTimeout(1000)
 
-          // Verify items are pre-filled
-          const monthlyRetainerItem = page.locator('text=/Monthly Retainer/i')
-          const additionalHoursItem = page.locator('text=/Additional Hours/i')
+      // Strict: Template option must be present and clickable after filtering
+      const templateOption = page.locator(`[role="option"]:has-text("${uniqueTemplateName}")`).first()
+      await expect(templateOption).toBeVisible({ timeout: 3000 })
 
-          if (await monthlyRetainerItem.count() > 0) {
-            await expect(monthlyRetainerItem.first()).toBeVisible()
-            console.log('✅ Template applied - Items pre-filled')
-          } else {
-            console.log('⚠️  Template items not visible - but template selected')
-          }
-        } else {
-          console.log('⚠️  Template option not found - might use different selector')
-        }
+      await templateOption.scrollIntoViewIfNeeded()
+      await templateOption.hover({ timeout: 2000 }).catch(() => null)
+      await templateOption.click({ timeout: 2000, force: true })
 
-        // Close form
-        const cancelButton = page.locator('button:has-text("Cancel"), button:has-text("Annuleren")').first()
-        await cancelButton.click()
-      } else {
-        console.log('⚠️  Template feature not implemented yet')
-      }
+      // Click a neutral spot on the form to ensure the Radix Select closes like a user click would
+      await page.locator('[data-testid="invoice-form"]').click({ position: { x: 8, y: 8 } })
+      await expect(templateSelector).toContainText(uniqueTemplateName, { timeout: 3000 })
+      await page.waitForTimeout(1000)
+
+      // Strict: Template items must be pre-filled
+      const monthlyRetainerItem = page.locator('text=/Monthly Retainer/i')
+      const additionalHoursItem = page.locator('text=/Additional Hours/i')
+
+      await expect(monthlyRetainerItem.first()).toBeVisible({ timeout: 3000 })
+      await expect(additionalHoursItem.first()).toBeVisible({ timeout: 3000 })
+      console.log('✅ Template applied - Items pre-filled')
+
+      // Close form
+      const cancelButton = page.locator('button:has-text("Cancel"), button:has-text("Annuleren")').first()
+      await cancelButton.click()
     } else {
-      console.log('⚠️  Could not create template - endpoint might not exist yet')
+      throw new Error('Failed to create template - endpoint not working')
     }
   })
 
@@ -244,48 +254,46 @@ test.describe('Invoice Advanced Features', () => {
     await page.waitForLoadState('networkidle')
     await waitForInvoiceList(page)
 
-    // Open invoice detail
+    // Open invoice detail by clicking the View (Eye) button
     const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-    await invoiceRow.click()
+    const viewButton = invoiceRow.locator('button:has(svg.lucide-eye)')
+    await viewButton.click()
 
     // Wait for detail modal
     await page.waitForSelector('[data-testid="invoice-detail-modal"], [role="dialog"]', { timeout: 5000 })
 
-    // Look for PDF preview/download button
-    const pdfButton = page.locator('button:has-text("PDF"), button:has-text("Download"), button:has-text("Preview"), button[data-testid="pdf-button"]')
+    // Strict: PDF button must be visible
+    const pdfButton = page.locator('[data-testid="pdf-button"]')
+    await expect(pdfButton).toBeVisible({ timeout: 5000 })
 
-    if (await pdfButton.count() > 0) {
-      // Setup download listener
-      const downloadPromise = page.waitForEvent('download', { timeout: 10000 }).catch(() => null)
+    // Setup download listener
+    const downloadPromise = page.waitForEvent('download', { timeout: 10000 }).catch(() => null)
 
-      // Click PDF button
-      await pdfButton.first().click()
+    // Click PDF button
+    await pdfButton.click()
 
-      // Wait for download or new tab
-      const download = await downloadPromise
+    // Wait for download or new tab
+    const download = await downloadPromise
 
-      if (download) {
-        // Verify PDF download
-        const fileName = download.suggestedFilename()
-        expect(fileName).toMatch(/\.pdf$/i)
-        console.log(`✅ PDF generated and downloaded: ${fileName}`)
-      } else {
-        // Might open in new tab instead of downloading
-        const pages = page.context().pages()
-        if (pages.length > 1) {
-          const pdfPage = pages[pages.length - 1]
-          await pdfPage.waitForLoadState('load', { timeout: 5000 }).catch(() => {})
-
-          if (pdfPage.url().includes('.pdf') || pdfPage.url().includes('/invoices/') && pdfPage.url().includes('/pdf')) {
-            console.log('✅ PDF opened in new tab')
-            await pdfPage.close()
-          }
-        } else {
-          console.log('⚠️  PDF might be generated but not downloaded/opened')
-        }
-      }
+    if (download) {
+      // Verify PDF download
+      const fileName = download.suggestedFilename()
+      expect(fileName).toMatch(/\.pdf$/i)
+      console.log(`✅ PDF generated and downloaded: ${fileName}`)
     } else {
-      console.log('⚠️  PDF generation feature not implemented yet')
+      // Might open in new tab instead of downloading
+      const pages = page.context().pages()
+      if (pages.length > 1) {
+        const pdfPage = pages[pages.length - 1]
+        await pdfPage.waitForLoadState('load', { timeout: 5000 }).catch(() => {})
+
+        const isPdfPage = pdfPage.url().includes('.pdf') || (pdfPage.url().includes('/invoices/') && pdfPage.url().includes('/pdf'))
+        expect(isPdfPage).toBeTruthy()
+        console.log('✅ PDF opened in new tab')
+        await pdfPage.close()
+      } else {
+        throw new Error('PDF was not downloaded or opened in new tab')
+      }
     }
   })
 
@@ -321,58 +329,39 @@ test.describe('Invoice Advanced Features', () => {
     await page.waitForLoadState('networkidle')
     await waitForInvoiceList(page)
 
-    // Open invoice detail
+    // Open invoice detail by clicking the View (Eye) button
     const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-    await invoiceRow.click()
+    const viewButton = invoiceRow.locator('button:has(svg.lucide-eye)')
+    await viewButton.click()
 
     // Wait for detail modal
     await page.waitForSelector('[data-testid="invoice-detail-modal"], [role="dialog"]', { timeout: 5000 })
 
-    // Look for email/send button
-    const sendEmailButton = page.locator('button:has-text("Send Invoice"), button:has-text("Send Email"), button:has-text("Email"), button:has-text("Verstuur")')
+    // Strict: Email send button must be visible
+    const sendEmailButton = page.locator('[data-testid="send-email-button"]')
+    await expect(sendEmailButton).toBeVisible({ timeout: 5000 })
+    await sendEmailButton.click()
+    await page.waitForTimeout(1000)
 
-    if (await sendEmailButton.count() > 0) {
-      await sendEmailButton.first().click()
-      await page.waitForTimeout(1000)
+    // Strict: Email dialog must open
+    const emailDialog = page.locator('[data-testid="email-dialog"]')
+    await expect(emailDialog).toBeVisible({ timeout: 3000 })
 
-      // Look for email dialog
-      const emailDialog = page.locator('[data-testid="email-dialog"], [role="dialog"]').last()
+    // Strict: Email input must be pre-filled with client email
+    const emailInput = emailDialog.locator('[data-testid="email-to-input"]')
+    await expect(emailInput).toBeVisible({ timeout: 2000 })
+    const emailValue = await emailInput.inputValue()
+    expect(emailValue).toContain('test-email@example.com')
+    console.log(`✅ Email dialog opened with recipient: ${emailValue}`)
 
-      if (await emailDialog.isVisible({ timeout: 3000 }).catch(() => false)) {
-        // Verify email pre-filled
-        const emailInput = emailDialog.locator('input[type="email"], input[name="to"]')
+    // Strict: Send button must be available
+    const sendButton = emailDialog.locator('button:has-text("Send"), button:has-text("Versturen")')
+    await expect(sendButton).toBeVisible({ timeout: 2000 })
+    console.log('✅ Email send functionality available')
 
-        if (await emailInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-          const emailValue = await emailInput.inputValue()
-          expect(emailValue).toContain('test-email@example.com')
-          console.log(`✅ Email dialog opened with recipient: ${emailValue}`)
-        }
-
-        // Look for send button
-        const sendButton = emailDialog.locator('button:has-text("Send"), button:has-text("Versturen")')
-
-        if (await sendButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-          // Note: We won't actually send the email in test
-          console.log('✅ Email send functionality available')
-
-          // Close dialog
-          const closeButton = emailDialog.locator('button:has-text("Cancel"), button:has-text("Annuleren"), button[aria-label="Close"]').first()
-          await closeButton.click()
-        } else {
-          console.log('⚠️  Email send button not found')
-        }
-      } else {
-        console.log('⚠️  Email dialog not found - might send directly')
-
-        // Check for success message
-        const successMessage = page.locator('text=/Email sent|sent successfully|verstuurd/i')
-        if (await successMessage.isVisible({ timeout: 3000 }).catch(() => false)) {
-          console.log('✅ Email sent (direct send)')
-        }
-      }
-    } else {
-      console.log('⚠️  Email send feature not implemented yet')
-    }
+    // Close dialog
+    const closeButton = emailDialog.locator('button:has-text("Cancel"), button:has-text("Annuleren"), button[aria-label="Close"]').first()
+    await closeButton.click()
   })
 
   test('should export invoices to CSV', async ({ page }) => {
@@ -409,56 +398,43 @@ test.describe('Invoice Advanced Features', () => {
     await page.waitForLoadState('networkidle')
     await waitForInvoiceList(page)
 
-    // Look for export button (might be in menu)
-    const exportButton = page.locator('button:has-text("Export"), button:has-text("CSV"), button[data-testid="export-button"]')
+    // Strict: Export button must be visible
+    const exportButton = page.locator('[data-testid="export-button"]')
+    await expect(exportButton).toBeVisible({ timeout: 5000 })
 
-    if (await exportButton.count() > 0) {
-      // Setup download listener
-      const downloadPromise = page.waitForEvent('download', { timeout: 10000 }).catch(() => null)
+    // Setup download listener
+    const downloadPromise = page.waitForEvent('download', { timeout: 10000 })
 
-      // Click export button
-      await exportButton.first().click()
-      await page.waitForTimeout(500)
+    // Click export button
+    await exportButton.click()
+    await page.waitForTimeout(500)
 
-      // If dropdown menu, click CSV option
-      const csvOption = page.locator('[role="menuitem"]:has-text("CSV"), button:has-text("CSV")').first()
-      if (await csvOption.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await csvOption.click()
-      }
+    // If dropdown menu, click CSV option
+    const csvOption = page.locator('[role="menuitem"]:has-text("CSV"), button:has-text("CSV")').first()
+    if (await csvOption.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await csvOption.click()
+    }
 
-      // Wait for download
-      const download = await downloadPromise
+    // Strict: Download must occur
+    const download = await downloadPromise
 
-      if (download) {
-        // Verify CSV download
-        const fileName = download.suggestedFilename()
-        expect(fileName).toMatch(/\.(csv|xlsx)$/i)
-        console.log(`✅ Invoices exported to ${fileName}`)
+    // Strict: Verify CSV download
+    const fileName = download.suggestedFilename()
+    expect(fileName).toMatch(/\.csv$/i)
+    console.log(`✅ Invoices exported to ${fileName}`)
 
-        // Optionally verify CSV contents
-        const filePath = await download.path()
-        if (filePath) {
-          const fs = await import('fs')
-          const fileContent = fs.readFileSync(filePath, 'utf-8')
+    // Strict: Verify CSV contents contain test data
+    const filePath = await download.path()
+    expect(filePath).toBeTruthy()
 
-          // Verify CSV contains invoice data
-          const hasExportData = fileContent.includes('EXPORT-TEST') || fileContent.includes('Export Test Service')
-          if (hasExportData) {
-            console.log('✅ CSV contains invoice data')
-          }
-        }
-      } else {
-        console.log('⚠️  Export might be processing - download not detected')
-      }
-    } else {
-      console.log('⚠️  Export feature not implemented yet')
+    if (filePath) {
+      const fs = await import('fs')
+      const fileContent = fs.readFileSync(filePath, 'utf-8')
 
-      // Try alternative: Look for bulk actions menu
-      const bulkActionsButton = page.locator('button:has-text("Bulk"), button:has-text("Actions"), button[data-testid="bulk-actions"]').first()
-
-      if (await bulkActionsButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        console.log('⚠️  Found bulk actions - export might be there')
-      }
+      // Verify CSV contains invoice data
+      const hasExportData = fileContent.includes('EXPORT-TEST') || fileContent.includes('Export Test Service')
+      expect(hasExportData).toBeTruthy()
+      console.log('✅ CSV contains invoice data')
     }
   })
 })
@@ -475,6 +451,7 @@ async function loginToApplication(page: Page) {
 
   if (isLoggedIn) {
     console.log('✅ Already logged in')
+    await dismissCookieConsent(page)
     return
   }
 
@@ -495,6 +472,10 @@ async function loginToApplication(page: Page) {
   await continueButton.click()
 
   await page.waitForURL(/\/dashboard/, { timeout: 15000 })
+
+  // Dismiss cookie consent if present
+  await dismissCookieConsent(page)
+
   console.log('✅ Login successful')
 }
 

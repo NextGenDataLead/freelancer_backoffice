@@ -93,7 +93,7 @@ export function ComprehensiveInvoicingWizard({
     
     try {
       // Load clients (using maximum allowed limit of 100)
-      const clientsResponse = await fetch('/api/clients?limit=100')
+      const clientsResponse = await fetch('/api/clients?all=true')
       if (!clientsResponse.ok) throw new Error('Failed to fetch clients')
       const clientsData = await clientsResponse.json()
       

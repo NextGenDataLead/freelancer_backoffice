@@ -185,10 +185,25 @@ export const CreateInvoiceItemSchema = z.object({
   unit_price: CurrencyAmountSchema
 });
 
+const InvoiceDateSchema = z.union([
+  z.date(),
+  z.string().transform((value, ctx) => {
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.invalid_date,
+        message: "Invalid date format"
+      })
+      return z.NEVER
+    }
+    return parsed
+  })
+])
+
 export const CreateInvoiceSchema = z.object({
   client_id: z.string().uuid("Invalid client ID"),
-  invoice_date: z.date().default(() => new Date()),
-  due_date: z.date(),
+  invoice_date: InvoiceDateSchema.default(() => new Date()),
+  due_date: InvoiceDateSchema,
   reference: z.string().max(255, "Reference too long").optional(),
   notes: z.string().max(1000, "Notes too long").optional(),
   items: z.array(CreateInvoiceItemSchema).min(1, "At least one item is required")
@@ -200,8 +215,8 @@ export const CreateInvoiceSchema = z.object({
 export const UpdateInvoiceSchema = z.object({
   id: z.string().uuid("Invalid invoice ID"),
   client_id: z.string().uuid("Invalid client ID").optional(),
-  invoice_date: z.date().optional(),
-  due_date: z.date().optional(),
+  invoice_date: InvoiceDateSchema.optional(),
+  due_date: InvoiceDateSchema.optional(),
   reference: z.string().max(255, "Reference too long").optional(),
   notes: z.string().max(1000, "Notes too long").optional(),
   items: z.array(CreateInvoiceItemSchema.extend({
@@ -452,6 +467,7 @@ export const ClientsQuerySchema = PaginationSchema.extend({
   is_business: z.coerce.boolean().optional(),
   is_supplier: z.coerce.boolean().optional(),
   country_code: z.string().length(2).optional(),
+  all: z.coerce.boolean().optional(),
   // Support filtering by status (Enhancement #2)
   // Can be single status or comma-separated list (e.g., "active,on_hold")
   status: z.string().optional().transform((val) => {

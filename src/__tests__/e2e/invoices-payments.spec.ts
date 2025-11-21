@@ -48,7 +48,7 @@ test.describe('Invoice Payment Management', () => {
     await loginToApplication(page)
     await page.goto('/dashboard/financieel-v2/facturen')
     await page.waitForLoadState('networkidle')
-    await page.waitForSelector('text=/Invoices|Facturen/i', { timeout: 15000 })
+    await page.waitForSelector('h1, h2, table, [data-testid="invoices-page"]', { timeout: 15000 })
   })
 
   test.afterEach(async ({ page }) => {
@@ -57,10 +57,8 @@ test.describe('Invoice Payment Management', () => {
       await cleanupInvoices(page, testData.invoiceIds)
       testData.invoiceIds = []
     }
-  })
 
-  test.afterAll(async ({ page }) => {
-    // Cleanup clients created during tests
+    // Cleanup clients at end of each test to avoid afterAll page fixture issue
     if (testData.clientIds.length > 0) {
       await cleanupClients(page, testData.clientIds)
       testData.clientIds = []

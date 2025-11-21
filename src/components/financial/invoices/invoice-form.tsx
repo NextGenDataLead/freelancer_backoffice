@@ -23,16 +23,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { 
-  Plus, 
-  Trash2, 
-  Calculator, 
-  FileText, 
-  User, 
-  Calendar, 
+import {
+  Plus,
+  Trash2,
+  Calculator,
+  FileText,
+  User,
+  Calendar,
   Euro,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Search
 } from 'lucide-react'
 import { CreateInvoiceSchema } from '@/lib/validations/financial'
 import type { InvoiceWithClient, Client, InvoiceCalculation } from '@/lib/types/financial'
@@ -56,12 +57,27 @@ interface ClientOption {
   default_payment_terms: number
 }
 
+interface InvoiceTemplate {
+  id: string
+  name: string
+  description?: string
+  default_payment_terms_days?: number
+  items: Array<{
+    description: string
+    quantity: number
+    unit_price: number
+  }>
+}
+
 export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [clients, setClients] = useState<ClientOption[]>([])
   const [selectedClient, setSelectedClient] = useState<ClientOption | null>(null)
   const [vatCalculation, setVatCalculation] = useState<InvoiceCalculation | null>(null)
   const [isCalculatingVAT, setIsCalculatingVAT] = useState(false)
+  const [templates, setTemplates] = useState<InvoiceTemplate[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('none')
+  const [templateSearch, setTemplateSearch] = useState<string>('')
 
   const form = useForm<z.infer<typeof CreateInvoiceSchema>>({
     resolver: zodResolver(CreateInvoiceSchema),
@@ -82,15 +98,15 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
     name: 'items'
   })
 
-  // Load clients on component mount
+  // Load clients and templates on component mount
   useEffect(() => {
     const fetchClients = async () => {
       try {
-        const response = await fetch('/api/clients?limit=100')
+        const response = await fetch('/api/clients?all=true')
         if (response.ok) {
           const data = await response.json()
           setClients(data.data)
-          
+
           // Set selected client if editing existing invoice
           if (invoice?.client_id) {
             const client = data.data.find((c: ClientOption) => c.id === invoice.client_id)
@@ -104,7 +120,20 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
       }
     }
 
+    const fetchTemplates = async () => {
+      try {
+        const response = await fetch('/api/invoice-templates')
+        if (response.ok) {
+          const data = await response.json()
+          setTemplates(data.data || [])
+        }
+      } catch (error) {
+        console.error('Failed to load templates:', error)
+      }
+    }
+
     fetchClients()
+    fetchTemplates()
   }, [invoice])
 
   // Calculate VAT when client or items change
@@ -153,13 +182,41 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
     const client = clients.find(c => c.id === clientId)
     if (client) {
       setSelectedClient(client)
-      
+
       // Auto-set due date based on payment terms
       const invoiceDate = new Date(form.getValues('invoice_date'))
       const dueDate = new Date(invoiceDate)
       dueDate.setDate(dueDate.getDate() + client.default_payment_terms)
       form.setValue('due_date', dueDate.toISOString().split('T')[0])
     }
+  }
+
+  const handleTemplateChange = (templateId: string) => {
+    setSelectedTemplate(templateId)
+
+    if (!templateId || templateId === 'none') return
+
+    const template = templates.find(t => t.id === templateId)
+    if (!template) return
+
+    // Replace the current form items in a single update to avoid freeze loops
+    form.setValue('items', template.items.map(item => ({
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unit_price
+    })))
+
+    // Apply default payment terms if present
+    if (template.default_payment_terms_days) {
+      const invoiceDate = new Date(form.getValues('invoice_date'))
+      const dueDate = new Date(invoiceDate)
+      dueDate.setDate(dueDate.getDate() + template.default_payment_terms_days)
+      form.setValue('due_date', dueDate.toISOString().split('T')[0])
+    }
+
+    toast.success('Template applied', {
+      description: `${template.items.length} items added to invoice`
+    })
   }
 
   const onSubmit = async (data: z.infer<typeof CreateInvoiceSchema>) => {
@@ -258,7 +315,64 @@ export function InvoiceForm({ invoice, onSuccess, onCancel }: InvoiceFormProps) 
 
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" data-testid="invoice-form">
+              {/* Invoice Template Selector */}
+              {!invoice && templates.length > 0 && (
+                <div className="pb-4 border-b">
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Factuursjabloon (optioneel)
+                    </FormLabel>
+                    <Select
+                      value={selectedTemplate}
+                      onValueChange={handleTemplateChange}
+                    >
+                      <SelectTrigger data-testid="template-selector">
+                        <SelectValue placeholder="Selecteer een sjabloon om snel te starten" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {/* Search Input */}
+                        <div className="p-2 border-b sticky top-0 bg-background">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              data-testid="template-search"
+                              placeholder="Zoek sjabloon..."
+                              value={templateSearch}
+                              onChange={(e) => setTemplateSearch(e.target.value)}
+                              className="pl-8"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        </div>
+
+                        <SelectItem value="none">Geen sjabloon</SelectItem>
+                        {templates
+                          .filter((template) =>
+                            templateSearch === '' ||
+                            template.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                            template.description?.toLowerCase().includes(templateSearch.toLowerCase())
+                          )
+                          .map((template) => (
+                            <SelectItem key={template.id} value={template.id}>
+                              {template.name}
+                              {template.description && (
+                                <span className="text-xs text-muted-foreground ml-2">
+                                  - {template.description}
+                                </span>
+                              )}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Kies een sjabloon om factuurregels automatisch in te vullen
+                    </FormDescription>
+                  </FormItem>
+                </div>
+              )}
+
               {/* Client and Date Information */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <FormField
