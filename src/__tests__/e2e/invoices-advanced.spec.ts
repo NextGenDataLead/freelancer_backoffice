@@ -25,7 +25,7 @@ import {
   generateTestClientData,
   cleanupClients
 } from './helpers/client-helpers'
-import { loginToApplication as authLogin, dismissCookieConsent } from './Final/helpers/auth-helpers'
+import { loginToApplication as authLogin, dismissCookieConsent } from './helpers/auth-helpers'
 import { clickDropdownOption } from './helpers/ui-interactions'
 
 test.setTimeout(60000)
@@ -153,9 +153,9 @@ test.describe('Invoice Advanced Features', () => {
       await expect(additionalHoursItem.first()).toBeVisible({ timeout: 3000 })
       console.log('✅ Template applied - Items pre-filled')
 
-      // Close form
-      const cancelButton = page.locator('button:has-text("Cancel"), button:has-text("Annuleren")').first()
-      await cancelButton.click()
+      // Close form using Escape key (more reliable than clicking Cancel due to overlay)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(500) // Wait for modal close animation
     } else {
       throw new Error('Failed to create template - endpoint not working')
     }
@@ -218,9 +218,9 @@ test.describe('Invoice Advanced Features', () => {
       console.log('⚠️  Payment terms field not found - might use different pattern')
     }
 
-    // Close form
-    const cancelButton = page.locator('button:has-text("Cancel"), button:has-text("Annuleren")').first()
-    await cancelButton.click()
+    // Close form using Escape key (more reliable than clicking Cancel due to overlay)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500) // Wait for modal close animation
 
     console.log('✅ VAT and payment terms customization test completed')
   })
@@ -359,9 +359,9 @@ test.describe('Invoice Advanced Features', () => {
     await expect(sendButton).toBeVisible({ timeout: 2000 })
     console.log('✅ Email send functionality available')
 
-    // Close dialog
-    const closeButton = emailDialog.locator('button:has-text("Cancel"), button:has-text("Annuleren"), button[aria-label="Close"]').first()
-    await closeButton.click()
+    // Close dialog using Escape key (more reliable than clicking Close due to overlay)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500) // Wait for modal close animation
   })
 
   test('should export invoices to CSV', async ({ page }) => {

@@ -22,7 +22,8 @@ import {
   updateInvoiceStatusUI,
   waitForStatusBadge,
   cleanupInvoices,
-  getInvoiceDetails
+  getInvoiceDetails,
+  openInvoiceDetail
 } from './helpers/invoice-helpers'
 import {
   createClientViaAPI,
@@ -97,12 +98,8 @@ test.describe('Invoice Payment Management', () => {
     await page.waitForLoadState('networkidle')
     await waitForInvoiceList(page)
 
-    // Open invoice detail
-    const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-    await invoiceRow.click()
-
-    // Wait for detail modal
-    await page.waitForSelector('[data-testid="invoice-detail-modal"], [role="dialog"]', { timeout: 5000 })
+    // Open invoice detail modal using helper (clicks View button)
+    await openInvoiceDetail(page, invoiceNumber)
 
     // Record full payment
     await recordPaymentUI(page, totalAmount)
@@ -151,12 +148,8 @@ test.describe('Invoice Payment Management', () => {
     await page.waitForLoadState('networkidle')
     await waitForInvoiceList(page)
 
-    // Open invoice detail
-    const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-    await invoiceRow.click()
-
-    // Wait for detail modal
-    await page.waitForSelector('[data-testid="invoice-detail-modal"], [role="dialog"]', { timeout: 5000 })
+    // Open invoice detail modal using helper (clicks View button)
+    await openInvoiceDetail(page, invoiceNumber)
 
     // Record partial payment (€400 of €1000)
     const partialAmount = 400
@@ -189,7 +182,7 @@ test.describe('Invoice Payment Management', () => {
     const clientId = await createClientViaAPI(page, clientData)
     testData.clientIds.push(clientId)
 
-    // Create invoice (€1000)
+    // Create invoice (€1000 subtotal, but total will include VAT for NL clients = €1210)
     const invoiceId = await createInvoiceViaAPI(page, {
       clientId: clientId,
       items: [
@@ -203,28 +196,38 @@ test.describe('Invoice Payment Management', () => {
     })
     testData.invoiceIds.push(invoiceId)
 
-    console.log(`Testing multiple partial payments for invoice ${invoiceId}`)
-
-    // Record first payment (€400) via API
-    await recordPaymentViaAPI(page, invoiceId, { amount: 400 })
-    console.log('✅ First payment: €400')
-
-    // Record second payment (€300) via API
-    await recordPaymentViaAPI(page, invoiceId, { amount: 300 })
-    console.log('✅ Second payment: €300')
-
-    // Verify total paid is €700
+    // Get the actual total amount (includes VAT)
     let invoiceDetails = await getInvoiceDetails(page, invoiceId)
-    expect(parseFloat(invoiceDetails.paid_amount)).toBe(700)
+    const totalAmount = parseFloat(invoiceDetails.total_amount)
+
+    console.log(`Testing multiple partial payments for invoice ${invoiceId}, total: €${totalAmount}`)
+
+    // Calculate payment amounts that sum to total
+    const payment1 = Math.round(totalAmount * 0.33 * 100) / 100 // ~33%
+    const payment2 = Math.round(totalAmount * 0.33 * 100) / 100 // ~33%
+    const payment3 = Math.round((totalAmount - payment1 - payment2) * 100) / 100 // Remainder
+
+    // Record first payment via API
+    await recordPaymentViaAPI(page, invoiceId, { amount: payment1 })
+    console.log(`✅ First payment: €${payment1}`)
+
+    // Record second payment via API
+    await recordPaymentViaAPI(page, invoiceId, { amount: payment2 })
+    console.log(`✅ Second payment: €${payment2}`)
+
+    // Verify total paid is payment1 + payment2
+    invoiceDetails = await getInvoiceDetails(page, invoiceId)
+    const expectedPaidAfterTwo = Math.round((payment1 + payment2) * 100) / 100
+    expect(Math.round(parseFloat(invoiceDetails.paid_amount) * 100) / 100).toBe(expectedPaidAfterTwo)
     expect(invoiceDetails.status).not.toBe('paid') // Still not fully paid
 
-    // Record third payment (€300) via API to complete payment
-    await recordPaymentViaAPI(page, invoiceId, { amount: 300 })
-    console.log('✅ Third payment: €300')
+    // Record third payment via API to complete payment
+    await recordPaymentViaAPI(page, invoiceId, { amount: payment3 })
+    console.log(`✅ Third payment: €${payment3}`)
 
     // Verify fully paid
     invoiceDetails = await getInvoiceDetails(page, invoiceId)
-    expect(parseFloat(invoiceDetails.paid_amount)).toBe(1000)
+    expect(Math.round(parseFloat(invoiceDetails.paid_amount) * 100) / 100).toBe(Math.round(totalAmount * 100) / 100)
     expect(invoiceDetails.status).toBe('paid')
 
     console.log('✅ Multiple partial payments handled correctly - Status: Paid')
@@ -263,12 +266,8 @@ test.describe('Invoice Payment Management', () => {
     await page.waitForLoadState('networkidle')
     await waitForInvoiceList(page)
 
-    // Open invoice detail
-    const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-    await invoiceRow.click()
-
-    // Wait for detail modal
-    await page.waitForSelector('[data-testid="invoice-detail-modal"], [role="dialog"]', { timeout: 5000 })
+    // Open invoice detail modal using helper (clicks View button)
+    await openInvoiceDetail(page, invoiceNumber)
 
     // Look for send reminder button
     const reminderButton = page.locator('button:has-text("Send Reminder"), button:has-text("Herinnering Versturen"), button:has-text("Reminder")')
@@ -332,12 +331,8 @@ test.describe('Invoice Payment Management', () => {
     await page.waitForLoadState('networkidle')
     await waitForInvoiceList(page)
 
-    // Open invoice detail
-    const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-    await invoiceRow.click()
-
-    // Wait for detail modal
-    await page.waitForSelector('[data-testid="invoice-detail-modal"], [role="dialog"]', { timeout: 5000 })
+    // Open invoice detail modal using helper (clicks View button)
+    await openInvoiceDetail(page, invoiceNumber)
 
     // Look for "Mark as Paid" button
     const markPaidButton = page.locator('button:has-text("Mark as Paid"), button:has-text("Markeer als Betaald")')
@@ -396,52 +391,57 @@ test.describe('Invoice Payment Management', () => {
     })
     testData.invoiceIds.push(invoiceId)
 
+    // Get the actual total amount (includes VAT)
+    let invoiceDetails = await getInvoiceDetails(page, invoiceId)
+    const totalAmount = parseFloat(invoiceDetails.total_amount)
+
+    // Calculate payment amounts that sum to total (dividing into 3 payments)
+    const payment1Amount = Math.round(totalAmount * 0.25 * 100) / 100 // 25%
+    const payment2Amount = Math.round(totalAmount * 0.33 * 100) / 100 // 33%
+    const payment3Amount = Math.round((totalAmount - payment1Amount - payment2Amount) * 100) / 100 // Remainder
+
     // Record multiple payments
     const payment1 = await recordPaymentViaAPI(page, invoiceId, {
-      amount: 300,
+      amount: payment1Amount,
       paymentDate: '2025-01-10',
       reference: 'Payment 1'
     })
-    console.log('✅ Recorded payment 1: €300')
+    console.log(`✅ Recorded payment 1: €${payment1Amount}`)
 
     const payment2 = await recordPaymentViaAPI(page, invoiceId, {
-      amount: 400,
+      amount: payment2Amount,
       paymentDate: '2025-01-15',
       reference: 'Payment 2'
     })
-    console.log('✅ Recorded payment 2: €400')
+    console.log(`✅ Recorded payment 2: €${payment2Amount}`)
 
     const payment3 = await recordPaymentViaAPI(page, invoiceId, {
-      amount: 300,
+      amount: payment3Amount,
       paymentDate: '2025-01-20',
       reference: 'Payment 3'
     })
-    console.log('✅ Recorded payment 3: €300')
+    console.log(`✅ Recorded payment 3: €${payment3Amount}`)
 
-    // Get invoice details
-    const invoice = await getInvoiceDetails(page, invoiceId)
-    const invoiceNumber = invoice.invoice_number
+    // Get invoice details (refresh to get updated values)
+    invoiceDetails = await getInvoiceDetails(page, invoiceId)
+    const invoiceNumber = invoiceDetails.invoice_number
 
     // Reload page
     await page.reload()
     await page.waitForLoadState('networkidle')
     await waitForInvoiceList(page)
 
-    // Open invoice detail
-    const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-    await invoiceRow.click()
-
-    // Wait for detail modal
-    await page.waitForSelector('[data-testid="invoice-detail-modal"], [role="dialog"]', { timeout: 5000 })
+    // Open invoice detail modal using helper (clicks View button)
+    await openInvoiceDetail(page, invoiceNumber)
 
     // Look for payment history section
     const paymentHistorySection = page.locator('text=/Payment History|Betalingsgeschiedenis|Payments/i')
 
     if (await paymentHistorySection.isVisible({ timeout: 3000 }).catch(() => false)) {
-      // Verify all 3 payments are displayed
-      const payment1Display = page.locator('text=/Payment 1|€\\s*300/i')
-      const payment2Display = page.locator('text=/Payment 2|€\\s*400/i')
-      const payment3Display = page.locator('text=/Payment 3|€\\s*300/i')
+      // Verify all 3 payments are displayed (using payment references since amounts are dynamic)
+      const payment1Display = page.locator('text=/Payment 1/i')
+      const payment2Display = page.locator('text=/Payment 2/i')
+      const payment3Display = page.locator('text=/Payment 3/i')
 
       // Check if payments are visible
       const payments = [payment1Display, payment2Display, payment3Display]
@@ -464,7 +464,7 @@ test.describe('Invoice Payment Management', () => {
 
       // Verify via API that payments were recorded correctly
       const updatedInvoice = await getInvoiceDetails(page, invoiceId)
-      expect(parseFloat(updatedInvoice.paid_amount)).toBe(1000)
+      expect(Math.round(parseFloat(updatedInvoice.paid_amount) * 100) / 100).toBe(Math.round(totalAmount * 100) / 100)
       expect(updatedInvoice.status).toBe('paid')
 
       console.log('✅ Payments recorded correctly (verified via API)')

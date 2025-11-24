@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { format, addMonths } from 'date-fns';
+import { getCurrentDate } from '@/lib/current-date';
 
 test.setTimeout(60000);
 
@@ -178,7 +179,8 @@ test.afterAll(async ({ request }) => {
   });
 
   test('5. should process past expenses', async ({ page }) => {
-    const pastDate = format(addMonths(new Date(), -2), 'yyyy-MM-dd');
+    const currentDate = getCurrentDate();
+    const pastDate = format(addMonths(currentDate, -2), 'yyyy-MM-dd');
     const carouselTemplateName = `Carousel Template ${Date.now()}`;
     const carouselTemplateDescription = 'Carousel Recurring Expense';
 
@@ -263,24 +265,16 @@ test.afterAll(async ({ request }) => {
     await page.goto('/dashboard/financieel-v2/uitgaven');
     await page.waitForLoadState('networkidle');
 
-    // Wait for expenses to load (expenses are rendered as div cards, not table rows)
-    await page.waitForTimeout(3000); // Allow expenses to load and render
+    // Wait for expenses to load
+    await page.waitForTimeout(2000);
 
-    // The expense is from 2 months ago, so we need to scroll to that month section
-    // Look for the September (or August) 2025 section heading
-    const monthYear = format(addMonths(new Date(), -2), 'MMMM yyyy'); // e.g., "September 2025"
-    const monthSection = page.getByText(monthYear);
+    // Use the search bar to find the created expense
+    const searchInput = page.locator('input[placeholder*="Search"], input[placeholder*="Zoek"]').first();
+    await searchInput.fill(carouselTemplateName);
+    await page.waitForTimeout(1000); // Wait for search to filter
 
-    // Scroll the month section into view
-    await monthSection.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(500); // Wait for scroll
-
-    // Click on the month header to expand it (it's collapsed by default)
-    await monthSection.click();
-    await page.waitForTimeout(500); // Wait for expansion animation
-
-    // Verify expenses were created by looking for the description
-    const expenseElement = page.getByText(carouselTemplateDescription);
+    // Verify the expense appears in search results
+    const expenseElement = page.getByText(carouselTemplateName);
     await expect(expenseElement.first()).toBeVisible({ timeout: 10000 });
   });
 
@@ -328,7 +322,8 @@ test.afterAll(async ({ request }) => {
     await page.getByRole('button', { name: 'New Template' }).click();
     const dialog = page.locator('[role="dialog"]:has-text("New Recurring Expense")');
     await dialog.locator('input[name="vendor_name"]').fill('Metric Test Vendor');
-    const templateStartDate = format(addMonths(new Date(), -2), 'yyyy-MM-dd');
+    const currentDate = getCurrentDate();
+    const templateStartDate = format(addMonths(currentDate, -2), 'yyyy-MM-dd');
     await dialog.locator('input[name="expense_date"]').fill(templateStartDate);
     await dialog.locator('textarea[name="description"]').fill('Metric Test Expense');
     await dialog.locator('input[name="amount"]').fill('50');
@@ -641,7 +636,8 @@ test.afterAll(async ({ request }) => {
   });
 
   test('14. should navigate to edit via carousel Aanpassen button', async ({ page }) => {
-    const pastDate = format(addMonths(new Date(), -2), 'yyyy-MM-dd');
+    const currentDate = getCurrentDate();
+    const pastDate = format(addMonths(currentDate, -2), 'yyyy-MM-dd');
     const carouselTemplateName = `Aanpassen Carousel ${Date.now()}`;
 
     const createResponse = await page.request.post('/api/recurring-expenses/templates', {
@@ -886,12 +882,13 @@ test.afterAll(async ({ request }) => {
       const startDateInput = dialog.locator('input[name="startDate"]').or(
         dialog.locator('label:has-text("Start")').locator('..').locator('input[type="date"]')
       ).first();
-      const startDate = format(addMonths(new Date(), 2), 'yyyy-MM-dd'); // 2 months from now
+      const currentDate = getCurrentDate();
+      const startDate = format(addMonths(currentDate, 2), 'yyyy-MM-dd'); // 2 months from now
 
       const endDateInput = dialog.locator('input[name="endDate"]').or(
         dialog.locator('label:has-text("End")').locator('..').locator('input[type="date"]')
       ).first();
-      const endDate = format(new Date(), 'yyyy-MM-dd'); // Today (before start date)
+      const endDate = format(currentDate, 'yyyy-MM-dd'); // Today (before start date)
 
       await startDateInput.fill(startDate);
       await endDateInput.fill(endDate);
@@ -916,7 +913,7 @@ test.afterAll(async ({ request }) => {
       console.log('Date validation working correctly');
 
       // Fix the dates (valid range)
-      await endDateInput.fill(format(addMonths(new Date(), 6), 'yyyy-MM-dd'));
+      await endDateInput.fill(format(addMonths(currentDate, 6), 'yyyy-MM-dd'));
       await page.waitForTimeout(300);
 
       // Now submission should work (or at least pass date validation)

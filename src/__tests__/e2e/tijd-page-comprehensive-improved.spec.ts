@@ -534,8 +534,17 @@ test.describe('Tijd Page - Improved E2E Tests', () => {
       const body = await response.json()
       expect(body.data?.id).toBeTruthy()
 
-      // Verify entry appears in list
-      await expect(page.locator('text=Testing CRUD create operation').first()).toBeVisible()
+      // Wait for page to refresh after creation
+      await page.waitForLoadState('networkidle')
+      await page.waitForTimeout(1000)
+
+      // Use the search bar to find the created entry
+      const searchInput = page.locator('input[placeholder*="Search time entries"]')
+      await searchInput.fill('Testing CRUD create operation')
+      await page.waitForTimeout(500) // Wait for search to filter
+
+      // Verify entry appears in search results
+      await expect(page.locator('text=Testing CRUD create operation').first()).toBeVisible({ timeout: 5000 })
     })
 
     test('should edit an existing time entry with restoration', async ({ page }) => {

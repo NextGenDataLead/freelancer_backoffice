@@ -73,10 +73,15 @@ export async function POST(
     const currentPaidAmount = parseFloat(invoice.paid_amount?.toString() || '0')
     const newPaymentAmount = validatedData.amount
     const totalAmount = parseFloat(invoice.total_amount.toString())
-    const newPaidAmount = currentPaidAmount + newPaymentAmount
+    // Round to 2 decimal places to avoid floating-point precision issues
+    const newPaidAmount = Math.round((currentPaidAmount + newPaymentAmount) * 100) / 100
+
+    // Convert to cents for precise integer comparison (avoids floating-point issues)
+    const paidCents = Math.round(newPaidAmount * 100)
+    const totalCents = Math.round(totalAmount * 100)
 
     // Validate payment doesn't exceed invoice total
-    if (newPaidAmount > totalAmount) {
+    if (paidCents > totalCents) {
       return NextResponse.json({
         success: false,
         message: `Payment amount exceeds remaining balance. Remaining: €${(totalAmount - currentPaidAmount).toFixed(2)}`,
@@ -102,15 +107,29 @@ export async function POST(
 
     if (paymentError) {
       console.error('Error recording payment:', paymentError)
-      return NextResponse.json(ApiErrors.InternalError, { status: ApiErrors.InternalError.status })
+      console.error('Payment data attempted:', {
+        invoice_id: invoiceId,
+        tenant_id: profile.tenant_id,
+        recorded_by: profile.id,
+        amount: newPaymentAmount,
+        payment_date: validatedData.payment_date,
+        payment_method: validatedData.payment_method
+      })
+      // Return detailed error for debugging (only in development)
+      const isDev = process.env.NODE_ENV === 'development'
+      return NextResponse.json({
+        error: isDev ? paymentError.message : 'Internal server error',
+        details: isDev ? paymentError : undefined,
+        status: 500
+      }, { status: 500 })
     }
 
     // Update invoice paid amount and status
-    // Determine new status based on payment amount
+    // Determine new status based on payment amount (using cents comparison from above)
     let newStatus: string
-    if (newPaidAmount >= totalAmount) {
+    if (paidCents >= totalCents) {
       newStatus = 'paid'
-    } else if (newPaidAmount > 0) {
+    } else if (paidCents > 0) {
       newStatus = 'partial'
     } else {
       // Keep existing status if no payment made (shouldn't happen due to validation)

@@ -9,6 +9,7 @@ import { InvoiceForm } from '@/components/financial/invoices/invoice-form'
 import { InvoiceDetailModal } from '@/components/financial/invoices/invoice-detail-modal'
 import { ClientInvoiceWizard } from '@/components/financial/invoices/client-invoice-wizard'
 import { ComprehensiveInvoicingWizard } from '@/components/financial/invoices/comprehensive-invoicing-wizard'
+import { DeleteConfirmationDialog } from '@/components/financial/recurring-expenses/delete-confirmation-dialog'
 import { FileText, Plus, Euro, Clock, AlertTriangle, Send, Receipt, Download } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -33,6 +34,10 @@ export default function FacturenPage() {
   const [showRemindersModal, setShowRemindersModal] = useState(false)
   const [showVATOverview, setShowVATOverview] = useState(false)
 
+  // Delete confirmation state
+  const [invoiceToDelete, setInvoiceToDelete] = useState<any>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+
   // Metrics state
   const [metrics, setMetrics] = useState<any>(null)
   const [metricsLoading, setMetricsLoading] = useState(true)
@@ -55,6 +60,13 @@ export default function FacturenPage() {
 
   useEffect(() => {
     fetchMetrics()
+
+    // Check for success messages from previous actions
+    const deletedInvoice = sessionStorage.getItem('invoice-deleted')
+    if (deletedInvoice) {
+      toast.success('Invoice deleted successfully')
+      sessionStorage.removeItem('invoice-deleted')
+    }
   }, [])
 
   // Handle action query parameter to open comprehensive wizard
@@ -170,6 +182,35 @@ export default function FacturenPage() {
     } catch (error) {
       console.error('Error exporting invoices:', error)
       toast.error('Failed to export invoices')
+    }
+  }
+
+  const handleDeleteInvoice = (invoice: any) => {
+    setInvoiceToDelete(invoice)
+    setShowDeleteDialog(true)
+  }
+
+  const confirmDeleteInvoice = async () => {
+    if (!invoiceToDelete) return
+
+    try {
+      const response = await fetch(`/api/invoices/${invoiceToDelete.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to delete invoice')
+      }
+
+      // Store success message in sessionStorage to show after reload
+      sessionStorage.setItem('invoice-deleted', 'true')
+      window.location.reload()
+    } catch (error) {
+      console.error('Error deleting invoice:', error)
+      toast.error('Failed to delete invoice', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      })
     }
   }
 
@@ -347,6 +388,7 @@ export default function FacturenPage() {
           <InvoiceList
             onEditInvoice={handleEditInvoice}
             onViewInvoice={handleViewInvoice}
+            onDeleteInvoice={handleDeleteInvoice}
           />
         </CardContent>
       </article>
@@ -465,6 +507,19 @@ export default function FacturenPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmationDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={confirmDeleteInvoice}
+        title="Delete Invoice?"
+        description={
+          invoiceToDelete
+            ? `This will permanently delete invoice ${invoiceToDelete.invoice_number || 'this invoice'}. This action cannot be undone.`
+            : 'This will permanently delete this invoice. This action cannot be undone.'
+        }
+      />
     </section>
   )
 }

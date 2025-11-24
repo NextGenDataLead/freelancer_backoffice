@@ -81,6 +81,11 @@ export async function GET(request: Request) {
       query = query.lte('invoice_date', validatedQuery.date_to)
     }
 
+    // Apply search filter (searches invoice_number and reference)
+    if (validatedQuery.search) {
+      query = query.or(`invoice_number.ilike.%${validatedQuery.search}%,reference.ilike.%${validatedQuery.search}%`)
+    }
+
     // Apply pagination
     const from = (validatedQuery.page - 1) * validatedQuery.limit
     const to = from + validatedQuery.limit - 1

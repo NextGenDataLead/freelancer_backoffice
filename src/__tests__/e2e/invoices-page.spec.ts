@@ -239,9 +239,12 @@ test.describe('Invoices Page - Core Functionality', () => {
       testData.invoiceIds.push(invoiceId)
 
       // Get invoice details to verify invoice number
-      const invoiceDetails = await page.request.get(`/api/invoices/${invoiceId}`)
+      const { buildAuthHeaders } = await import('./helpers/api-auth')
+      const invoiceDetails = await page.request.get(`/api/invoices/${invoiceId}`, {
+        headers: await buildAuthHeaders(page)
+      })
       const invoice = await invoiceDetails.json()
-      const invoiceNumber = invoice.invoice_number
+      const invoiceNumber = invoice.invoice?.invoice_number || invoice.data?.invoice_number || invoice.invoice_number
 
       console.log(`Created invoice ${invoiceNumber}`)
 
@@ -290,18 +293,18 @@ test.describe('Invoices Page - Core Functionality', () => {
       }
     })
 
-    test('should paginate invoice list with more than 10 invoices', async ({ page }) => {
+    test('should paginate invoice list with more than 20 invoices', async ({ page }) => {
       // Create test client
       const clientData = generateTestClientData('E2E Pagination Test Client')
       const clientId = await createClientViaAPI(page, clientData)
       testData.clientIds.push(clientId)
 
-      // Create 12 invoices to trigger pagination
-      console.log('Creating 12 test invoices...')
-      const invoicePromises = []
+      // Create 25 invoices to trigger pagination (page size is 20)
+      // NOTE: Creating sequentially to avoid race condition on invoice number generation
+      console.log('Creating 25 test invoices sequentially...')
 
-      for (let i = 0; i < 12; i++) {
-        const promise = createInvoiceViaAPI(page, {
+      for (let i = 0; i < 25; i++) {
+        const invoiceId = await createInvoiceViaAPI(page, {
           clientId: clientId,
           items: [
             {
@@ -310,15 +313,14 @@ test.describe('Invoices Page - Core Functionality', () => {
               unit_price: 100 + i
             }
           ]
-        }).then(id => {
-          testData.invoiceIds.push(id)
-          return id
         })
-        invoicePromises.push(promise)
+        testData.invoiceIds.push(invoiceId)
+        if ((i + 1) % 5 === 0) {
+          console.log(`Created ${i + 1}/25 invoices...`)
+        }
       }
 
-      await Promise.all(invoicePromises)
-      console.log('All invoices created')
+      console.log('All 25 invoices created successfully')
 
       // Reload page
       await page.reload()
@@ -330,12 +332,12 @@ test.describe('Invoices Page - Core Functionality', () => {
       const hasPagination = await paginationControls.count() > 0
 
       if (hasPagination) {
-        // Verify first page shows max 10 invoices
+        // Verify first page shows max 20 invoices (page limit is 20)
         const invoiceRows = page.locator('table tbody tr')
         const rowCount = await invoiceRows.count()
-        expect(rowCount).toBeLessThanOrEqual(10)
+        expect(rowCount).toBeLessThanOrEqual(20)
 
-        console.log(`First page shows ${rowCount} invoices`)
+        console.log(`First page shows ${rowCount} invoices (max 20)`)
 
         // Try to navigate to next page
         const nextButton = page.locator('button:has-text("Next"), button[aria-label="Next page"]')
@@ -537,9 +539,12 @@ test.describe('Invoices Page - Core Functionality', () => {
       testData.invoiceIds.push(invoiceId)
 
       // Get invoice number
-      const invoiceDetails = await page.request.get(`/api/invoices/${invoiceId}`)
+      const { buildAuthHeaders } = await import('./helpers/api-auth')
+      const invoiceDetails = await page.request.get(`/api/invoices/${invoiceId}`, {
+        headers: await buildAuthHeaders(page)
+      })
       const invoice = await invoiceDetails.json()
-      const invoiceNumber = invoice.invoice_number
+      const invoiceNumber = invoice.invoice?.invoice_number || invoice.data?.invoice_number || invoice.invoice_number
 
       // Reload page
       await page.reload()
@@ -576,13 +581,9 @@ test.describe('Invoices Page - Core Functionality', () => {
 
       console.log('✅ Comprehensive invoicing wizard opened successfully')
 
-      // Close modal
-      const closeButton = page.locator('button[aria-label="Close"], button:has-text("Close")').first()
-      if (await closeButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await closeButton.click()
-      } else {
-        await page.keyboard.press('Escape')
-      }
+      // Close modal using Escape key (more reliable than clicking Close due to overlay)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(500) // Wait for modal close animation
     })
 
     test('should open manual invoice form', async ({ page }) => {
@@ -593,22 +594,19 @@ test.describe('Invoices Page - Core Functionality', () => {
       const invoiceForm = page.locator('[data-testid="invoice-form"], form')
       await expect(invoiceForm).toBeVisible({ timeout: 5000 })
 
-      // Verify required fields are present
-      const clientField = page.locator('input[name="client_id"], select[name="client_id"], button:has-text("Select client")')
+      // Verify required fields are present (client field is a Select component with Dutch text)
+      const clientField = page.locator('button:has-text("Selecteer klant"), button:has-text("Select client")').first()
       await expect(clientField).toBeVisible()
 
-      const dateField = page.locator('input[type="date"], input[name="invoice_date"]')
+      // Verify invoice date field (specific selector to avoid matching due_date)
+      const dateField = page.locator('input[name="invoice_date"]')
       await expect(dateField).toBeVisible()
 
       console.log('✅ Manual invoice form opened successfully')
 
-      // Close form
-      const cancelButton = page.locator('button:has-text("Cancel"), button:has-text("Annuleren")').first()
-      if (await cancelButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await cancelButton.click()
-      } else {
-        await page.keyboard.press('Escape')
-      }
+      // Close form using Escape key (more reliable than clicking Cancel due to overlay)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(500) // Wait for modal close animation
     })
 
     test('should validate required fields on form submission', async ({ page }) => {
@@ -670,18 +668,21 @@ test.describe('Invoices Page - Core Functionality', () => {
       testData.invoiceIds.push(invoiceId)
 
       // Get invoice number
-      const invoiceDetails = await page.request.get(`/api/invoices/${invoiceId}`)
+      const { buildAuthHeaders } = await import('./helpers/api-auth')
+      const invoiceDetails = await page.request.get(`/api/invoices/${invoiceId}`, {
+        headers: await buildAuthHeaders(page)
+      })
       const invoice = await invoiceDetails.json()
-      const invoiceNumber = invoice.invoice_number
+      const invoiceNumber = invoice.invoice?.invoice_number || invoice.data?.invoice_number || invoice.invoice_number
 
       // Reload page
       await page.reload()
       await page.waitForLoadState('networkidle')
       await waitForInvoiceList(page)
 
-      // Click invoice to open detail modal
-      const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-      await invoiceRow.click()
+      // Click View button to open detail modal (not the row itself)
+      const { openInvoiceDetail } = await import('./helpers/invoice-helpers')
+      await openInvoiceDetail(page, invoiceNumber)
 
       // Verify detail modal opened
       const detailModal = page.locator('[data-testid="invoice-detail-modal"], [role="dialog"]')
@@ -694,13 +695,9 @@ test.describe('Invoices Page - Core Functionality', () => {
 
       console.log('✅ Invoice detail modal opened successfully')
 
-      // Close modal
-      const closeButton = page.locator('button[aria-label="Close"], button:has-text("Close")').first()
-      if (await closeButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await closeButton.click()
-      } else {
-        await page.keyboard.press('Escape')
-      }
+      // Close modal using Escape key (more reliable than clicking Close due to overlay)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(500) // Wait for modal close animation
     })
 
     test('should delete draft invoice with confirmation', async ({ page }) => {
@@ -724,24 +721,20 @@ test.describe('Invoices Page - Core Functionality', () => {
       testData.invoiceIds.push(invoiceId)
 
       // Get invoice number
-      const invoiceDetails = await page.request.get(`/api/invoices/${invoiceId}`)
+      const { buildAuthHeaders } = await import('./helpers/api-auth')
+      const invoiceDetails = await page.request.get(`/api/invoices/${invoiceId}`, {
+        headers: await buildAuthHeaders(page)
+      })
       const invoice = await invoiceDetails.json()
-      const invoiceNumber = invoice.invoice_number
+      const invoiceNumber = invoice.invoice?.invoice_number || invoice.data?.invoice_number || invoice.invoice_number
 
       // Reload page
       await page.reload()
       await page.waitForLoadState('networkidle')
       await waitForInvoiceList(page)
 
-      // Open invoice detail
-      const invoiceRow = await findInvoiceByNumber(page, invoiceNumber)
-      await invoiceRow.click()
-
-      // Wait for detail modal
-      await page.waitForSelector('[data-testid="invoice-detail-modal"], [role="dialog"]', { timeout: 5000 })
-
-      // Delete invoice
-      await deleteInvoiceUI(page)
+      // Delete invoice directly from table row (no need to open modal)
+      await deleteInvoiceUI(page, invoiceNumber)
 
       // Verify invoice removed from list
       await page.waitForLoadState('networkidle')

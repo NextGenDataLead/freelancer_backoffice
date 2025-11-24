@@ -484,7 +484,8 @@ export const InvoicesQuerySchema = PaginationSchema.extend({
   status: InvoiceStatusSchema.optional(),
   client_id: z.string().uuid().optional(),
   date_from: z.string().datetime().optional(),
-  date_to: z.string().datetime().optional()
+  date_to: z.string().datetime().optional(),
+  search: z.string().optional()
 });
 
 export const ExpensesQuerySchema = PaginationSchema.extend({

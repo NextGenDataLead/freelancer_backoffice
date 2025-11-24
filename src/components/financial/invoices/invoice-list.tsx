@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -11,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Edit, Eye, Send, Check, AlertCircle, Clock, FileText, Download, Loader2, Bell, CheckCircle } from 'lucide-react'
+import { Plus, Edit, Eye, Send, Check, AlertCircle, Clock, FileText, Download, Loader2, Bell, CheckCircle, Trash2, Search } from 'lucide-react'
 import type { InvoiceWithClient, ReminderLevel } from '@/lib/types/financial'
 import { toast } from 'sonner'
 import { PaymentReminderModal } from './payment-reminder-modal'
@@ -22,6 +23,7 @@ interface InvoiceListProps {
   onAddInvoice?: () => void
   onEditInvoice?: (invoice: InvoiceWithClient) => void
   onViewInvoice?: (invoice: InvoiceWithClient) => void
+  onDeleteInvoice?: (invoice: InvoiceWithClient) => void
   statusFilter?: string
 }
 
@@ -35,7 +37,7 @@ interface InvoicesResponse {
   }
 }
 
-export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, statusFilter }: InvoiceListProps) {
+export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, onDeleteInvoice, statusFilter }: InvoiceListProps) {
   const [invoices, setInvoices] = useState<InvoiceWithClient[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -44,6 +46,11 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
   const [sendingInvoices, setSendingInvoices] = useState<Set<string>>(new Set())
   const [reminderInvoice, setReminderInvoice] = useState<InvoiceWithClient | null>(null)
   const [reminderLevels, setReminderLevels] = useState<Record<string, ReminderLevel | null | undefined>>({})
+
+  // Local filter and search state
+  const [localStatusFilter, setLocalStatusFilter] = useState<string>('all')
+  const [searchTerm, setSearchTerm] = useState<string>('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>('')
 
   // Helper function to check if an invoice is actually overdue
   const isInvoiceOverdue = (invoice: InvoiceWithClient): boolean => {
@@ -70,8 +77,15 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
         limit: '20'
       })
 
-      if (statusFilter) {
-        params.append('status', statusFilter)
+      // Use localStatusFilter if set, otherwise use statusFilter prop
+      const activeFilter = localStatusFilter !== 'all' ? localStatusFilter : statusFilter
+      if (activeFilter) {
+        params.append('status', activeFilter)
+      }
+
+      // Add search term if present
+      if (debouncedSearchTerm.trim()) {
+        params.append('search', debouncedSearchTerm.trim())
       }
 
       const response = await fetch(`/api/invoices?${params.toString()}`)
@@ -133,9 +147,20 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
     setReminderLevels(levels)
   }
 
+  // Debounce search term to avoid excessive API calls
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 500)
+
+    return () => {
+      clearTimeout(handler)
+    }
+  }, [searchTerm])
+
   useEffect(() => {
     fetchInvoices()
-  }, [statusFilter])
+  }, [statusFilter, localStatusFilter, debouncedSearchTerm])
 
   const getReminderBadgeVariant = (level: ReminderLevel): 'default' | 'secondary' | 'destructive' => {
     switch (level) {
@@ -270,7 +295,7 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
   }
 
   const getStatusBadge = (status: string, invoice?: InvoiceWithClient) => {
-    const baseClasses = "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium gap-1"
+    const baseClasses = "badge inline-flex items-center px-2 py-1 rounded-full text-xs font-medium gap-1"
 
     // Check if 'sent' invoice is actually overdue
     if (status === 'sent' && invoice && isInvoiceOverdue(invoice)) {
@@ -400,19 +425,100 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
           Start Invoice Wizard
         </Button>
       </CardHeader>
-      
+
+      {/* Filter and Search Bar */}
+      <div className="px-6 pb-4 space-y-4">
+        {/* Status Filter Tabs */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={localStatusFilter === 'all' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setLocalStatusFilter('all')}
+          >
+            All
+          </Button>
+          <Button
+            variant={localStatusFilter === 'draft' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setLocalStatusFilter('draft')}
+          >
+            Draft
+          </Button>
+          <Button
+            variant={localStatusFilter === 'sent' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setLocalStatusFilter('sent')}
+          >
+            Sent
+          </Button>
+          <Button
+            variant={localStatusFilter === 'paid' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setLocalStatusFilter('paid')}
+          >
+            Paid
+          </Button>
+          <Button
+            variant={localStatusFilter === 'overdue' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setLocalStatusFilter('overdue')}
+          >
+            Overdue
+          </Button>
+          <Button
+            variant={localStatusFilter === 'cancelled' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setLocalStatusFilter('cancelled')}
+          >
+            Cancelled
+          </Button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search invoices..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      </div>
+
       <CardContent>
-        {invoices.length === 0 ? (
+        {invoices.length === 0 && !loading ? (
           <div className="text-center py-12">
             <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No invoices yet</h3>
-            <p className="text-muted-foreground mb-4">
-              Create your first invoice to start billing
-            </p>
-            <Button onClick={onAddInvoice}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create first invoice
-            </Button>
+            {localStatusFilter !== 'all' || debouncedSearchTerm ? (
+              <>
+                <h3 className="text-lg font-semibold mb-2">No invoices found</h3>
+                <p className="text-muted-foreground mb-4">
+                  No invoices match your current filters
+                </p>
+                <Button
+                  onClick={() => {
+                    setLocalStatusFilter('all')
+                    setSearchTerm('')
+                  }}
+                  variant="outline"
+                >
+                  Clear filters
+                </Button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold mb-2">No invoices yet</h3>
+                <p className="text-muted-foreground mb-4">
+                  Create your first invoice to start billing
+                </p>
+                <Button onClick={onAddInvoice}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create first invoice
+                </Button>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -466,7 +572,7 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
                     </TableCell>
                     
                     <TableCell>
-                      <span className={getStatusBadge(invoice.status, invoice)}>
+                      <span className={getStatusBadge(invoice.status, invoice)} data-status={invoice.status}>
                         {getStatusIcon(invoice.status)}
                         {getStatusLabel(invoice.status, invoice)}
                       </span>
@@ -547,6 +653,19 @@ export function InvoiceList({ onAddInvoice, onEditInvoice, onViewInvoice, status
                               <CheckCircle className="absolute -top-1 -right-1 h-3 w-3 text-green-500 bg-white dark:bg-slate-900 rounded-full" />
                             )}
                             {/* No badge shown during waiting period (undefined) - user can still click to view history */}
+                          </Button>
+                        )}
+
+                        {/* Delete button - only show for draft invoices */}
+                        {invoice.status === 'draft' && onDeleteInvoice && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onDeleteInvoice(invoice)}
+                            className="h-7 w-7 text-destructive hover:text-destructive/90 hover:bg-destructive/10"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         )}
                       </div>

@@ -223,13 +223,13 @@ export function ComprehensiveInvoicingWizard({
   const progress = ((currentStep + 1) / STEPS.length) * 100
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-lg max-w-6xl w-full h-[90vh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" data-testid="comprehensive-invoicing-wizard">
+      <div className="bg-white dark:bg-gray-900 rounded-lg max-w-6xl w-full h-[90vh] flex flex-col overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
         {/* Header */}
         <div className="border-b p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold">Factuur Wizard</h2>
+              <h2 id="wizard-title" className="text-2xl font-bold">Factuur Wizard</h2>
               <p className="text-muted-foreground mt-1">
                 Maak al je facturen in één keer - tijd-gebaseerd en handmatig
               </p>

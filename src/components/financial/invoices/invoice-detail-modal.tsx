@@ -65,13 +65,38 @@ export function InvoiceDetailModal({
   const [showEmailModal, setShowEmailModal] = useState(false)
   const [reminders, setReminders] = useState<PaymentReminder[]>([])
   const [isLoadingReminders, setIsLoadingReminders] = useState(false)
+  const [fullInvoice, setFullInvoice] = useState<InvoiceWithClient | null>(null)
+  const [isLoadingInvoice, setIsLoadingInvoice] = useState(false)
 
-  // Fetch reminders when modal opens
+  // Fetch full invoice details (including items) when modal opens
   useEffect(() => {
     if (isOpen && invoice) {
+      fetchFullInvoice()
       fetchReminders()
     }
   }, [isOpen, invoice?.id])
+
+  const fetchFullInvoice = async () => {
+    if (!invoice) return
+
+    try {
+      setIsLoadingInvoice(true)
+      const response = await fetch(`/api/invoices/${invoice.id}`)
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch invoice details')
+      }
+
+      const data = await response.json()
+      setFullInvoice(data.data || data.invoice || invoice)
+    } catch (error) {
+      console.error('Error fetching invoice details:', error)
+      // Fall back to the invoice passed via props if fetch fails
+      setFullInvoice(invoice)
+    } finally {
+      setIsLoadingInvoice(false)
+    }
+  }
 
   const fetchReminders = async () => {
     if (!invoice) return
@@ -95,6 +120,9 @@ export function InvoiceDetailModal({
   }
 
   if (!invoice) return null
+
+  // Use fullInvoice if available (includes items), otherwise fall back to invoice prop
+  const displayInvoice = fullInvoice || invoice
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('nl-NL', {
@@ -235,22 +263,26 @@ export function InvoiceDetailModal({
     window.print()
   }
 
-  const handlePaymentSuccess = (payment: any) => {
+  const handlePaymentSuccess = async (payment: any) => {
     setShowPaymentModal(false)
-    // Trigger a status update or refresh
-    if (onStatusUpdate && payment.invoice) {
-      // The payment API already updated the status, so we need to refresh
-      onClose()
-      window.location.reload()
-    }
+
+    // Refetch the invoice to get updated status and payment amount
+    await fetchFullInvoice()
+
+    // Show success toast
+    toast.success('Payment recorded successfully', {
+      description: `Payment of ${formatCurrency(payment.amount)} has been recorded`
+    })
   }
 
-  const handleReminderSuccess = () => {
+  const handleReminderSuccess = async () => {
     setShowReminderModal(false)
     // Refresh reminders list
-    fetchReminders()
-    // Optionally refresh the invoice to update status
-    window.location.reload()
+    await fetchReminders()
+    // Refresh the invoice to update status
+    await fetchFullInvoice()
+
+    toast.success('Reminder sent successfully')
   }
 
   const getDeliveryStatusBadge = (status: string) => {
@@ -300,10 +332,10 @@ export function InvoiceDetailModal({
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <FileText className="h-6 w-6" />
-              <span>Factuur {invoice.invoice_number}</span>
-              <Badge className={getStatusBadge(invoice.status)}>
-                {getStatusIcon(invoice.status)}
-                {getStatusLabel(invoice.status)}
+              <span>Factuur {displayInvoice.invoice_number}</span>
+              <Badge className={getStatusBadge(displayInvoice.status)}>
+                {getStatusIcon(displayInvoice.status)}
+                {getStatusLabel(displayInvoice.status)}
               </Badge>
             </div>
             
@@ -343,21 +375,21 @@ export function InvoiceDetailModal({
               </CardHeader>
               <CardContent className="space-y-2">
                 <div>
-                  <p className="font-medium">{invoice.client?.company_name || invoice.client?.name}</p>
-                  {invoice.client?.company_name && (
-                    <p className="text-sm text-muted-foreground">{invoice.client.name}</p>
+                  <p className="font-medium">{displayInvoice.client?.company_name || displayInvoice.client?.name}</p>
+                  {displayInvoice.client?.company_name && (
+                    <p className="text-sm text-muted-foreground">{displayInvoice.client.name}</p>
                   )}
                 </div>
-                {invoice.client?.email && (
-                  <p className="text-sm text-muted-foreground">{invoice.client.email}</p>
+                {displayInvoice.client?.email && (
+                  <p className="text-sm text-muted-foreground">{displayInvoice.client.email}</p>
                 )}
-                {invoice.client?.vat_number && (
+                {displayInvoice.client?.vat_number && (
                   <p className="text-sm">
-                    <span className="text-muted-foreground">BTW nummer:</span> {invoice.client.vat_number}
+                    <span className="text-muted-foreground">BTW nummer:</span> {displayInvoice.client.vat_number}
                   </p>
                 )}
                 <p className="text-sm">
-                  <span className="text-muted-foreground">Land:</span> {invoice.client?.country_code}
+                  <span className="text-muted-foreground">Land:</span> {displayInvoice.client?.country_code}
                 </p>
               </CardContent>
             </Card>
@@ -373,25 +405,25 @@ export function InvoiceDetailModal({
               <CardContent className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Factuurnummer:</span>
-                  <span className="font-mono">{invoice.invoice_number}</span>
+                  <span className="font-mono">{displayInvoice.invoice_number}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Factuurdatum:</span>
-                  <span>{formatDate(invoice.invoice_date)}</span>
+                  <span>{formatDate(displayInvoice.invoice_date)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Vervaldatum:</span>
-                  <span>{formatDate(invoice.due_date)}</span>
+                  <span>{formatDate(displayInvoice.due_date)}</span>
                 </div>
-                {invoice.reference && (
+                {displayInvoice.reference && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Referentie:</span>
-                    <span>{invoice.reference}</span>
+                    <span>{displayInvoice.reference}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">BTW Type:</span>
-                  <span className="text-sm">{getVATTypeLabel(invoice.vat_type)}</span>
+                  <span className="text-sm">{getVATTypeLabel(displayInvoice.vat_type)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -413,7 +445,7 @@ export function InvoiceDetailModal({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invoice.items?.map((item) => (
+                  {displayInvoice.items?.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
                         <div className="max-w-md">
@@ -448,35 +480,35 @@ export function InvoiceDetailModal({
               <div className="space-y-2 max-w-md ml-auto">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotaal:</span>
-                  <span>{formatCurrency(parseFloat(invoice.subtotal.toString()))}</span>
+                  <span>{formatCurrency(parseFloat(displayInvoice.subtotal.toString()))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">
-                    BTW ({Math.round(invoice.vat_rate * 100)}%):
+                    BTW ({Math.round(displayInvoice.vat_rate * 100)}%):
                   </span>
-                  <span>{formatCurrency(parseFloat(invoice.vat_amount.toString()))}</span>
+                  <span>{formatCurrency(parseFloat(displayInvoice.vat_amount.toString()))}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2 font-bold text-lg">
                   <span>Totaal:</span>
-                  <span>{formatCurrency(parseFloat(invoice.total_amount.toString()))}</span>
+                  <span>{formatCurrency(parseFloat(displayInvoice.total_amount.toString()))}</span>
                 </div>
-                
+
                 {/* Payment Information */}
-                {parseFloat(invoice.paid_amount?.toString() || '0') > 0 && (
+                {parseFloat(displayInvoice.paid_amount?.toString() || '0') > 0 && (
                   <>
                     <div className="flex justify-between text-green-600 dark:text-green-400">
                       <span>Betaald:</span>
-                      <span>-{formatCurrency(parseFloat(invoice.paid_amount.toString()))}</span>
+                      <span>-{formatCurrency(parseFloat(displayInvoice.paid_amount.toString()))}</span>
                     </div>
                     <div className="flex justify-between border-t pt-2 font-bold text-lg">
                       <span>Openstaand:</span>
                       <span className={
-                        parseFloat(invoice.paid_amount.toString()) >= parseFloat(invoice.total_amount.toString())
+                        parseFloat(displayInvoice.paid_amount.toString()) >= parseFloat(displayInvoice.total_amount.toString())
                           ? 'text-green-600 dark:text-green-400'
                           : 'text-orange-600 dark:text-orange-400'
                       }>
                         {formatCurrency(
-                          parseFloat(invoice.total_amount.toString()) - parseFloat(invoice.paid_amount.toString())
+                          parseFloat(displayInvoice.total_amount.toString()) - parseFloat(displayInvoice.paid_amount.toString())
                         )}
                       </span>
                     </div>
@@ -487,19 +519,19 @@ export function InvoiceDetailModal({
           </Card>
 
           {/* Notes */}
-          {invoice.notes && (
+          {displayInvoice.notes && (
             <Card>
               <CardHeader>
                 <CardTitle>Opmerkingen</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="whitespace-pre-wrap text-sm">{invoice.notes}</p>
+                <p className="whitespace-pre-wrap text-sm">{displayInvoice.notes}</p>
               </CardContent>
             </Card>
           )}
 
           {/* Reminder History */}
-          {(invoice.status === 'sent' || invoice.status === 'overdue') && (
+          {(displayInvoice.status === 'sent' || displayInvoice.status === 'overdue') && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
@@ -592,14 +624,14 @@ export function InvoiceDetailModal({
           {/* Action Buttons */}
           <div className="flex justify-between pt-4 border-t">
             <div className="flex gap-2">
-              {invoice.status === 'draft' && onEdit && (
-                <Button onClick={() => onEdit(invoice)}>
+              {displayInvoice.status === 'draft' && onEdit && (
+                <Button onClick={() => onEdit(displayInvoice)}>
                   <Edit className="h-4 w-4 mr-2" />
                   Bewerken
                 </Button>
               )}
-              
-              {invoice.status === 'draft' && (
+
+              {displayInvoice.status === 'draft' && (
                 <>
                   <Button
                     variant="outline"
@@ -620,7 +652,7 @@ export function InvoiceDetailModal({
                 </>
               )}
 
-              {invoice.status === 'sent' && (
+              {displayInvoice.status === 'sent' && (
                 <>
                   <Button
                     variant="outline"
@@ -650,7 +682,7 @@ export function InvoiceDetailModal({
                 </>
               )}
 
-              {invoice.status === 'overdue' && (
+              {displayInvoice.status === 'overdue' && (
                 <>
                   <Button
                     variant="outline"

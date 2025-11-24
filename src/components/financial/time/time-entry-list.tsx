@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { DeleteConfirmationModal } from '@/components/ui/modal'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -27,7 +28,9 @@ import {
   Lock,
   ChevronLeft,
   ChevronRight,
-  Filter
+  Filter,
+  Search,
+  X
 } from 'lucide-react'
 import type { TimeEntryWithClient, Client } from '@/lib/types/financial'
 import { getTimeEntryStatus } from '@/lib/utils/time-entry-status'
@@ -61,11 +64,26 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination = true,
   } | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [currentPage, setCurrentPage] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Filter time entries by date and status from the complete list
+  // Filter time entries by date, search, and status from the complete list
   const filteredEntries = useMemo(() => {
-    console.log('🔍 Filtering all entries - statusFilter:', statusFilter, 'total entries:', allTimeEntries.length)
+    console.log('🔍 Filtering all entries - statusFilter:', statusFilter, 'searchQuery:', searchQuery, 'total entries:', allTimeEntries.length)
     let filtered = allTimeEntries
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const searchLower = searchQuery.toLowerCase()
+      filtered = filtered.filter(entry => {
+        const client = clients.get(entry.client_id || '')
+        return (
+          entry.description?.toLowerCase().includes(searchLower) ||
+          entry.project_name?.toLowerCase().includes(searchLower) ||
+          client?.name?.toLowerCase().includes(searchLower)
+        )
+      })
+      console.log('🔎 After search filter:', filtered.length, 'entries')
+    }
 
     // Apply date filter
     if (dateFilter) {
@@ -124,7 +142,7 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination = true,
 
     console.log('📊 Final filtered count:', filtered.length)
     return filtered
-  }, [allTimeEntries, dateFilter, statusFilter, clients])
+  }, [allTimeEntries, dateFilter, statusFilter, clients, searchQuery])
 
   // Paginate the filtered entries
   const paginatedEntries = useMemo(() => {
@@ -419,6 +437,36 @@ export function TimeEntryList({ onEdit, onRefresh, limit, showPagination = true,
             Showing {paginatedEntries.length} of {filteredEntries.length} entries
           </div>
         </CardTitle>
+
+        {/* Search Bar */}
+        <div className="mt-4">
+          <div className="relative">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+            />
+            <Input
+              type="text"
+              placeholder="Search time entries..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                setCurrentPage(1) // Reset to first page on search
+              }}
+              className="pl-10 pr-8 bg-slate-900/50 border-slate-700 focus:border-slate-600 text-slate-200"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery('')
+                  setCurrentPage(1)
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Status Filter Tabs */}
         <div className="flex gap-2 mt-4 flex-wrap" data-testid="time-entry-status-filters">
